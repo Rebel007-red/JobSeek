@@ -143,38 +143,43 @@ export function JobsPage() {
   return (
     <div className="min-h-screen bg-slate-950">
       {/* Top nav */}
-      <header className="bg-gray-900 border-b border-gray-800 sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-4 py-2.5 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-sm font-bold text-gray-100">Job Seeker</h1>
+      <header className="bg-gray-900/95 backdrop-blur border-b border-gray-800 sticky top-0 z-10">
+        <div className="max-w-6xl mx-auto px-3 sm:px-4 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h1 className="text-sm font-bold text-gray-100 tracking-tight">Job Seeker</h1>
             {newCount > 0 && (
-              <span className="text-xs bg-green-900/60 text-green-300 border border-green-700/50 font-semibold px-1.5 py-0.5 rounded">
+              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold px-1.5 py-0.5 rounded whitespace-nowrap">
                 {newCount} new
               </span>
             )}
             {matchCount > 0 && (
-              <span className="text-xs bg-indigo-900/60 text-indigo-300 border border-indigo-700/50 font-semibold px-1.5 py-0.5 rounded">
-                {matchCount} match{matchCount > 1 ? 'es' : ''}
+              <span className="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-bold px-1.5 py-0.5 rounded whitespace-nowrap">
+                {matchCount} match
               </span>
             )}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1">
+            {/* Settings — icon on mobile, icon+text on sm+ */}
             <button onClick={() => navigate('/settings')}
-              className="text-xs text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              className="flex items-center gap-1 px-2 py-1.5 text-[11px] text-gray-400 hover:text-gray-200 hover:bg-gray-800 rounded-md transition-colors">
+              <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
-              Settings
+              <span className="hidden sm:inline">Settings</span>
             </button>
-            <button onClick={handleSignOut} className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
-              Sign out
+            <button onClick={handleSignOut}
+              className="flex items-center gap-1 px-2 py-1.5 text-[11px] text-gray-400 hover:text-gray-200 hover:bg-gray-800 rounded-md transition-colors">
+              <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              <span className="hidden sm:inline">Sign out</span>
             </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-3 py-4 flex flex-col gap-3">
+      <main className="max-w-6xl mx-auto px-3 sm:px-4 py-3 flex flex-col gap-3">
         {/* Filters */}
         <SearchFilter filters={filters} companies={companies} onChange={setFilters} />
 
@@ -195,7 +200,7 @@ export function JobsPage() {
           </p>
         )}
 
-        {/* Grid */}
+        {/* Grid — 1 col mobile, 2 sm, 3 lg, 4 xl */}
         {jobsWithMatches.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
             {jobsWithMatches.map(({ job, matched }) => (
