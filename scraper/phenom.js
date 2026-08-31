@@ -31,7 +31,9 @@ export async function fetchPhenomJobs(company) {
     const res = await fetch(url, {
       headers: {
         Accept: 'application/json, text/javascript, */*',
-        'User-Agent': 'Mozilla/5.0 (compatible; JobAggregator/1.0)',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         Referer: `${baseUrl}/search-results`,
       },
     })

@@ -20,9 +20,11 @@
     "api_url": "https://jobs-ta.pwc.com/global/en"
   },
   {
+    "_comment": "Deloitte uses Oracle Taleo (apply.deloitte.com) — Taleo handler not yet implemented",
     "name": "Deloitte",
-    "ats_type": "phenom",
-    "api_url": "https://jobs2.deloitte.com/global/en"
+    "ats_type": "taleo",
+    "api_url": "https://apply.deloitte.com",
+    "disabled": true
   },
   {
     "_comment": "EY uses SAP SuccessFactors which blocks server-side requests — skipped",
