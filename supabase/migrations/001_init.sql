@@ -6,7 +6,7 @@
 -- Companies table: one row per career page you want to scrape
 create table if not exists public.companies (
   id          uuid primary key default gen_random_uuid(),
-  name        text not null,
+  name        text not null unique,
   ats_type    text not null check (ats_type in ('greenhouse', 'workday', 'phenom', 'icims', 'oracle', 'successfactors')),
   slug        text,          -- Greenhouse board slug  e.g. "acme"
   api_url     text,          -- Workday full API URL
