@@ -7,6 +7,7 @@ import { fetchOracleJobs } from './oracle.js';
 import { fetchSuccessFactorsJobs } from './successfactors.js';
 import { fetchJSearchJobs } from './jsearch.js';
 import { fetchLinkedInJobs } from './linkedin.js';
+import { fetchNaukriJobs } from './naukri.js';
 
 // ── Environment ──────────────────────────────────────────────
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -24,7 +25,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 // ── Load companies from Supabase ──────────────────────────────
 // mode: 'companies' (default, used by 30-min cron) or 'boards' (daily job board search)
 async function loadCompanies(mode = 'all') {
-  const BOARD_TYPES = ['jsearch', 'linkedin']
+  const BOARD_TYPES = ['jsearch', 'linkedin', 'naukri']
 
   let query = supabase.from('companies').select('*').eq('disabled', false).order('name')
 
@@ -106,6 +107,8 @@ async function run() {
         jobs = await fetchJSearchJobs(company);
       } else if (company.ats_type === 'linkedin') {
         jobs = await fetchLinkedInJobs(company);
+      } else if (company.ats_type === 'naukri') {
+        jobs = await fetchNaukriJobs(company);
       } else {
         console.warn(`  Unknown ats_type "${company.ats_type}" — skipping`);
         continue;

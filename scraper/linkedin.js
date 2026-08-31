@@ -17,7 +17,7 @@ import { parse } from 'node-html-parser'
 
 const BASE = 'https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search'
 const PAGE_SIZE = 25
-const MAX_PAGES = 4  // up to 100 results
+const MAX_PAGES = 10  // up to 250 results
 
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',

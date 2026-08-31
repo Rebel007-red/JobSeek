@@ -26,10 +26,12 @@ jobs:
         run: npm install
         working-directory: scraper
 
-      - name: Run board scraper (JSearch + LinkedIn)
+      - name: Run board scraper (JSearch + LinkedIn + Naukri)
         run: node index.js --boards
         working-directory: scraper
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+          NAUKRI_EMAIL: ${{ secrets.NAUKRI_EMAIL }}
+          NAUKRI_PASSWORD: ${{ secrets.NAUKRI_PASSWORD }}
