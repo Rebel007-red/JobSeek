@@ -1,0 +1,38 @@
+[
+  {
+    "name": "Omnissa",
+    "ats_type": "workday",
+    "api_url": "https://omnissa.wd501.myworkdayjobs.com/wday/cxs/omnissa/Omnissa_External_Career_Site/jobs"
+  },
+  {
+    "name": "Google",
+    "ats_type": "workday",
+    "api_url": "https://google.wd501.myworkdayjobs.com/wday/cxs/google/GOCJobs/jobs"
+  },
+  {
+    "name": "NTT Data",
+    "ats_type": "phenom",
+    "api_url": "https://careers.services.global.ntt/api/jobs/search"
+  },
+  {
+    "name": "PwC Acceleration Centers",
+    "ats_type": "phenom",
+    "api_url": "https://jobs-ta.pwc.com/api/jobs/search"
+  },
+  {
+    "name": "Deloitte",
+    "ats_type": "phenom",
+    "api_url": "https://jobs2.deloitte.com/api/jobs/search"
+  },
+  {
+    "name": "EY",
+    "ats_type": "successfactors",
+    "slug": "careers.ey.com"
+  },
+  {
+    "name": "KPMG",
+    "ats_type": "workday",
+    "api_url": "https://kpmg.wd3.myworkdayjobs.com/wday/cxs/kpmg/External_Career_Site/jobs"
+  }
+]
+
