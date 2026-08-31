@@ -53,15 +53,17 @@ export async function fetchWorkdayJobs(company) {
     }
 
     postings.forEach((job) => {
-      // Build absolute URL from the base tenant URL + job path
-      const baseUrl = api_url.split('/wday/')[0];
-      const jobPath = job.externalPath || '';
+      const tenantBase = api_url.split('/wday/')[0]
+      // Extract board name from: /wday/cxs/{tenant}/{board}/jobs
+      const boardName = api_url.split('/wday/cxs/')[1]?.split('/')?.[1] || ''
+      const careerBase = boardName ? `${tenantBase}/en-US/${boardName}` : tenantBase
+      const jobPath = job.externalPath || ''
       allJobs.push({
         job_id: job.bulletFields?.[0] || job.title + '-' + offset,
         title: job.title || 'Untitled',
         location: job.locationsText || null,
         department: job.jobFamilyGroup || null,
-        url: jobPath ? `${baseUrl}${jobPath}` : baseUrl,
+        url: jobPath ? `${careerBase}${jobPath}` : careerBase,
         posted_at: job.postedOn || null,
       });
     });
