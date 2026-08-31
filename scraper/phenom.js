@@ -1,14 +1,18 @@
 /**
  * Phenom People handler
  *
- * Phenom People powers custom career sites. The API endpoint is:
- *   POST https://{careers-domain}/api/jobs/search
+ * Phenom People career sites expose job data via their search-results page
+ * with a ?format=json query parameter.
  *
- * The `api_url` in companies.json should be the full search endpoint, e.g.:
- *   https://careers.services.global.ntt/api/jobs/search
+ * The `api_url` in companies.json should be the base locale path, e.g.:
+ *   https://careers.services.global.ntt/global/en
+ *   https://jobs-ta.pwc.com/global/en
+ *
+ * The scraper calls: GET {api_url}/search-results?format=json&from=N
+ * Job data lives in: response.ddoResults.eagerLoadRefineSearch.data.jobs
  */
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 10 // Phenom default page size
 
 export async function fetchPhenomJobs(company) {
   const { api_url } = company
@@ -16,30 +20,20 @@ export async function fetchPhenomJobs(company) {
     throw new Error(`Phenom company "${company.name}" is missing api_url in companies.json`)
   }
 
+  const baseUrl = api_url.replace(/\/$/, '') // strip trailing slash
   const allJobs = []
-  let pageNo = 0
+  let from = 0
   let total = null
 
   while (total === null || allJobs.length < total) {
-    const res = await fetch(api_url, {
-      method: 'POST',
+    const url = `${baseUrl}/search-results?format=json&from=${from}&s=1`
+
+    const res = await fetch(url, {
       headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
+        Accept: 'application/json, text/javascript, */*',
         'User-Agent': 'Mozilla/5.0 (compatible; JobAggregator/1.0)',
+        Referer: `${baseUrl}/search-results`,
       },
-      body: JSON.stringify({
-        country: [],
-        category: [],
-        city: [],
-        state: [],
-        location: [],
-        type: [],
-        lang: 'en',
-        facets: ['country', 'category', 'city', 'state', 'location', 'type'],
-        pageSize: PAGE_SIZE,
-        pageNo,
-      }),
     })
 
     if (!res.ok) {
@@ -47,32 +41,36 @@ export async function fetchPhenomJobs(company) {
     }
 
     const data = await res.json()
-    const jobs = data.data || data.jobs || data.results || []
+    const searchData = data?.ddoResults?.eagerLoadRefineSearch
 
-    if (total === null) {
-      total = data.total || data.totalCount || data.count || jobs.length
+    if (!searchData) {
+      throw new Error(`Phenom unexpected response structure for ${company.name}`)
     }
 
+    if (total === null) {
+      total = searchData.totalHits || 0
+    }
+
+    const jobs = searchData?.data?.jobs || []
     if (jobs.length === 0) break
 
-    const baseUrl = new URL(api_url).origin
-
     jobs.forEach((job) => {
-      const jobPath = job.applyUrl || job.jobUrl || job.url || ''
-      const absoluteUrl = jobPath.startsWith('http') ? jobPath : `${baseUrl}${jobPath}`
+      const jobId = String(job.jobId || job.reqId || job.jobSeqNo || `${from}-${allJobs.length}`)
+      // Prefer the applyUrl; fall back to building the canonical job page URL
+      const jobUrl = job.applyUrl && job.applyUrl.startsWith('http')
+        ? job.applyUrl
+        : `${baseUrl}/job/${job.jobId}/${encodeURIComponent((job.title || '').replace(/\s+/g, '-').toLowerCase())}`
 
       allJobs.push({
-        job_id: String(job.jobId || job.id || job.reqId || job.requisitionId || `${pageNo}-${allJobs.length}`),
-        title: job.title || job.jobTitle || 'Untitled',
-        location: job.location || job.city || job.country || null,
-        department: job.category || job.department || job.function || null,
-        url: absoluteUrl || baseUrl,
+        job_id: jobId,
+        title: job.title || 'Untitled',
+        location: job.location || job.cityState || job.city || null,
+        department: job.category || job.department || null,
+        url: jobUrl,
       })
     })
 
-    pageNo++
-
-    // Stop if we fetched everything
+    from += jobs.length
     if (allJobs.length >= total) break
   }
 

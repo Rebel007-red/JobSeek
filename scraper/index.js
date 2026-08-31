@@ -83,6 +83,10 @@ async function run() {
   const errors = [];
 
   for (const company of companies) {
+    if (company.disabled) {
+      console.log(`\nSkipping: ${company.name} (disabled)`);
+      continue;
+    }
     console.log(`\nScraping: ${company.name} (${company.ats_type})`);
     try {
       const companyId = await ensureCompanyRow(company);

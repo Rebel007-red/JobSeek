@@ -12,27 +12,31 @@
   {
     "name": "NTT Data",
     "ats_type": "phenom",
-    "api_url": "https://careers.services.global.ntt/api/jobs/search"
+    "api_url": "https://careers.services.global.ntt/global/en"
   },
   {
     "name": "PwC Acceleration Centers",
     "ats_type": "phenom",
-    "api_url": "https://jobs-ta.pwc.com/api/jobs/search"
+    "api_url": "https://jobs-ta.pwc.com/global/en"
   },
   {
     "name": "Deloitte",
     "ats_type": "phenom",
-    "api_url": "https://jobs2.deloitte.com/api/jobs/search"
+    "api_url": "https://jobs2.deloitte.com/global/en"
   },
   {
+    "_comment": "EY uses SAP SuccessFactors which blocks server-side requests — skipped",
     "name": "EY",
     "ats_type": "successfactors",
-    "slug": "careers.ey.com"
+    "slug": "careers.ey.com",
+    "disabled": true
   },
   {
+    "_comment": "KPMG Workday URL needs verification via DevTools — skipped until confirmed",
     "name": "KPMG",
     "ats_type": "workday",
-    "api_url": "https://kpmg.wd3.myworkdayjobs.com/wday/cxs/kpmg/External_Career_Site/jobs"
+    "api_url": "https://kpmg.wd3.myworkdayjobs.com/wday/cxs/kpmg/External_Career_Site/jobs",
+    "disabled": true
   }
 ]
 
