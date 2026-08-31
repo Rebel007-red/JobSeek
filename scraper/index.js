@@ -1,15 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
 import { fetchGreenhouseJobs } from './greenhouse.js';
 import { fetchWorkdayJobs } from './workday.js';
 import { fetchPhenomJobs } from './phenom.js';
 import { fetchICIMSJobs } from './icims.js';
 import { fetchOracleJobs } from './oracle.js';
 import { fetchSuccessFactorsJobs } from './successfactors.js';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // ── Environment ──────────────────────────────────────────────
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -24,10 +19,20 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
 
-// ── Load company config ───────────────────────────────────────
-const companies = JSON.parse(
-  readFileSync(join(__dirname, 'companies.json'), 'utf-8')
-);
+// ── Load companies from Supabase ──────────────────────────────
+async function loadCompanies() {
+  const { data, error } = await supabase
+    .from('companies')
+    .select('*')
+    .eq('disabled', false)
+    .order('name');
+  if (error) throw new Error(`Failed to load companies: ${error.message}`);
+  if (!data || data.length === 0) {
+    console.warn('No enabled companies found in Supabase. Add companies via the Settings page in the app.');
+    return [];
+  }
+  return data;
+}
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -83,15 +88,12 @@ async function run() {
   let totalInserted = 0;
   const errors = [];
 
+  const companies = await loadCompanies();
+  console.log(`Loaded ${companies.length} enabled companies from Supabase.\n`);
+
   for (const company of companies) {
-    if (company.disabled) {
-      console.log(`\nSkipping: ${company.name} (disabled)`);
-      continue;
-    }
     console.log(`\nScraping: ${company.name} (${company.ats_type})`);
     try {
-      const companyId = await ensureCompanyRow(company);
-
       let jobs = [];
       if (company.ats_type === 'greenhouse') {
         jobs = await fetchGreenhouseJobs(company);
@@ -111,7 +113,7 @@ async function run() {
       }
 
       console.log(`  Found ${jobs.length} jobs`);
-      const count = await upsertJobs(companyId, jobs);
+      const count = await upsertJobs(company.id, jobs);
       totalInserted += count;
       console.log(`  Upserted ${count} jobs`);
     } catch (err) {

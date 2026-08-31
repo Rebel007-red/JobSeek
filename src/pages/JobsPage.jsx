@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { JobCard } from '../components/JobCard'
 import { SearchFilter } from '../components/SearchFilter'
 import { supabase } from '../lib/supabase'
 
 const PAGE_SIZE = 24
 
-const DEFAULT_FILTERS = { keyword: '', companyId: '', location: '', department: '', skills: '' }
+const DEFAULT_FILTERS = { keyword: '', companyId: '', location: '', department: '' }
 
 // Parse comma-separated skills string into lowercase array
 function parseSkills(str) {
@@ -20,22 +21,26 @@ function getMatchedSkills(job, userSkills) {
 }
 
 export function JobsPage() {
+  const navigate = useNavigate()
   const [jobs, setJobs] = useState([])
   const [companies, setCompanies] = useState([])
-  const [filters, setFilters] = useState(() => {
-    // Persist skills in localStorage so they survive page refresh
-    const saved = localStorage.getItem('jobseeker_skills')
-    return { ...DEFAULT_FILTERS, skills: saved || '' }
-  })
+  const [filters, setFilters] = useState(DEFAULT_FILTERS)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(false)
 
-  // Persist skills to localStorage whenever they change
+  // Read skills directly from localStorage (managed in Settings page)
+  const [userSkills, setUserSkills] = useState(() =>
+    parseSkills(localStorage.getItem('jobseeker_skills') || '')
+  )
+
+  // Re-read skills from localStorage when window gains focus (in case user updated in Settings)
   useEffect(() => {
-    localStorage.setItem('jobseeker_skills', filters.skills)
-  }, [filters.skills])
+    const onFocus = () => setUserSkills(parseSkills(localStorage.getItem('jobseeker_skills') || ''))
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [])
 
   // Load companies once for the filter dropdown
   useEffect(() => {
@@ -120,8 +125,6 @@ export function JobsPage() {
   )
 
   // Compute skill matches and sort: matched jobs first
-  const userSkills = useMemo(() => parseSkills(filters.skills || ''), [filters.skills])
-
   const jobsWithMatches = useMemo(() => {
     const withScores = jobs.map(job => ({
       job,
@@ -155,12 +158,22 @@ export function JobsPage() {
               </span>
             )}
           </div>
-          <button
-            onClick={handleSignOut}
-            className="text-sm text-gray-500 hover:text-gray-800 transition-colors"
-          >
-            Sign out
-          </button>
+          <div className="flex items-center gap-3">
+            <button onClick={() => navigate('/settings')}
+              className="text-sm text-gray-500 hover:text-gray-800 transition-colors flex items-center gap-1">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              Settings
+            </button>
+            <button
+              onClick={handleSignOut}
+              className="text-sm text-gray-500 hover:text-gray-800 transition-colors"
+            >
+              Sign out
+            </button>
+          </div>
         </div>
       </header>
 
@@ -179,7 +192,7 @@ export function JobsPage() {
         {!loading && jobs.length > 0 && (
           <p className="text-sm text-gray-500">
             Showing {jobs.length} job{jobs.length !== 1 ? 's' : ''}
-            {userSkills.length > 0 && matchCount > 0 && (
+              {userSkills.length > 0 && matchCount > 0 && (
               <span className="ml-1 text-indigo-600 font-medium">· {matchCount} match your skills</span>
             )}
           </p>
