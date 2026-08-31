@@ -69,6 +69,7 @@ export async function fetchPhenomJobs(company) {
         location: job.location || job.cityState || job.city || null,
         department: job.category || job.department || null,
         url: jobUrl,
+        posted_at: job.postedDate || null,
       })
     })
 

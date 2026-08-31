@@ -21,5 +21,6 @@ export async function fetchGreenhouseJobs(company) {
     location: job.location?.name || null,
     department: job.departments?.[0]?.name || null,
     url: job.absolute_url || `https://boards.greenhouse.io/${slug}/jobs/${job.id}`,
+    posted_at: job.first_published_at || job.updated_at || null,
   }));
 }

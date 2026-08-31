@@ -63,13 +63,14 @@ async function upsertJobs(companyId, jobs) {
     location: job.location || null,
     department: job.department || null,
     url: job.url,
+    posted_at: job.posted_at || null,
     last_seen_at: now,
     is_active: true,
   }));
 
   const { error } = await supabase.from('jobs').upsert(rows, {
     onConflict: 'company_id,job_id',
-    ignoreDuplicates: false, // update last_seen_at on conflict
+    ignoreDuplicates: false,
   });
 
   if (error) throw new Error(`Failed to upsert jobs: ${error.message}`);

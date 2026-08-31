@@ -62,6 +62,7 @@ export async function fetchWorkdayJobs(company) {
         location: job.locationsText || null,
         department: job.jobFamilyGroup || null,
         url: jobPath ? `${baseUrl}${jobPath}` : baseUrl,
+        posted_at: job.postedOn || null,
       });
     });
 

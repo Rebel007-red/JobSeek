@@ -6,12 +6,20 @@ function isNew(firstSeenAt) {
   return diff < NEW_JOB_HOURS * 60 * 60 * 1000
 }
 
-export function JobCard({ job }) {
-  const { title, location, department, url, first_seen_at, companies } = job
+function formatDate(dateStr) {
+  if (!dateStr) return null
+  const d = new Date(dateStr)
+  if (isNaN(d)) return null
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
+export function JobCard({ job, matchedSkills = [] }) {
+  const { title, location, department, url, first_seen_at, posted_at, companies } = job
   const companyName = companies?.name ?? 'Unknown Company'
+  const matchCount = matchedSkills.length
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow">
+    <div className={`bg-white border rounded-xl p-5 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow ${matchCount > 0 ? 'border-indigo-300 ring-1 ring-indigo-200' : 'border-gray-200'}`}>
       {/* Header row */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
@@ -20,12 +28,30 @@ export function JobCard({ job }) {
           </h3>
           <p className="text-sm text-indigo-600 font-medium mt-0.5">{companyName}</p>
         </div>
-        {isNew(first_seen_at) && (
-          <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
-            NEW
-          </span>
-        )}
+        <div className="shrink-0 flex flex-col gap-1 items-end">
+          {matchCount > 0 && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700">
+              {matchCount} skill{matchCount > 1 ? 's' : ''} match
+            </span>
+          )}
+          {isNew(first_seen_at) && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+              NEW
+            </span>
+          )}
+        </div>
       </div>
+
+      {/* Matched skills */}
+      {matchCount > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {matchedSkills.map((s) => (
+            <span key={s} className="px-2 py-0.5 bg-indigo-50 text-indigo-600 text-xs rounded-full border border-indigo-100">
+              {s}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Meta */}
       <div className="flex flex-wrap gap-2 text-sm text-gray-500">
@@ -53,9 +79,16 @@ export function JobCard({ job }) {
 
       {/* Footer */}
       <div className="flex items-center justify-between pt-1">
-        <span className="text-xs text-gray-400">
-          Added {new Date(first_seen_at).toLocaleDateString()}
-        </span>
+        <div className="flex flex-col gap-0.5">
+          {posted_at && (
+            <span className="text-xs text-gray-500 font-medium">
+              Posted {formatDate(posted_at)}
+            </span>
+          )}
+          <span className="text-xs text-gray-400">
+            Found {new Date(first_seen_at).toLocaleDateString()}
+          </span>
+        </div>
         <a
           href={url}
           target="_blank"

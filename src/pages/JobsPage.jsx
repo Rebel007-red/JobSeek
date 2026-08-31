@@ -5,16 +5,37 @@ import { supabase } from '../lib/supabase'
 
 const PAGE_SIZE = 24
 
-const DEFAULT_FILTERS = { keyword: '', companyId: '', location: '', department: '' }
+const DEFAULT_FILTERS = { keyword: '', companyId: '', location: '', department: '', skills: '' }
+
+// Parse comma-separated skills string into lowercase array
+function parseSkills(str) {
+  return str.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+}
+
+// Return which of the user's skills appear in the job
+function getMatchedSkills(job, userSkills) {
+  if (!userSkills.length) return []
+  const haystack = `${job.title} ${job.department || ''} ${job.location || ''}`.toLowerCase()
+  return userSkills.filter(skill => haystack.includes(skill))
+}
 
 export function JobsPage() {
   const [jobs, setJobs] = useState([])
   const [companies, setCompanies] = useState([])
-  const [filters, setFilters] = useState(DEFAULT_FILTERS)
+  const [filters, setFilters] = useState(() => {
+    // Persist skills in localStorage so they survive page refresh
+    const saved = localStorage.getItem('jobseeker_skills')
+    return { ...DEFAULT_FILTERS, skills: saved || '' }
+  })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(false)
+
+  // Persist skills to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('jobseeker_skills', filters.skills)
+  }, [filters.skills])
 
   // Load companies once for the filter dropdown
   useEffect(() => {
@@ -57,10 +78,18 @@ export function JobsPage() {
       return
     }
 
+    // Deduplicate by id (safety net)
+    const deduped = (data || []).filter(
+      (job, idx, arr) => arr.findIndex(j => j.id === job.id) === idx
+    )
+
     if (currentPage === 0) {
-      setJobs(data || [])
+      setJobs(deduped)
     } else {
-      setJobs((prev) => [...prev, ...(data || [])])
+      setJobs((prev) => {
+        const existingIds = new Set(prev.map(j => j.id))
+        return [...prev, ...deduped.filter(j => !existingIds.has(j.id))]
+      })
     }
 
     setHasMore((currentPage + 1) * PAGE_SIZE < (count || 0))
@@ -90,6 +119,24 @@ export function JobsPage() {
     [jobs]
   )
 
+  // Compute skill matches and sort: matched jobs first
+  const userSkills = useMemo(() => parseSkills(filters.skills || ''), [filters.skills])
+
+  const jobsWithMatches = useMemo(() => {
+    const withScores = jobs.map(job => ({
+      job,
+      matched: getMatchedSkills(job, userSkills),
+    }))
+    if (!userSkills.length) return withScores
+    // Sort: most matches first, then by first_seen_at
+    return [...withScores].sort((a, b) => b.matched.length - a.matched.length)
+  }, [jobs, userSkills])
+
+  const matchCount = useMemo(
+    () => jobsWithMatches.filter(({ matched }) => matched.length > 0).length,
+    [jobsWithMatches]
+  )
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Top nav */}
@@ -100,6 +147,11 @@ export function JobsPage() {
             {newCount > 0 && (
               <span className="text-xs bg-green-100 text-green-700 font-semibold px-2 py-0.5 rounded-full">
                 {newCount} new
+              </span>
+            )}
+            {matchCount > 0 && (
+              <span className="text-xs bg-indigo-100 text-indigo-700 font-semibold px-2 py-0.5 rounded-full">
+                {matchCount} skill match{matchCount > 1 ? 'es' : ''}
               </span>
             )}
           </div>
@@ -127,14 +179,17 @@ export function JobsPage() {
         {!loading && jobs.length > 0 && (
           <p className="text-sm text-gray-500">
             Showing {jobs.length} job{jobs.length !== 1 ? 's' : ''}
+            {userSkills.length > 0 && matchCount > 0 && (
+              <span className="ml-1 text-indigo-600 font-medium">· {matchCount} match your skills</span>
+            )}
           </p>
         )}
 
         {/* Grid */}
-        {jobs.length > 0 ? (
+        {jobsWithMatches.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {jobs.map((job) => (
-              <JobCard key={job.id} job={job} />
+            {jobsWithMatches.map(({ job, matched }) => (
+              <JobCard key={job.id} job={job} matchedSkills={matched} />
             ))}
           </div>
         ) : !loading ? (
