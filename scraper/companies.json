@@ -39,6 +39,12 @@
     "ats_type": "workday",
     "api_url": "https://kpmg.wd3.myworkdayjobs.com/wday/cxs/kpmg/External_Career_Site/jobs",
     "disabled": true
+  },
+  {
+    "name": "JPMorgan Chase",
+    "ats_type": "oracle",
+    "api_url": "https://jpmc.fa.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1001",
+    "slug": "CX_1001"
   }
 ]
 
