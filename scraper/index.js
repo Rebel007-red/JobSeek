@@ -5,6 +5,8 @@ import { fetchPhenomJobs } from './phenom.js';
 import { fetchICIMSJobs } from './icims.js';
 import { fetchOracleJobs } from './oracle.js';
 import { fetchSuccessFactorsJobs } from './successfactors.js';
+import { fetchJSearchJobs } from './jsearch.js';
+import { fetchLinkedInJobs } from './linkedin.js';
 
 // ── Environment ──────────────────────────────────────────────
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -20,41 +22,29 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 });
 
 // ── Load companies from Supabase ──────────────────────────────
-async function loadCompanies() {
-  const { data, error } = await supabase
-    .from('companies')
-    .select('*')
-    .eq('disabled', false)
-    .order('name');
-  if (error) throw new Error(`Failed to load companies: ${error.message}`);
-  if (!data || data.length === 0) {
-    console.warn('No enabled companies found in Supabase. Add companies via the Settings page in the app.');
-    return [];
+// mode: 'companies' (default, used by 30-min cron) or 'boards' (daily job board search)
+async function loadCompanies(mode = 'all') {
+  const BOARD_TYPES = ['jsearch', 'linkedin']
+
+  let query = supabase.from('companies').select('*').eq('disabled', false).order('name')
+
+  if (mode === 'companies') {
+    // Exclude job boards — they run on a separate daily schedule
+    query = query.not('ats_type', 'in', `(${BOARD_TYPES.map(t => `"${t}"`).join(',')})`)
+  } else if (mode === 'boards') {
+    query = query.in('ats_type', BOARD_TYPES)
   }
-  return data;
+
+  const { data, error } = await query
+  if (error) throw new Error(`Failed to load companies: ${error.message}`)
+  if (!data || data.length === 0) {
+    console.warn(`No enabled companies found for mode="${mode}".`)
+    return []
+  }
+  return data
 }
 
 // ── Helpers ───────────────────────────────────────────────────
-
-async function ensureCompanyRow(company) {
-  // Upsert the company row and return its id
-  const { data, error } = await supabase
-    .from('companies')
-    .upsert(
-      {
-        name: company.name,
-        ats_type: company.ats_type,
-        slug: company.slug || null,
-        api_url: company.api_url || null,
-      },
-      { onConflict: 'name' }
-    )
-    .select('id')
-    .single();
-
-  if (error) throw new Error(`Failed to upsert company "${company.name}": ${error.message}`);
-  return data.id;
-}
 
 async function upsertJobs(companyId, jobs) {
   if (jobs.length === 0) return 0;
@@ -85,11 +75,16 @@ async function upsertJobs(companyId, jobs) {
 // ── Main ──────────────────────────────────────────────────────
 
 async function run() {
+  // mode passed via CLI: node index.js --boards  (daily)  or default (every 30 min)
+  const mode = process.argv.includes('--boards') ? 'boards'
+    : process.argv.includes('--all') ? 'all'
+    : 'companies'
+
   let totalInserted = 0;
   const errors = [];
 
-  const companies = await loadCompanies();
-  console.log(`Loaded ${companies.length} enabled companies from Supabase.\n`);
+  const companies = await loadCompanies(mode);
+  console.log(`Loaded ${companies.length} companies [mode=${mode}].\n`);
 
   for (const company of companies) {
     console.log(`\nScraping: ${company.name} (${company.ats_type})`);
@@ -107,6 +102,10 @@ async function run() {
         jobs = await fetchOracleJobs(company);
       } else if (company.ats_type === 'successfactors') {
         jobs = await fetchSuccessFactorsJobs(company);
+      } else if (company.ats_type === 'jsearch') {
+        jobs = await fetchJSearchJobs(company);
+      } else if (company.ats_type === 'linkedin') {
+        jobs = await fetchLinkedInJobs(company);
       } else {
         console.warn(`  Unknown ats_type "${company.ats_type}" — skipping`);
         continue;
