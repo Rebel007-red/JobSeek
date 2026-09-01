@@ -60,6 +60,7 @@ export function JobsPage() {
       .select('*, companies(name)', { count: 'exact' })
       .eq('is_active', true)
       .eq('hidden', false)
+      .order('posted_at', { ascending: false, nullsFirst: false })
       .order('first_seen_at', { ascending: false })
       .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1)
 
