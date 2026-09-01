@@ -8,11 +8,12 @@
  * 3 pages × 2 queries = 6 calls/day × 30 days = 180/month ✅ within quota
  *
  * Ignores company.api_url and company.slug (hardcoded queries instead).
+ * Uses `/search-v2` endpoint (working endpoint as of Sept 2026).
  * Requires env var: RAPIDAPI_KEY
  */
 
 const RAPID_HOST = 'jsearch.p.rapidapi.com'
-const PAGE_SIZE = 10  // max per call on free tier
+const PAGE_SIZE = 10  // fixed per page by API
 const MAX_PAGES = 3   // up to 30 results per query
 const QUERIES = [
   'data engineer python pyspark databricks',
@@ -30,10 +31,11 @@ async function fetchQueryJobs(query) {
       query,
       page: String(page),
       num_pages: '1',
-      date_posted: 'month',
+      country: 'us',
+      language: 'en',
     })
 
-    const res = await fetch(`https://${RAPID_HOST}/search?${params}`, {
+    const res = await fetch(`https://${RAPID_HOST}/search-v2?${params}`, {
       headers: {
         'X-RapidAPI-Key': apiKey,
         'X-RapidAPI-Host': RAPID_HOST,
@@ -47,12 +49,12 @@ async function fetchQueryJobs(query) {
     }
 
     const data = await res.json()
-    const jobs = data.data || []
+    const jobs = data.data?.jobs || []
     if (jobs.length === 0) break
 
     jobs.forEach((job) => {
       queryJobs.push({
-        job_id: job.job_id || `${job.employer_name}-${job.job_title}-${page}`.replace(/\s+/g, '-'),
+        job_id: job.job_id || `jsearch-${Date.now()}-${Math.random()}`.replace(/\D/g, ''),
         title: job.job_title || 'Untitled',
         location: [job.job_city, job.job_state, job.job_country].filter(Boolean).join(', ') || null,
         department: job.job_category || null,
@@ -62,6 +64,9 @@ async function fetchQueryJobs(query) {
     })
 
     if (jobs.length < PAGE_SIZE) break
+
+    // Respect rate limiting
+    await new Promise(r => setTimeout(r, 500))
   }
 
   return queryJobs
