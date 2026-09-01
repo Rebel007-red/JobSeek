@@ -99,7 +99,7 @@ export function SearchFilter({ filters, companies, onChange }) {
 
       {/* -- MOBILE: icon buttons only (below sm) --------------------------- */}
       <div className="flex sm:hidden items-center gap-0.5">
-        {/* Search icon — expands to full-width input */}
+        {/* Search icon ï¿½ expands to full-width input */}
         {searchOpen ? (
           <div className="relative">
             <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500 pointer-events-none"
@@ -145,7 +145,7 @@ export function SearchFilter({ filters, companies, onChange }) {
       {filterOpen && (
         <div className="fixed inset-0 z-50 flex flex-col bg-slate-950 sm:hidden">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 h-14 border-b border-gray-800">
+          <div className="flex items-center justify-between px-4 h-14 border-b border-gray-800 shrink-0">
             <span className="text-sm font-semibold text-gray-100">Filters</span>
             <button onClick={() => setFilterOpen(false)}
               className="p-2 text-gray-400 hover:text-gray-200 rounded-md">
@@ -156,30 +156,30 @@ export function SearchFilter({ filters, companies, onChange }) {
           </div>
 
           {/* Filter fields */}
-          <div className="flex-1 overflow-y-auto px-4 py-5 flex flex-col gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1.5">Company</label>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 flex flex-col gap-5">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-gray-400 uppercase tracking-wide">Company</label>
               <select value={companyId} onChange={handle('companyId')} className={inputCls}>
                 <option value="">All Companies</option>
                 {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1.5">Location</label>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-gray-400 uppercase tracking-wide">Location</label>
               <input type="text" placeholder="e.g. Bangalore, Remote" value={location}
                 onChange={handle('location')} className={inputCls} />
             </div>
           </div>
 
-          {/* Footer actions */}
-          <div className="px-4 py-4 border-t border-gray-800 flex gap-3">
+          {/* Footer */}
+          <div className="shrink-0 px-4 py-4 border-t border-gray-800 flex gap-3">
             <button onClick={clear}
-              className="flex-1 py-2.5 text-sm font-medium text-gray-400 border border-gray-700 rounded-lg hover:bg-gray-800 transition-colors">
+              className="flex-1 py-3 text-sm font-medium text-gray-400 border border-gray-700 rounded-xl hover:bg-gray-800 transition-colors">
               Reset
             </button>
             <button onClick={() => setFilterOpen(false)}
-              className="flex-1 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors">
+              className="flex-1 py-3 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-colors">
               Apply
             </button>
           </div>
