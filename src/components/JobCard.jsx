@@ -40,21 +40,21 @@ export function JobCard({ job, matchedSkills = [], onHide }) {
   ].slice(0, 6)
 
   return (
-    <div className={`group relative rounded-lg p-3 flex flex-col gap-2 border transition-all active:scale-[0.99] ${
+    <div className={`relative rounded-lg p-3 flex flex-col gap-2 border transition-all active:scale-[0.99] ${
       matchCount > 0
         ? 'bg-gray-800 border-indigo-500/50 ring-1 ring-indigo-500/20'
         : 'bg-gray-800 border-gray-700/80 hover:border-gray-600'
     }`}>
 
-      {/* Hide button — top-right corner, visible on hover/touch */}
+      {/* Hide button — always visible (dim), bright on hover */}
       {onHide && (
         <button
           onClick={() => onHide(job.id)}
           title="Hide this job"
-          className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 rounded text-gray-600 hover:text-red-400 hover:bg-gray-700 transition-all"
+          className="absolute top-1 right-1 p-1.5 rounded opacity-20 hover:opacity-100 focus:opacity-100 text-gray-400 hover:text-red-400 hover:bg-gray-700/80 transition-all touch-manipulation"
         >
           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
       )}

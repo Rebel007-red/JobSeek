@@ -140,4 +140,24 @@ async function run() {
   }
 }
 
-run();
+// ── Cleanup ───────────────────────────────────────────────────
+// Delete jobs not seen in the last 30 days to stay within Supabase free tier
+async function cleanupOldJobs() {
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { error, count } = await supabase
+    .from('jobs')
+    .delete({ count: 'exact' })
+    .lt('last_seen_at', cutoff);
+  if (error) {
+    console.warn(`Cleanup failed: ${error.message}`);
+  } else if (count > 0) {
+    console.log(`\nCleaned up ${count} jobs not seen in 30+ days.`);
+  }
+}
+
+async function main() {
+  await run();
+  await cleanupOldJobs();
+}
+
+main();
