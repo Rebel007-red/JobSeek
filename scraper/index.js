@@ -47,38 +47,51 @@ async function loadCompanies(mode = 'all') {
 
 // ── Helpers ───────────────────────────────────────────────────
 
+// Validate and sanitize a date value — returns ISO string or null
+function safeDate(val) {
+  if (!val) return null;
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
+
 async function upsertJobs(companyId, jobs) {
   if (jobs.length === 0) return 0;
 
   const now = new Date().toISOString();
 
-  // Deduplicate by job_id — same job may appear multiple times (e.g. Phenom multi-location)
+  // Deduplicate by job_id within this batch
   const seen = new Set();
   const uniqueJobs = jobs.filter(job => {
-    if (seen.has(job.job_id)) return false;
+    if (!job.job_id || seen.has(job.job_id)) return false;
     seen.add(job.job_id);
     return true;
   });
 
   const rows = uniqueJobs.map((job) => ({
     company_id: companyId,
-    job_id: job.job_id,
-    title: job.title,
+    job_id: String(job.job_id),
+    title: job.title || 'Untitled',
     location: job.location || null,
     department: job.department || null,
-    url: job.url,
-    posted_at: job.posted_at || null,
+    url: job.url || '',
+    posted_at: safeDate(job.posted_at),   // sanitize — rejects "Posted X Days Ago"
     last_seen_at: now,
     is_active: true,
   }));
 
-  const { error } = await supabase.from('jobs').upsert(rows, {
-    onConflict: 'company_id,job_id',
-    ignoreDuplicates: false,
-  });
-
-  if (error) throw new Error(`Failed to upsert jobs: ${error.message}`);
-  return rows.length;
+  // Chunk into batches of 500 to avoid payload / dedup issues
+  const CHUNK = 500;
+  let total = 0;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const chunk = rows.slice(i, i + CHUNK);
+    const { error } = await supabase.from('jobs').upsert(chunk, {
+      onConflict: 'company_id,job_id',
+      ignoreDuplicates: false,
+    });
+    if (error) throw new Error(`Failed to upsert jobs: ${error.message}`);
+    total += chunk.length;
+  }
+  return total;
 }
 
 // ── Main ──────────────────────────────────────────────────────
