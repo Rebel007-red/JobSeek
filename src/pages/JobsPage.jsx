@@ -123,10 +123,16 @@ export function JobsPage() {
     await supabase.from('jobs').update({ hidden: true }).eq('id', jobId)
   }
 
+  async function handleApplied(jobId, markAsApplied) {
+    const applied_at = markAsApplied ? new Date().toISOString() : null
+    setJobs(prev => prev.map(j => j.id === jobId ? { ...j, applied_at } : j))
+    await supabase.from('jobs').update({ applied_at }).eq('id', jobId)
+  }
+
   const newCount = useMemo(
     () => jobs.filter((j) => {
-      const diff = Date.now() - new Date(j.first_seen_at).getTime()
-      return diff < 48 * 60 * 60 * 1000
+      const ref = j.posted_at || j.first_seen_at
+      return ref && Date.now() - new Date(ref).getTime() < 2 * 24 * 60 * 60 * 1000
     }).length,
     [jobs]
   )
@@ -211,7 +217,7 @@ export function JobsPage() {
         {jobsWithMatches.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
             {jobsWithMatches.map(({ job, matched }) => (
-              <JobCard key={job.id} job={job} matchedSkills={matched} onHide={handleHide} />
+              <JobCard key={job.id} job={job} matchedSkills={matched} onHide={handleHide} onApplied={handleApplied} />
             ))}
           </div>
         ) : !loading ? (
