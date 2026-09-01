@@ -64,7 +64,7 @@ async function fetchQueryJobs(query) {
         title: job.job_title || 'Untitled',
         location: [job.job_city, job.job_state, job.job_country].filter(Boolean).join(', ') || null,
         department: job.job_category || null,
-        url: job.job_apply_link || job.job_google_link || '#',
+        url: job.job_google_link || job.job_apply_link || '#',
         posted_at: job.job_posted_at_datetime_utc || null,
       })
     })
