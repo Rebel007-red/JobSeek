@@ -83,7 +83,7 @@ export function JobCard({ job, matchedSkills = [], onHide, onApplied }) {
   const revealIntensity = Math.min(Math.abs(offset) / SWIPE_THRESHOLD, 1)
 
   return (
-    <div className="relative overflow-hidden rounded-lg">
+    <div className="relative overflow-hidden rounded-lg h-full">
       {/* Swipe reveal backgrounds */}
       <div
         className="absolute inset-0 flex items-center justify-start px-4 rounded-lg"
@@ -107,7 +107,7 @@ export function JobCard({ job, matchedSkills = [], onHide, onApplied }) {
           transform: `translateX(${offset}px)`,
           transition: swiping.current ? 'none' : 'transform 0.25s ease',
         }}
-        className={`relative rounded-lg p-2.5 flex flex-col gap-2 border ${
+        className={`relative rounded-lg p-2.5 flex flex-col gap-2 border h-full ${
           matchCount > 0
             ? 'bg-gray-800 border-indigo-500/40 ring-1 ring-indigo-500/10'
             : 'bg-gray-800 border-gray-700/60 hover:border-gray-600/80'
@@ -140,9 +140,9 @@ export function JobCard({ job, matchedSkills = [], onHide, onApplied }) {
               <button
                 onClick={() => onHide(job.id)}
                 title="Hide this job"
-                className="flex items-center justify-center w-5 h-5 rounded-full bg-gray-700/50 hover:bg-red-500/70 text-gray-600 hover:text-white transition-all touch-manipulation ml-0.5"
+                className="flex items-center justify-center w-5 h-5 rounded-full bg-gray-600/50 hover:bg-red-500/80 text-gray-400 hover:text-white transition-all touch-manipulation ml-0.5"
               >
-                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
@@ -166,8 +166,9 @@ export function JobCard({ job, matchedSkills = [], onHide, onApplied }) {
           </span>
         </div>
 
-        {/* Skill tags */}
-        {displaySkills.length > 0 && (
+        {/* Skill tags — flex-1 pushes footer to bottom */}
+        <div className="flex-1">
+          {displaySkills.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {displaySkills.map(s => (
               <span key={s} className={`px-1.5 py-0.5 text-[10px] rounded-full border ${
@@ -180,6 +181,7 @@ export function JobCard({ job, matchedSkills = [], onHide, onApplied }) {
             ))}
           </div>
         )}
+        </div>
 
         {/* Footer */}
         <div className="flex items-center justify-between pt-1.5 border-t border-gray-700/30">
