@@ -64,13 +64,16 @@ export function JobCard({ job, matchedSkills = [], onHide, onApplied }) {
 
   function handleTouchEnd() {
     if (offset > SWIPE_THRESHOLD && onHide) {
-      // Animate out right, then hide
+      // Swipe right → animate off screen then hide
       setOffset(400)
       setTimeout(() => onHide(job.id), 200)
     } else if (offset < -SWIPE_THRESHOLD && onApplied) {
-      // Animate out left, then mark applied
-      setOffset(-400)
-      setTimeout(() => onApplied(job.id, !applied_at), 200)
+      // Swipe left → bounce, call onApplied, snap back so badge shows
+      setOffset(-100)
+      setTimeout(() => {
+        onApplied(job.id, !applied_at)
+        setOffset(0)
+      }, 150)
     } else {
       setOffset(0)
     }

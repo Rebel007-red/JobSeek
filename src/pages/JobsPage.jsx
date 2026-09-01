@@ -127,7 +127,8 @@ export function JobsPage() {
   async function handleApplied(jobId, markAsApplied) {
     const applied_at = markAsApplied ? new Date().toISOString() : null
     setJobs(prev => prev.map(j => j.id === jobId ? { ...j, applied_at } : j))
-    await supabase.from('jobs').update({ applied_at }).eq('id', jobId)
+    const { error } = await supabase.from('jobs').update({ applied_at }).eq('id', jobId)
+    if (error) console.error('Failed to save applied status:', error.message)
   }
 
   const newCount = useMemo(
