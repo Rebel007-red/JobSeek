@@ -158,22 +158,24 @@ export function JobsPage() {
     <div className="min-h-screen bg-slate-950">
       {/* Top nav */}
       <header className="bg-gray-900/95 backdrop-blur border-b border-gray-800 sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-3 sm:px-4 py-2 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="max-w-6xl mx-auto px-3 sm:px-4 py-2 flex items-center gap-2">
+          {/* Brand */}
+          <div className="flex items-center gap-2 shrink-0">
             <h1 className="text-sm font-bold text-gray-100 tracking-tight">Job Seeker</h1>
             {newCount > 0 && (
               <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold px-1.5 py-0.5 rounded whitespace-nowrap">
                 {newCount} new
               </span>
             )}
-            {matchCount > 0 && (
-              <span className="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-bold px-1.5 py-0.5 rounded whitespace-nowrap">
-                {matchCount} match
-              </span>
-            )}
           </div>
-          <div className="flex items-center gap-1">
-            {/* Settings — icon on mobile, icon+text on sm+ */}
+
+          {/* Search + filters — flex-1 fills remaining space */}
+          <div className="flex-1 flex items-center gap-1.5">
+            <SearchFilter filters={filters} companies={companies} onChange={setFilters} />
+          </div>
+
+          {/* Settings + sign out */}
+          <div className="flex items-center gap-1 shrink-0">
             <button onClick={() => navigate('/settings')}
               className="flex items-center gap-1 px-2 py-1.5 text-[11px] text-gray-400 hover:text-gray-200 hover:bg-gray-800 rounded-md transition-colors">
               <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -194,9 +196,6 @@ export function JobsPage() {
       </header>
 
       <main className="max-w-6xl mx-auto px-3 sm:px-4 py-3 flex flex-col gap-3">
-        {/* Filters */}
-        <SearchFilter filters={filters} companies={companies} onChange={setFilters} />
-
         {/* Error */}
         {error && (
           <p className="text-xs text-red-400 bg-red-900/20 border border-red-800/50 rounded-md px-3 py-2">
