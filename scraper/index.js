@@ -160,7 +160,10 @@ async function run() {
   if (errors.length > 0) {
     console.error('\nErrors:');
     errors.forEach((e) => console.error(`  ${e.company}: ${e.error}`));
-    process.exit(1);
+    // Only fail if nothing was upserted at all — partial success is still success
+    if (totalInserted === 0) {
+      process.exit(1);
+    }
   }
 }
 
