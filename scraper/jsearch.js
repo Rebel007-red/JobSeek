@@ -15,9 +15,15 @@
 const RAPID_HOST = 'jsearch.p.rapidapi.com'
 const PAGE_SIZE = 10  // fixed per page by API
 const MAX_PAGES = 3   // up to 30 results per query
+// ── ADD YOUR JOB TITLES HERE ─────────────────────────────────────────────────
+// Each entry = 1 RapidAPI call × 3 pages = 30 jobs
+// Free tier: 200 calls/month → max 6 entries (6 × 3 × ~30 days = 180 calls)
+// ─────────────────────────────────────────────────────────────────────────────
 const QUERIES = [
   'data engineer python pyspark databricks',
   'java developer spring boot react',
+  // 'frontend developer react typescript',
+  // 'devops engineer kubernetes aws',
 ]
 
 async function fetchQueryJobs(query) {

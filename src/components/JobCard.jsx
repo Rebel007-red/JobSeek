@@ -107,62 +107,62 @@ export function JobCard({ job, matchedSkills = [], onHide, onApplied }) {
           transform: `translateX(${offset}px)`,
           transition: swiping.current ? 'none' : 'transform 0.25s ease',
         }}
-        className={`relative rounded-lg p-2.5 flex flex-col gap-1.5 border ${
+        className={`relative rounded-lg p-2.5 flex flex-col gap-2 border ${
           matchCount > 0
-            ? 'bg-gray-800 border-indigo-500/50 ring-1 ring-indigo-500/20'
-            : 'bg-gray-800 border-gray-700/80 hover:border-gray-600'
+            ? 'bg-gray-800 border-indigo-500/40 ring-1 ring-indigo-500/10'
+            : 'bg-gray-800 border-gray-700/60 hover:border-gray-600/80'
         }`}
       >
         {/* Title row */}
-        <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start gap-2">
           <div className="flex-1 min-w-0">
-            <h3 className="font-medium text-gray-100 text-[13px] leading-snug line-clamp-2" title={title}>{title}</h3>
-            <p className="text-[11px] text-indigo-400 font-medium truncate">{companyName}</p>
+            <h3 className="font-semibold text-gray-100 text-[13px] leading-snug line-clamp-2" title={title}>{title}</h3>
+            <p className="text-[11px] text-indigo-400/80 mt-0.5 font-medium truncate">{companyName}</p>
           </div>
-          <div className="shrink-0 flex flex-col gap-0.5 items-end">
-            {/* Hide button */}
+          {/* Right badges + hide button */}
+          <div className="shrink-0 flex items-center gap-1 pt-0.5">
+            {applied_at && (
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+                ✓ Applied
+              </span>
+            )}
+            {!applied_at && isNew(posted_at, first_seen_at) && (
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/15 text-sky-400 border border-sky-500/20">
+                NEW
+              </span>
+            )}
+            {matchCount > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/15 text-indigo-400 border border-indigo-500/20 whitespace-nowrap">
+                {matchCount}✦
+              </span>
+            )}
             {onHide && (
               <button
                 onClick={() => onHide(job.id)}
                 title="Hide this job"
-                className="flex items-center justify-center w-5 h-5 rounded bg-gray-700/60 hover:bg-red-500/80 text-gray-500 hover:text-white transition-all touch-manipulation"
+                className="flex items-center justify-center w-5 h-5 rounded-full bg-gray-700/50 hover:bg-red-500/70 text-gray-600 hover:text-white transition-all touch-manipulation ml-0.5"
               >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
+                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
-            )}
-            {matchCount > 0 && (
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 whitespace-nowrap">
-                {matchCount}✦
-              </span>
-            )}
-            {applied_at && (
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 whitespace-nowrap">
-                ✓
-              </span>
-            )}
-            {!applied_at && isNew(posted_at, first_seen_at) && (
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30">
-                NEW
-              </span>
             )}
           </div>
         </div>
 
-        {/* Location + date inline */}
-        <div className="flex items-center gap-2 text-[10px] text-gray-500 flex-wrap">
-          {location && (
-            <span className="flex items-center gap-0.5 truncate max-w-[130px]">
-              <svg className="w-2.5 h-2.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        {/* Location + date */}
+        <div className="flex items-center justify-between text-[10px]">
+          {location ? (
+            <span className="flex items-center gap-0.5 text-gray-500 min-w-0">
+              <svg className="w-2.5 h-2.5 shrink-0 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
-              {location}
+              <span className="truncate max-w-[160px]">{location}</span>
             </span>
-          )}
-          <span className="text-gray-600 ml-auto shrink-0">
-            {posted_at ? formatDate(posted_at) : formatDate(first_seen_at)}
+          ) : <span />}
+          <span className="text-gray-600 shrink-0">
+            {formatDate(posted_at || first_seen_at)}
           </span>
         </div>
 
@@ -170,10 +170,10 @@ export function JobCard({ job, matchedSkills = [], onHide, onApplied }) {
         {displaySkills.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {displaySkills.map(s => (
-              <span key={s} className={`px-1 py-0.5 text-[10px] rounded border ${
+              <span key={s} className={`px-1.5 py-0.5 text-[10px] rounded-full border ${
                 matchedSkills.includes(s)
-                  ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
-                  : 'bg-gray-700/40 text-gray-500 border-gray-600/40'
+                  ? 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20'
+                  : 'bg-gray-700/30 text-gray-500 border-gray-700/50'
               }`}>
                 {s}
               </span>
@@ -182,28 +182,31 @@ export function JobCard({ job, matchedSkills = [], onHide, onApplied }) {
         )}
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 pt-1 border-t border-gray-700/30">
-          {onApplied && (
+        <div className="flex items-center justify-between pt-1.5 border-t border-gray-700/30">
+          {onApplied ? (
             <button
               onClick={() => onApplied(job.id, !applied_at)}
-              title={applied_at ? 'Undo applied' : 'Mark as applied'}
-              className={`inline-flex items-center gap-0.5 text-[11px] font-semibold transition-colors ${
-                applied_at ? 'text-emerald-400 hover:text-gray-400' : 'text-gray-500 hover:text-emerald-400'
+              className={`inline-flex items-center gap-1 text-[11px] transition-colors ${
+                applied_at
+                  ? 'text-emerald-400 hover:text-gray-400'
+                  : 'text-gray-600 hover:text-emerald-400'
               }`}
             >
               <svg className="w-3 h-3" fill={applied_at ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              {applied_at ? 'Applied' : 'Applied?'}
+              {applied_at ? 'Applied' : 'Mark applied'}
             </button>
-          )}
+          ) : <span />}
           <a href={url} target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 transition-colors">
-            Apply ↗
+            className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 transition-colors">
+            Apply
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
           </a>
         </div>
       </div>
     </div>
   )
 }
-

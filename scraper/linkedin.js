@@ -19,10 +19,15 @@ const BASE = 'https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/se
 const PAGE_SIZE = 25
 const MAX_PAGES = 10  // up to 250 results per query
 
-// Hardcoded queries (same as JSearch) for consistency
+// ── ADD YOUR JOB TITLES HERE ─────────────────────────────────────────────────
+// Each entry fetches up to 250 LinkedIn jobs. No API quota — add freely!
+// Change location to 'India', 'US', 'Remote', etc.
+// ─────────────────────────────────────────────────────────────────────────────
 const QUERIES = [
   { keywords: 'data engineer python pyspark databricks', location: 'India' },
   { keywords: 'java developer spring boot react', location: 'India' },
+  // { keywords: 'frontend developer react typescript', location: 'India' },
+  // { keywords: 'devops engineer kubernetes aws', location: 'India' },
 ]
 
 const HEADERS = {
