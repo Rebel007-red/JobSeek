@@ -26,14 +26,25 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 // mode: 'companies' (default, used by 30-min cron) or 'boards' (daily job board search)
 async function loadCompanies(mode = 'all') {
   const BOARD_TYPES = ['jsearch', 'linkedin', 'naukri']
+  
+  // Hardcoded board companies (no database lookup needed)
+  // Using stable IDs so job references don't break
+  const BOARD_COMPANIES = [
+    { id: '00000001-0000-0000-0000-000000000001', name: 'JSearch', ats_type: 'jsearch', api_url: 'data engineer python pyspark databricks', slug: 'jsearch', disabled: false },
+    { id: '00000001-0000-0000-0000-000000000002', name: 'LinkedIn Jobs', ats_type: 'linkedin', api_url: 'data engineer python pyspark databricks', slug: 'linkedin', disabled: false },
+    { id: '00000001-0000-0000-0000-000000000003', name: 'Naukri.com', ats_type: 'naukri', api_url: 'data engineer python pyspark databricks', slug: 'naukri', disabled: true },  // Disabled: requires reCAPTCHA
+  ]
+
+  // For board mode, return hardcoded list (bypass database constraint issue)
+  if (mode === 'boards') {
+    return BOARD_COMPANIES
+  }
 
   let query = supabase.from('companies').select('*').eq('disabled', false).order('name')
 
   if (mode === 'companies') {
     // Exclude job boards — they run on a separate daily schedule
     query = query.not('ats_type', 'in', `(${BOARD_TYPES.map(t => `"${t}"`).join(',')})`)
-  } else if (mode === 'boards') {
-    query = query.in('ats_type', BOARD_TYPES)
   }
 
   const { data, error } = await query
