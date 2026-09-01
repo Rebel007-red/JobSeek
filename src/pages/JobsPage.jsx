@@ -59,6 +59,7 @@ export function JobsPage() {
       .from('jobs')
       .select('*, companies(name)', { count: 'exact' })
       .eq('is_active', true)
+      .eq('hidden', false)
       .order('first_seen_at', { ascending: false })
       .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1)
 
@@ -114,6 +115,12 @@ export function JobsPage() {
 
   async function handleSignOut() {
     await supabase.auth.signOut()
+  }
+
+  async function handleHide(jobId) {
+    // Optimistic: remove from local state immediately
+    setJobs(prev => prev.filter(j => j.id !== jobId))
+    await supabase.from('jobs').update({ hidden: true }).eq('id', jobId)
   }
 
   const newCount = useMemo(
@@ -204,7 +211,7 @@ export function JobsPage() {
         {jobsWithMatches.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
             {jobsWithMatches.map(({ job, matched }) => (
-              <JobCard key={job.id} job={job} matchedSkills={matched} />
+              <JobCard key={job.id} job={job} matchedSkills={matched} onHide={handleHide} />
             ))}
           </div>
         ) : !loading ? (

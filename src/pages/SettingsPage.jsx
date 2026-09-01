@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
-const ATS_TYPES = ['greenhouse', 'workday', 'phenom', 'icims', 'oracle', 'successfactors']
+const ATS_TYPES = ['greenhouse', 'workday', 'phenom', 'icims', 'oracle', 'successfactors', 'jsearch', 'linkedin', 'naukri']
 
 const ATS_HELP = {
   greenhouse: {
@@ -43,6 +43,10 @@ export function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
 
+  // Hidden jobs state
+  const [hiddenCount, setHiddenCount] = useState(0)
+  const [restoring, setRestoring] = useState(false)
+
   // Skills state (localStorage)
   const [skillInput, setSkillInput] = useState('')
   const [skills, setSkills] = useState(() => {
@@ -52,7 +56,23 @@ export function SettingsPage() {
 
   useEffect(() => {
     loadCompanies()
+    loadHiddenCount()
   }, [])
+
+  async function loadHiddenCount() {
+    const { count } = await supabase
+      .from('jobs')
+      .select('id', { count: 'exact', head: true })
+      .eq('hidden', true)
+    setHiddenCount(count || 0)
+  }
+
+  async function restoreAllHidden() {
+    setRestoring(true)
+    await supabase.from('jobs').update({ hidden: false }).eq('hidden', true)
+    setHiddenCount(0)
+    setRestoring(false)
+  }
 
   async function loadCompanies() {
     setLoading(true)
@@ -142,10 +162,13 @@ export function SettingsPage() {
       <main className="max-w-4xl mx-auto px-4 py-4">
         {/* Tabs */}
         <div className="flex gap-1 bg-gray-800 border border-gray-700 rounded-lg p-1 w-fit mb-6">
-          {['companies', 'skills'].map(t => (
+          {['companies', 'skills', 'hidden'].map(t => (
             <button key={t} onClick={() => setTab(t)}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium capitalize transition-colors ${tab === t ? 'bg-gray-700 text-gray-100 shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}>
+              className={`px-4 py-1.5 rounded-md text-sm font-medium capitalize transition-colors flex items-center gap-1.5 ${tab === t ? 'bg-gray-700 text-gray-100 shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}>
               {t}
+              {t === 'hidden' && hiddenCount > 0 && (
+                <span className="text-[10px] bg-gray-600 text-gray-300 px-1.5 py-0.5 rounded-full font-bold">{hiddenCount}</span>
+              )}
             </button>
           ))}
         </div>
@@ -321,6 +344,42 @@ export function SettingsPage() {
             </div>
 
             <p className="text-xs text-gray-400">Skills are stored locally in your browser and never sent to the server.</p>
+          </div>
+        )}
+
+        {/* ── HIDDEN JOBS TAB ── */}
+        {tab === 'hidden' && (
+          <div className="flex flex-col gap-4">
+            <div className="bg-gray-800 border border-gray-700 rounded-lg p-5 flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-200">
+                    {hiddenCount > 0
+                      ? <>{hiddenCount} job{hiddenCount > 1 ? 's' : ''} hidden</>
+                      : 'No hidden jobs'}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Jobs you dismiss with the × button are hidden across all sessions.
+                    They reappear if a new scrape finds them again — unless you restore them here first.
+                  </p>
+                </div>
+                {hiddenCount > 0 && (
+                  <button
+                    onClick={restoreAllHidden}
+                    disabled={restoring}
+                    className="shrink-0 px-3 py-1.5 text-xs font-medium bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-md transition-colors"
+                  >
+                    {restoring ? 'Restoring…' : `Restore all ${hiddenCount}`}
+                  </button>
+                )}
+              </div>
+
+              {hiddenCount === 0 && (
+                <p className="text-xs text-gray-600 text-center py-4">
+                  Hover over any job card and click × to hide it.
+                </p>
+              )}
+            </div>
           </div>
         )}
       </main>
