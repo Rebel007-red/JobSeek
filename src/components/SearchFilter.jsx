@@ -128,7 +128,7 @@ export function SearchFilter({ filters, companies, onChange }) {
           </button>
         )}
 
-        {/* Filter icon — toggles popover */}
+        {/* Filter icon ï¿½ toggles popover */}
         <button ref={filterBtnRef} onClick={() => setFilterOpen(v => !v)} title="Filters"
           className={`relative p-1.5 rounded-md transition-colors ${activeFilterCount > 0 ? 'text-indigo-400 bg-indigo-500/10' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'}`}>
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -142,7 +142,7 @@ export function SearchFilter({ filters, companies, onChange }) {
         </button>
       </div>
 
-      {/* MOBILE FILTER POPOVER — portaled to body, positioned below filter button */}
+      {/* MOBILE FILTER POPOVER ï¿½ portaled to body, positioned below filter button */}
       {filterOpen && createPortal(
         <div ref={popoverRef} style={getPopoverStyle()}
           className="bg-gray-900 border border-gray-700/80 rounded-xl shadow-2xl p-4 flex flex-col gap-3">
