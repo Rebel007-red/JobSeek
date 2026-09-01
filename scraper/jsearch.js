@@ -1,32 +1,33 @@
 /**
  * JSearch (RapidAPI) handler — aggregates Google Jobs, Indeed, Glassdoor, etc.
  *
- * Free tier: 500 requests/month. Used for daily role-specific job searches.
+ * Free tier: 200 requests/month (not 500). Uses 2 hardcoded role queries:
+ *   1. "data engineer python pyspark databricks"
+ *   2. "java developer spring boot react"
  *
- * In companies.json / Supabase:
- *   ats_type: "jsearch"
- *   api_url:  search query, e.g. "data engineer python pyspark databricks"
- *   slug:     location,     e.g. "India"
+ * 3 pages × 2 queries = 6 calls/day × 30 days = 180/month ✅ within quota
  *
+ * Ignores company.api_url and company.slug (hardcoded queries instead).
  * Requires env var: RAPIDAPI_KEY
  */
 
 const RAPID_HOST = 'jsearch.p.rapidapi.com'
 const PAGE_SIZE = 10  // max per call on free tier
-const MAX_PAGES = 3   // up to 30 results per query per day
+const MAX_PAGES = 3   // up to 30 results per query
+const QUERIES = [
+  'data engineer python pyspark databricks',
+  'java developer spring boot react',
+]
 
-export async function fetchJSearchJobs(company) {
-  const { api_url: query, slug: location } = company
-  if (!query) throw new Error(`JSearch company "${company.name}" missing api_url (search query)`)
-
+async function fetchQueryJobs(query) {
   const apiKey = process.env.RAPIDAPI_KEY
   if (!apiKey) throw new Error('Missing RAPIDAPI_KEY env var — add it to GitHub Actions secrets')
 
-  const allJobs = []
+  const queryJobs = []
 
   for (let page = 1; page <= MAX_PAGES; page++) {
     const params = new URLSearchParams({
-      query: location ? `${query} in ${location}` : query,
+      query,
       page: String(page),
       num_pages: '1',
       date_posted: 'month',
@@ -41,8 +42,8 @@ export async function fetchJSearchJobs(company) {
     })
 
     if (!res.ok) {
-      if (res.status === 429) throw new Error(`JSearch rate limit exceeded for "${company.name}"`)
-      throw new Error(`JSearch API error for "${company.name}": ${res.status} ${res.statusText}`)
+      if (res.status === 429) throw new Error(`JSearch rate limit (query="${query}")`)
+      throw new Error(`JSearch API error for "${query}": ${res.status} ${res.statusText}`)
     }
 
     const data = await res.json()
@@ -50,7 +51,7 @@ export async function fetchJSearchJobs(company) {
     if (jobs.length === 0) break
 
     jobs.forEach((job) => {
-      allJobs.push({
+      queryJobs.push({
         job_id: job.job_id || `${job.employer_name}-${job.job_title}-${page}`.replace(/\s+/g, '-'),
         title: job.job_title || 'Untitled',
         location: [job.job_city, job.job_state, job.job_country].filter(Boolean).join(', ') || null,
@@ -61,6 +62,19 @@ export async function fetchJSearchJobs(company) {
     })
 
     if (jobs.length < PAGE_SIZE) break
+  }
+
+  return queryJobs
+}
+
+export async function fetchJSearchJobs(company) {
+  const allJobs = []
+
+  for (const query of QUERIES) {
+    console.log(`    → Fetching JSearch: "${query}"`)
+    const jobs = await fetchQueryJobs(query)
+    console.log(`      Found ${jobs.length} jobs`)
+    allJobs.push(...jobs)
   }
 
   return allJobs
