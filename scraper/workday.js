@@ -58,13 +58,16 @@ export async function fetchWorkdayJobs(company) {
       const boardName = api_url.split('/wday/cxs/')[1]?.split('/')?.[1] || ''
       const careerBase = boardName ? `${tenantBase}/en-US/${boardName}` : tenantBase
       const jobPath = job.externalPath || ''
+      // Only store properly formatted dates — Workday sometimes returns "Posted X Days Ago"
+      const rawDate = job.postedOn || null
+      const posted_at = rawDate && /^\d{4}-\d{2}-\d{2}/.test(rawDate) ? rawDate : null
       allJobs.push({
         job_id: job.bulletFields?.[0] || job.title + '-' + offset,
         title: job.title || 'Untitled',
         location: job.locationsText || null,
         department: job.jobFamilyGroup || null,
         url: jobPath ? `${careerBase}${jobPath}` : careerBase,
-        posted_at: job.postedOn || null,
+        posted_at,
       });
     });
 

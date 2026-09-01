@@ -52,7 +52,15 @@ async function upsertJobs(companyId, jobs) {
 
   const now = new Date().toISOString();
 
-  const rows = jobs.map((job) => ({
+  // Deduplicate by job_id — same job may appear multiple times (e.g. Phenom multi-location)
+  const seen = new Set();
+  const uniqueJobs = jobs.filter(job => {
+    if (seen.has(job.job_id)) return false;
+    seen.add(job.job_id);
+    return true;
+  });
+
+  const rows = uniqueJobs.map((job) => ({
     company_id: companyId,
     job_id: job.job_id,
     title: job.title,
