@@ -7,9 +7,10 @@
 create table if not exists public.companies (
   id          uuid primary key default gen_random_uuid(),
   name        text not null unique,
-  ats_type    text not null check (ats_type in ('greenhouse', 'workday', 'phenom', 'icims', 'oracle', 'successfactors')),
-  slug        text,          -- Greenhouse board slug  e.g. "acme"
-  api_url     text,          -- Workday full API URL
+  ats_type    text not null check (ats_type in ('greenhouse', 'workday', 'phenom', 'icims', 'oracle', 'successfactors', 'jsearch', 'linkedin', 'naukri')),
+  slug        text,          -- Greenhouse board slug or board type (e.g. "acme" or "jsearch")
+  api_url     text,          -- Workday full API URL or board query (e.g. "data engineer")
+  disabled    boolean default false,  -- Allow disabling companies without deletion
   created_at  timestamptz default now()
 );
 
