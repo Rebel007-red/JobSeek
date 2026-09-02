@@ -14,8 +14,8 @@
 
 const PAGE_SIZE = 100
 const MAX_JOBS = 50  // Limit to 50 high-quality jobs
-const MAX_AGE_MS = 24 * 3600 * 1000  // 24 hours in ms
-const MIN_SKILL_KEYWORDS = 2  // Must match at least 2 skill keywords
+const MAX_AGE_MS = 7 * 24 * 3600 * 1000  // 7 days (extended from 24 hours)
+const MIN_SKILL_KEYWORDS = 1  // Must match at least 1 skill keyword (relaxed from 2)
 let SKILL_KEYWORDS = []
 
 import { extractSkillsFromText } from './skills-extractor.js'
@@ -64,7 +64,7 @@ export async function fetchICIMSJobs(company) {
     jobs.forEach((job) => {
       if (allJobs.length >= MAX_JOBS) return  // Stop at 50 jobs
 
-      // 24hr freshness check
+      // 7-day freshness check
       const postedDate = new Date(job.postDate || job.datePosted || 0)
       if (Date.now() - postedDate.getTime() > MAX_AGE_MS) return
       

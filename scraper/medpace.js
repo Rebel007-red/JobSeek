@@ -14,8 +14,8 @@ const BASE = 'https://careers.medpace.com/api/jobs'
 const SITE = 'https://careers.medpace.com'
 const PAGE_SIZE = 50
 const MAX_JOBS = 50  // Limit to 50 high-quality jobs
-const MAX_AGE_MS = 24 * 3600 * 1000  // 24 hours in ms
-const MIN_SKILL_KEYWORDS = 2  // Must match at least 2 skill keywords
+const MAX_AGE_MS = 7 * 24 * 3600 * 1000  // 7 days (extended from 24 hours)
+const MIN_SKILL_KEYWORDS = 1  // Must match at least 1 skill keyword (relaxed from 2)
 let SKILL_KEYWORDS = []
 
 const HEADERS = {
@@ -61,7 +61,7 @@ export async function fetchMedpaceJobs(_company) {
       if (!id || seenIds.has(id)) continue
       seenIds.add(id)
 
-      // 24hr freshness check
+      // 7-day freshness check
       const postedDate = new Date(job.posted_date || job.create_date || 0)
       if (Date.now() - postedDate.getTime() > MAX_AGE_MS) continue
       
