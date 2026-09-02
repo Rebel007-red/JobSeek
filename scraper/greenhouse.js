@@ -9,7 +9,7 @@ import { loadFilterSkills } from './load-user-skills.js'
 
 const MAX_JOBS = 50
 const MAX_AGE_MS = 7 * 24 * 3600 * 1000  // 7 days in ms (was 24 hours - too restrictive)
-const MIN_SKILL_KEYWORDS = 2  // Must match at least 2 skill keywords
+const MIN_SKILL_KEYWORDS = 1  // Must match at least 1 skill keyword (relaxed from 2)
 let SKILL_KEYWORDS = []
 
 export async function fetchGreenhouseJobs(company) {
