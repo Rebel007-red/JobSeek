@@ -93,6 +93,7 @@ export async function fetchLinkedInJobs(company) {
   
   const allJobs = []
   const seenIds = new Set()
+  const matchedJobIds = new Set()  // Track jobs that pass skill filter
 
   for (const query of QUERIES) {
     if (allJobs.length >= MAX_JOBS) break  // Stop at 50 total jobs
@@ -137,12 +138,6 @@ export async function fetchLinkedInJobs(company) {
         if (allJobs.length >= MAX_JOBS) break  // Stop at 20 total jobs
         const job = parseJobCard(card)
         if (job && !seenIds.has(job.job_id)) {
-          // Quality filter: must match skill keywords
-          const desc = (job.description || '').toLowerCase()
-          const title = (job.title || '').toLowerCase()
-          const matchCount = SKILL_KEYWORDS.filter(kw => desc.includes(kw) || title.includes(kw)).length
-          if (matchCount < MIN_SKILL_KEYWORDS) continue  // Skip if too generic
-          
           seenIds.add(job.job_id)
           allJobs.push(job)
           newThisPage++
@@ -157,18 +152,31 @@ export async function fetchLinkedInJobs(company) {
       await new Promise(r => setTimeout(r, 1500))
     }
 
-    // ── Fetch job descriptions for skill extraction (capped at 50/query) ──
-    const DESCRIPTION_CAP = Math.min(50, pageJobs)
-    const toDescribe = allJobs.slice(-pageJobs).slice(0, DESCRIPTION_CAP)  // only this query's jobs
-    for (const job of toDescribe) {
+    // ── Fetch job descriptions and filter by skills ──
+    // First fetch descriptions for all jobs from this query
+    for (const job of allJobs.slice(-pageJobs)) {
       job.skills = await fetchLinkedInJobSkills(job.job_id)
+      job.description = job.skills.join(' ')  // Store as description for skill matching
+      
+      // Check if job matches skill filter
+      const desc = (job.description || '').toLowerCase()
+      const title = (job.title || '').toLowerCase()
+      const matchCount = SKILL_KEYWORDS.filter(kw => desc.includes(kw) || title.includes(kw)).length
+      if (matchCount >= MIN_SKILL_KEYWORDS) {
+        matchedJobIds.add(job.job_id)
+      }
+      
       await new Promise(r => setTimeout(r, 300))
     }
 
-    console.log(`      Found ${pageJobs} jobs`)
+    const matchCount = Array.from(matchedJobIds).filter(id => 
+      allJobs.slice(-pageJobs).some(j => j.job_id === id)
+    ).length
+    console.log(`      Found ${pageJobs} jobs, ${matchCount} match skills`)
   }
 
-  return allJobs
+  // Return only jobs that matched the skill filter
+  return allJobs.filter(j => matchedJobIds.has(j.job_id))
 }
 
 // Fetch a single LinkedIn job's description via the guest jobPosting API

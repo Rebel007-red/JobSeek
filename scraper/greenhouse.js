@@ -8,7 +8,7 @@ import { extractSkillsFromText } from './skills-extractor.js'
 import { loadFilterSkills } from './load-user-skills.js'
 
 const MAX_JOBS = 50
-const MAX_AGE_MS = 24 * 3600 * 1000  // 24 hours in ms
+const MAX_AGE_MS = 7 * 24 * 3600 * 1000  // 7 days in ms (was 24 hours - too restrictive)
 const MIN_SKILL_KEYWORDS = 2  // Must match at least 2 skill keywords
 let SKILL_KEYWORDS = []
 
@@ -25,14 +25,10 @@ export async function fetchGreenhouseJobs(company) {
 
   const data = await res.json();
   
-  // Filter to high-quality pyspark/databricks jobs from last 24 hours
+  // Parse all jobs first, then filter by skills (do NOT filter by freshness during parse)
   const now = Date.now()
   const filtered = (data.jobs || [])
     .filter(job => {
-      // 24hr freshness check
-      const postedDate = new Date(job.first_published_at || 0)
-      if (now - postedDate.getTime() > MAX_AGE_MS) return false
-      
       // Quality filter — pyspark/databricks focus
       const desc = (job.content || '').toLowerCase()
       const title = (job.title || '').toLowerCase()
@@ -48,5 +44,6 @@ export async function fetchGreenhouseJobs(company) {
     department: job.departments?.[0]?.name || null,
     url: job.absolute_url || `https://boards.greenhouse.io/${slug}/jobs/${job.id}`,
     posted_at: job.first_published_at || job.updated_at || null,
+    skills: extractSkillsFromText(job.content || ''),
   }));
 }

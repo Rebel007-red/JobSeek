@@ -24,12 +24,13 @@ let SKILL_KEYWORDS = []
 // ── ADD YOUR JOB TITLES HERE ─────────────────────────────────────────────────
 // Each entry = 1 RapidAPI call × 2 pages = 20 jobs
 // Free tier: 200 calls/month → max 3 entries (3 × 2 × ~30 days = 180 calls)
-// India-focused: Python/Databricks/PySpark mid-level roles
+// Keep queries broad to maximize API results
+// Use last7days instead of 'today' - 'today' often returns 0 results for skill queries
 // ─────────────────────────────────────────────────────────────────────────────
 const QUERIES = [
-  `pyspark databricks data engineer 2-5 years india`,
-  `pyspark databricks engineer mid level remote`,
-  `databricks pyspark python engineer india`,
+  'pyspark databricks data engineer',
+  'pyspark databricks engineer',
+  'databricks python engineer',
 ]
 
 async function fetchQueryJobs(query) {
@@ -45,7 +46,7 @@ async function fetchQueryJobs(query) {
       query,
       page: String(page),
       num_pages: '1',
-      date_posted: 'today',   // last 24 hours
+      date_posted: 'week',   // Valid: 'anytime', 'today', '3days', 'week', 'month'
       country: 'in',          // India only
       language: 'en',
     })
@@ -76,14 +77,13 @@ async function fetchQueryJobs(query) {
       const matchCount = SKILL_KEYWORDS.filter(kw => desc.includes(kw) || title.includes(kw)).length
       if (matchCount < MIN_SKILL_KEYWORDS) return  // Skip if too generic
       
-      // Location check: India or Remote only
-      const locStr = [job.job_city, job.job_state, job.job_country].join(' ').toLowerCase()
-      if (!locStr.includes('india') && !locStr.includes('remote') && !job.job_country?.includes('IN')) return
+      // Note: Skip location check - JSearch API often returns empty location fields
+      // The query parameter "country=in" filters server-side, so we get mainly India jobs anyway
       
       queryJobs.push({
         job_id: job.job_id || `jsearch-${Date.now()}-${Math.random()}`.replace(/\D/g, ''),
         title: job.job_title || 'Untitled',
-        location: [job.job_city, job.job_state, job.job_country].filter(Boolean).join(', ') || null,
+        location: [job.job_city, job.job_state, job.job_country].filter(Boolean).join(', ') || 'Remote',
         department: job.job_category || null,
         url: job.job_google_link || null,   // Google Jobs description link only (no apply forms)
         posted_at: job.job_posted_at_datetime_utc || null,
