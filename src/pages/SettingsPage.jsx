@@ -134,27 +134,48 @@ export function SettingsPage() {
   async function saveCompany(e) {
     e.preventDefault()
     setFormError('')
-    if (!form.name.trim()) return setFormError('Name is required')
+    
+    // Validation
+    const name = form.name.trim()
+    if (!name) return setFormError('Company name is required')
     if (!form.ats_type) return setFormError('ATS type is required')
 
+    // Check for duplicate company names
+    if (companies.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+      return setFormError(`Company "${name}" already exists`)
+    }
+
     const help = ATS_HELP[form.ats_type]
-    if (help?.api_url && !form.api_url.trim()) return setFormError('API URL / Career site URL is required for this ATS')
+    if (help?.api_url && !form.api_url.trim()) return setFormError(`${help.api_url.label} is required for this ATS`)
     if (help?.slug && !form.slug.trim()) return setFormError(`${help.slug.label} is required for this ATS`)
 
     setSaving(true)
-    const { error } = await supabase.from('companies').insert({
-      name: form.name.trim(),
+    
+    // Insert with proper error handling
+    const { error, data } = await supabase.from('companies').insert([{
+      name,
       ats_type: form.ats_type,
       slug: form.slug.trim() || null,
       api_url: form.api_url.trim() || null,
       disabled: false,
-    })
+    }]).select()
+    
     setSaving(false)
 
-    if (error) return setFormError(error.message)
+    if (error) {
+      console.error('Company insert error:', error)
+      return setFormError(`Failed to add company: ${error.message}`)
+    }
+    
+    if (!data || data.length === 0) {
+      return setFormError('Company was not created (unexpected response)')
+    }
+
+    // Success - clear form and reload
     setForm(EMPTY_FORM)
     setShowForm(false)
-    loadCompanies()
+    setFormError('')
+    await loadCompanies()
   }
 
   // Skills handlers
@@ -244,8 +265,11 @@ export function SettingsPage() {
                     <label className="block text-xs font-medium text-gray-400 mb-1">Company Name *</label>
                     <input type="text" required value={form.name}
                       onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                      placeholder="e.g. Stripe"
+                      placeholder="e.g. Stripe, Acme Corp"
                       className="w-full bg-gray-900 border border-gray-700 text-gray-100 placeholder:text-gray-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                    {companies.some(c => c.name.toLowerCase() === form.name.trim().toLowerCase()) && form.name.trim() && (
+                      <p className="text-xs text-red-400 mt-1">⚠ This company already exists</p>
+                    )}
                   </div>
 
                   <div>
@@ -259,7 +283,7 @@ export function SettingsPage() {
                   {help?.slug && (
                     <div className="sm:col-span-2">
                       <label className="block text-xs font-medium text-gray-400 mb-1">{help.slug.label} *</label>
-                      <input type="text" value={form.slug}
+                      <input type="text" required value={form.slug}
                         onChange={e => setForm(f => ({ ...f, slug: e.target.value }))}
                         placeholder={help.slug.placeholder}
                         className="w-full bg-gray-900 border border-gray-700 text-gray-100 placeholder:text-gray-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
@@ -270,7 +294,7 @@ export function SettingsPage() {
                   {help?.api_url && (
                     <div className="sm:col-span-2">
                       <label className="block text-xs font-medium text-gray-400 mb-1">{help.api_url.label} *</label>
-                      <input type="url" value={form.api_url}
+                      <input type="url" required value={form.api_url}
                         onChange={e => setForm(f => ({ ...f, api_url: e.target.value }))}
                         placeholder={help.api_url.placeholder}
                         className="w-full bg-gray-900 border border-gray-700 text-gray-100 placeholder:text-gray-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
@@ -282,13 +306,13 @@ export function SettingsPage() {
                 {formError && <p className="text-xs text-red-400 bg-red-900/20 border border-red-800/50 rounded-md px-3 py-2">{formError}</p>}
 
                 <div className="flex gap-2 justify-end">
-                  <button type="button" onClick={() => setShowForm(false)}
+                  <button type="button" onClick={() => { setShowForm(false); setFormError('') }}
                     className="px-3 py-1.5 text-xs text-gray-400 border border-gray-700 rounded-md hover:bg-gray-700">
                     Cancel
                   </button>
-                  <button type="submit" disabled={saving}
-                    className="px-3 py-1.5 text-xs font-medium bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-md transition-colors">
-                    {saving ? 'Saving…' : 'Add Company'}
+                  <button type="submit" disabled={saving || !form.name.trim() || !form.ats_type}
+                    className="px-3 py-1.5 text-xs font-medium bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-md transition-colors">
+                    {saving ? 'Adding…' : 'Add Company'}
                   </button>
                 </div>
               </form>
