@@ -14,10 +14,18 @@ function parseSkills(str) {
 }
 
 // Return which of the user's skills appear in the job
+// Checks stored skills tags (from description) + title/department fallback
 function getMatchedSkills(job, userSkills) {
   if (!userSkills.length) return []
-  const haystack = `${job.title} ${job.department || ''} ${job.location || ''}`.toLowerCase()
-  return userSkills.filter(skill => haystack.includes(skill))
+  const storedSkills = Array.isArray(job.skills) ? job.skills : []
+  // Match against stored skill tags first
+  const fromTags = userSkills.filter(s =>
+    storedSkills.some(tag => tag.toLowerCase().includes(s) || s.includes(tag.toLowerCase()))
+  )
+  // Also check title + department for any user skills not caught by tags
+  const haystack = `${job.title} ${job.department || ''}`.toLowerCase()
+  const fromText = userSkills.filter(s => !fromTags.includes(s) && haystack.includes(s))
+  return [...new Set([...fromTags, ...fromText])]
 }
 
 export function JobsPage() {
@@ -29,6 +37,8 @@ export function JobsPage() {
   const [error, setError] = useState('')
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(false)
+  const [skillsOnly, setSkillsOnly] = useState(false)
+  const [activeTab, setActiveTab] = useState('all')  // 'all' | 'pending' | 'applied'
 
   // Read skills directly from localStorage (managed in Settings page)
   const [userSkills, setUserSkills] = useState(() =>
@@ -40,6 +50,31 @@ export function JobsPage() {
     const onFocus = () => setUserSkills(parseSkills(localStorage.getItem('jobseeker_skills') || ''))
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
+  }, [])
+
+  // Load user skills from Supabase (server of truth) on mount
+  useEffect(() => {
+    async function loadSupabaseSkills() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          const { data } = await supabase
+            .from('user_skills')
+            .select('skills')
+            .eq('user_id', user.id)
+            .single()
+          
+          if (data?.skills && data.skills.length > 0) {
+            setUserSkills(data.skills)
+            localStorage.setItem('jobseeker_skills', data.skills.join(','))
+          }
+        }
+      } catch (err) {
+        // Silent fail - use localStorage fallback
+        console.debug('Could not load skills from Supabase:', err.message)
+      }
+    }
+    loadSupabaseSkills()
   }, [])
 
   // Load companies once for the filter dropdown
@@ -155,15 +190,43 @@ export function JobsPage() {
     [jobsWithMatches]
   )
 
+  // When skills filter is on, only show matched jobs
+  const visibleJobs = useMemo(() => {
+    let filtered = skillsOnly && userSkills.length > 0
+      ? jobsWithMatches.filter(({ matched }) => matched.length > 0)
+      : jobsWithMatches
+
+    // Apply tab filter
+    switch (activeTab) {
+      case 'pending':
+        filtered = filtered.filter(({ job }) => !job.applied_at)
+        break
+      case 'applied':
+        filtered = filtered.filter(({ job }) => job.applied_at)
+        break
+      case 'all':
+      default:
+        break
+    }
+    return filtered
+  }, [jobsWithMatches, skillsOnly, userSkills, activeTab])
+
+  // Compute tab counts
+  const tabCounts = useMemo(() => ({
+    all: jobsWithMatches.length,
+    pending: jobsWithMatches.filter(({ job }) => !job.applied_at).length,
+    applied: jobsWithMatches.filter(({ job }) => job.applied_at).length,
+  }), [jobsWithMatches])
+
   return (
     <div className="min-h-screen bg-slate-950">
       {/* Top nav */}
-      <header className="bg-gray-900/95 backdrop-blur border-b border-gray-800/60 sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-4 h-11 flex items-center justify-between gap-3">
+      <header className="bg-gray-800/60 backdrop-blur border-b border-gray-700/50 sticky top-0 z-10 flex flex-col">
+        <div className="max-w-6xl mx-auto px-3 h-9 w-full flex items-center justify-between gap-2">
 
           {/* Left: Brand + stats */}
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="text-[13px] font-bold text-gray-100 tracking-tight">Job Seeker</span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-[12px] font-bold text-gray-100 tracking-tight">Job Seeker</span>
             {newCount > 0 && (
               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 whitespace-nowrap">
                 {newCount} new
@@ -178,6 +241,24 @@ export function JobsPage() {
 
           {/* Right: Search + filters + nav */}
           <div className="flex items-center gap-1.5">
+            {/* Skills-only toggle — only shown when skills are saved */}
+            {userSkills.length > 0 && (
+              <button
+                onClick={() => { setSkillsOnly(v => !v); setPage(0) }}
+                title={skillsOnly ? 'Show all jobs' : `Show only ${matchCount} skill-matched jobs`}
+                className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                  skillsOnly
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-indigo-400 border border-indigo-800 hover:bg-indigo-900/30'
+                }`}
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.347.346a5 5 0 01-7.07-7.07l1.378-1.378a5 5 0 016.245-.175M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                {skillsOnly ? `${visibleJobs.length} matched` : `${matchCount}✦`}
+              </button>
+            )}
+
             <SearchFilter filters={filters} companies={companies} onChange={setFilters} />
 
             <div className="w-px h-4 bg-gray-700/60 mx-0.5" />
@@ -201,6 +282,28 @@ export function JobsPage() {
           </div>
 
         </div>
+
+        {/* Tab navigation — Compact toggle design */}
+        <div className="max-w-6xl mx-auto px-3 py-1 flex items-center justify-start">
+          <div className="inline-flex items-center gap-0 rounded-lg bg-gray-900/40 border border-gray-700/50 p-0.5 backdrop-blur-sm">
+            {['all', 'pending', 'applied'].map(tab => (
+              <button
+                key={tab}
+                onClick={() => { setActiveTab(tab); setPage(0) }}
+                className={`px-3 py-1 text-xs font-semibold rounded transition-all ${
+                  activeTab === tab
+                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-900/40'
+                    : 'text-gray-400 hover:text-gray-200 bg-transparent'
+                }`}
+              >
+                <span className="capitalize">{tab}</span>
+                <span className="ml-1.5 font-bold text-gray-300 text-[10px]">
+                  {tab === 'all' ? tabCounts.all : tab === 'pending' ? tabCounts.pending : tabCounts.applied}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-3 flex flex-col gap-2.5">
@@ -212,16 +315,16 @@ export function JobsPage() {
         )}
 
         {/* Grid — 1 col mobile, 2 sm, 3 lg, 4 xl */}
-        {jobsWithMatches.length > 0 ? (
+        {visibleJobs.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
-            {jobsWithMatches.map(({ job, matched }) => (
+            {visibleJobs.map(({ job, matched }) => (
               <JobCard key={job.id} job={job} matchedSkills={matched} onHide={handleHide} onApplied={handleApplied} />
             ))}
           </div>
         ) : !loading ? (
           <div className="text-center py-16 text-gray-600">
-            <p className="text-base font-medium">No jobs found</p>
-            <p className="text-sm mt-1">Try adjusting your filters</p>
+            <p className="text-base font-medium">No {activeTab === 'applied' ? 'applied' : activeTab === 'pending' ? 'pending' : ''} jobs found</p>
+            <p className="text-sm mt-1">Try adjusting your filters or view a different tab</p>
           </div>
         ) : null}
 

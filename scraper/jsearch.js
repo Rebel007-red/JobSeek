@@ -13,17 +13,23 @@
  */
 
 const RAPID_HOST = 'jsearch.p.rapidapi.com'
+import { extractSkillsFromText } from './skills-extractor.js'
+import { loadFilterSkills } from './load-user-skills.js'
 const PAGE_SIZE = 10  // fixed per page by API
-const MAX_PAGES = 3   // up to 30 results per query
+const MAX_PAGES = 3   // ~30 jobs per query max
+const MAX_JOBS = 25   // Tighter: max 25 high-quality jobs per query (was 50)
+const MIN_SKILL_KEYWORDS = 2  // Must match at least 2 keywords (Python + Spark/Databricks/ML)
+let SKILL_KEYWORDS = []
+
 // ── ADD YOUR JOB TITLES HERE ─────────────────────────────────────────────────
-// Each entry = 1 RapidAPI call × 3 pages = 30 jobs
-// Free tier: 200 calls/month → max 6 entries (6 × 3 × ~30 days = 180 calls)
+// Each entry = 1 RapidAPI call × 2 pages = 20 jobs
+// Free tier: 200 calls/month → max 3 entries (3 × 2 × ~30 days = 180 calls)
+// India-focused: Python/Databricks/PySpark mid-level roles
 // ─────────────────────────────────────────────────────────────────────────────
 const QUERIES = [
-  'data engineer python pyspark databricks',
-  'java developer spring boot react',
-  // 'frontend developer react typescript',
-  // 'devops engineer kubernetes aws',
+  `pyspark databricks data engineer 2-5 years india`,
+  `pyspark databricks engineer mid level remote`,
+  `databricks pyspark python engineer india`,
 ]
 
 async function fetchQueryJobs(query) {
@@ -33,11 +39,14 @@ async function fetchQueryJobs(query) {
   const queryJobs = []
 
   for (let page = 1; page <= MAX_PAGES; page++) {
+    if (queryJobs.length >= MAX_JOBS) break  // Stop at 50 jobs
+
     const params = new URLSearchParams({
       query,
       page: String(page),
       num_pages: '1',
-      country: 'us',
+      date_posted: 'today',   // last 24 hours
+      country: 'in',          // India only
       language: 'en',
     })
 
@@ -59,16 +68,30 @@ async function fetchQueryJobs(query) {
     if (jobs.length === 0) break
 
     jobs.forEach((job) => {
+      if (queryJobs.length >= MAX_JOBS) return
+      
+      // Quality filters: must match skill keywords
+      const desc = (job.job_description || '').toLowerCase()
+      const title = (job.job_title || '').toLowerCase()
+      const matchCount = SKILL_KEYWORDS.filter(kw => desc.includes(kw) || title.includes(kw)).length
+      if (matchCount < MIN_SKILL_KEYWORDS) return  // Skip if too generic
+      
+      // Location check: India or Remote only
+      const locStr = [job.job_city, job.job_state, job.job_country].join(' ').toLowerCase()
+      if (!locStr.includes('india') && !locStr.includes('remote') && !job.job_country?.includes('IN')) return
+      
       queryJobs.push({
         job_id: job.job_id || `jsearch-${Date.now()}-${Math.random()}`.replace(/\D/g, ''),
         title: job.job_title || 'Untitled',
         location: [job.job_city, job.job_state, job.job_country].filter(Boolean).join(', ') || null,
         department: job.job_category || null,
-        url: job.job_google_link || job.job_apply_link || '#',
+        url: job.job_google_link || null,   // Google Jobs description link only (no apply forms)
         posted_at: job.job_posted_at_datetime_utc || null,
+        skills: extractSkillsFromText(job.job_description || ''),
       })
     })
 
+    if (queryJobs.length >= MAX_JOBS) break
     if (jobs.length < PAGE_SIZE) break
 
     // Respect rate limiting
@@ -79,6 +102,9 @@ async function fetchQueryJobs(query) {
 }
 
 export async function fetchJSearchJobs(company) {
+  // Load user's preferred skills for filtering
+  SKILL_KEYWORDS = await loadFilterSkills()
+  
   const allJobs = []
 
   for (const query of QUERIES) {

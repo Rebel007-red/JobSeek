@@ -14,20 +14,27 @@
  */
 
 import { parse } from 'node-html-parser'
+import { extractSkillsFromText } from './skills-extractor.js'
+import { loadFilterSkills } from './load-user-skills.js'
 
 const BASE = 'https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search'
 const PAGE_SIZE = 25
-const MAX_PAGES = 10  // up to 250 results per query
+const MAX_PAGES = 2   // ~50 results per query
+const MAX_JOBS = 20   // Tighter: max 20 high-quality jobs (was 50)
+const MIN_SKILL_KEYWORDS = 2  // Must match at least 2 skill keywords
+
+// Skills will be loaded dynamically at runtime
+let SKILL_KEYWORDS = []
 
 // ── ADD YOUR JOB TITLES HERE ─────────────────────────────────────────────────
 // Each entry fetches up to 250 LinkedIn jobs. No API quota — add freely!
-// Change location to 'India', 'US', 'Remote', etc.
+// location: 'India' filters to India-based roles. Covers all Indian cities + Remote
+// Targeted: Python/Databricks/PySpark mid-level roles (2-5 years)
 // ─────────────────────────────────────────────────────────────────────────────
 const QUERIES = [
-  { keywords: 'data engineer python pyspark databricks', location: 'India' },
-  { keywords: 'java developer spring boot react', location: 'India' },
-  // { keywords: 'frontend developer react typescript', location: 'India' },
-  // { keywords: 'devops engineer kubernetes aws', location: 'India' },
+  { keywords: 'pyspark databricks data engineer 2-5 years', location: 'India' },
+  { keywords: 'pyspark databricks engineer mid level', location: 'India' },
+  { keywords: 'databricks pyspark python engineer', location: 'India' },
 ]
 
 const HEADERS = {
@@ -81,17 +88,25 @@ function parseJobCard(card) {
 }
 
 export async function fetchLinkedInJobs(company) {
+  // Load user's preferred skills for filtering
+  SKILL_KEYWORDS = await loadFilterSkills()
+  
   const allJobs = []
   const seenIds = new Set()
 
   for (const query of QUERIES) {
-    console.log(`    → Fetching LinkedIn: "${query.keywords}" in "${query.location}"`)
+    if (allJobs.length >= MAX_JOBS) break  // Stop at 50 total jobs
+
+    console.log(`    → Fetching LinkedIn: "${query.keywords}"${query.location ? ` in "${query.location}"` : ' (global)'}`)
     let pageJobs = 0
 
     for (let page = 0; page < MAX_PAGES; page++) {
+      if (allJobs.length >= MAX_JOBS) break  // Stop at 50 total jobs
+
       const params = new URLSearchParams({
         keywords: query.keywords,
-        location: query.location,
+        ...(query.location ? { location: query.location } : {}),
+        f_TPR: 'r86400',   // last 24 hours (86400 seconds)
         count: String(PAGE_SIZE),
         start: String(page * PAGE_SIZE),
       })
@@ -119,8 +134,15 @@ export async function fetchLinkedInJobs(company) {
 
       let newThisPage = 0
       for (const card of cards) {
+        if (allJobs.length >= MAX_JOBS) break  // Stop at 20 total jobs
         const job = parseJobCard(card)
         if (job && !seenIds.has(job.job_id)) {
+          // Quality filter: must match skill keywords
+          const desc = (job.description || '').toLowerCase()
+          const title = (job.title || '').toLowerCase()
+          const matchCount = SKILL_KEYWORDS.filter(kw => desc.includes(kw) || title.includes(kw)).length
+          if (matchCount < MIN_SKILL_KEYWORDS) continue  // Skip if too generic
+          
           seenIds.add(job.job_id)
           allJobs.push(job)
           newThisPage++
@@ -129,13 +151,43 @@ export async function fetchLinkedInJobs(company) {
 
       pageJobs += newThisPage
       if (newThisPage === 0) break
+      if (allJobs.length >= MAX_JOBS) break  // Stop at 50 total jobs
 
       // Polite delay between pages
       await new Promise(r => setTimeout(r, 1500))
+    }
+
+    // ── Fetch job descriptions for skill extraction (capped at 50/query) ──
+    const DESCRIPTION_CAP = Math.min(50, pageJobs)
+    const toDescribe = allJobs.slice(-pageJobs).slice(0, DESCRIPTION_CAP)  // only this query's jobs
+    for (const job of toDescribe) {
+      job.skills = await fetchLinkedInJobSkills(job.job_id)
+      await new Promise(r => setTimeout(r, 300))
     }
 
     console.log(`      Found ${pageJobs} jobs`)
   }
 
   return allJobs
+}
+
+// Fetch a single LinkedIn job's description via the guest jobPosting API
+async function fetchLinkedInJobSkills(jobId) {
+  try {
+    const res = await fetch(
+      `https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/${jobId}`,
+      { headers: HEADERS, signal: AbortSignal.timeout(10000) }
+    )
+    if (!res.ok) return []
+    const html = await res.text()
+    const root = parse(html)
+    // Try multiple selectors for the description block
+    const descEl =
+      root.querySelector('.show-more-less-html__markup') ||
+      root.querySelector('.description__text') ||
+      root.querySelector('section.description')
+    return descEl ? extractSkillsFromText(descEl.text) : []
+  } catch {
+    return []
+  }
 }

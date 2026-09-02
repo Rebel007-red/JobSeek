@@ -11,9 +11,17 @@
  *   in script/CDN references (e.g. rmkcdn.successfactors.com)
  */
 
-const PAGE_SIZE = 100
+const PAGE_SIZE = 50      // Limited to 50 per page
+const MAX_JOBS = 12       // Tighter: max 12 per company board (was 50)
+const MAX_AGE_MS = 24 * 3600 * 1000  // 24 hours in ms
+const MIN_SKILL_KEYWORDS = 2  // Must match at least 2 skill keywords
+let SKILL_KEYWORDS = []
+
+import { loadFilterSkills } from './load-user-skills.js'
 
 export async function fetchSuccessFactorsJobs(company) {
+  // Load user's preferred skills for filtering
+  SKILL_KEYWORDS = await loadFilterSkills()
   const { slug } = company
   if (!slug) {
     throw new Error(
@@ -26,18 +34,26 @@ export async function fetchSuccessFactorsJobs(company) {
   let start = 0
   let total = null
 
-  while (total === null || allJobs.length < total) {
+  while (total === null || allJobs.length < MAX_JOBS) {
     const url =
       `https://${domain}/api/apply/v2/jobs` +
       `?domain=${encodeURIComponent(domain)}&start=${start}&num=${PAGE_SIZE}&locale=en_US`
 
-    const res = await fetch(url, {
-      headers: {
-        Accept: 'application/json, text/javascript, */*',
-        'User-Agent': 'Mozilla/5.0 (compatible; JobAggregator/1.0)',
-        Referer: `https://${domain}/`,
-      },
-    })
+    let res
+    try {
+      res = await fetch(url, {
+        headers: {
+          Accept: 'application/json, text/javascript, */*',
+          'User-Agent': 'Mozilla/5.0 (compatible; JobAggregator/1.0)',
+          Referer: `https://${domain}/`,
+        },
+        signal: AbortSignal.timeout(15000),  // 15 second timeout
+      })
+    } catch (e) {
+      throw new Error(
+        `SuccessFactors fetch failed for ${company.name} (${domain}): ${e.message}`
+      )
+    }
 
     if (!res.ok) {
       throw new Error(
@@ -54,7 +70,22 @@ export async function fetchSuccessFactorsJobs(company) {
 
     if (jobs.length === 0) break
 
-    jobs.forEach((job) => {
+    const now = Date.now()
+    for (const job of jobs) {
+      if (allJobs.length >= MAX_JOBS) break  // Stop at 12 jobs
+
+      // Filter: only keep jobs posted in last 24 hours
+      const postedDate = new Date(job.postedDate || job.postingDate || job.createdDate || 0)
+      if (now - postedDate.getTime() > MAX_AGE_MS) {
+        continue  // Skip jobs older than 24 hours
+      }
+
+      // Quality filter for SuccessFactors — pyspark/databricks focus
+      const desc = (job.description || job.jobDescription || '').toLowerCase()
+      const title = (job.title || job.jobTitle || '').toLowerCase()
+      const matchCount = SKILL_KEYWORDS.filter(kw => desc.includes(kw) || title.includes(kw)).length
+      if (matchCount < MIN_SKILL_KEYWORDS) continue  // Skip if doesn't match pyspark/databricks focus
+
       const jobId = String(
         job.jobId || job.id || job.externalJobId || `${start}-${allJobs.length}`
       )
@@ -69,9 +100,11 @@ export async function fetchSuccessFactorsJobs(company) {
         location: job.location || job.city || job.country || null,
         department: job.department || job.category || job.businessArea || null,
         url: absoluteUrl,
+        posted_at: postedDate.toISOString() || null,
       })
-    })
+    }
 
+    if (allJobs.length >= MAX_JOBS) break
     start += jobs.length
     if (allJobs.length >= total) break
   }

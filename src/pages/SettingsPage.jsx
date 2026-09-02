@@ -57,6 +57,7 @@ export function SettingsPage() {
   useEffect(() => {
     loadCompanies()
     loadHiddenCount()
+    loadUserSkills()
   }, [])
 
   async function loadHiddenCount() {
@@ -65,6 +66,41 @@ export function SettingsPage() {
       .select('id', { count: 'exact', head: true })
       .eq('hidden', true)
     setHiddenCount(count || 0)
+  }
+
+  async function loadUserSkills() {
+    // Try to load from Supabase first
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const { data } = await supabase
+        .from('user_skills')
+        .select('skills')
+        .eq('user_id', user.id)
+        .single()
+      
+      if (data?.skills && data.skills.length > 0) {
+        setSkills(data.skills)
+        localStorage.setItem('jobseeker_skills', data.skills.join(','))
+        return
+      }
+    }
+    
+    // Fallback to localStorage if no Supabase data
+    const saved = localStorage.getItem('jobseeker_skills') || ''
+    if (saved) {
+      setSkills(saved.split(',').map(s => s.trim()).filter(Boolean))
+    }
+  }
+
+  async function saveSkillsToSupabase(updatedSkills) {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      // Try upsert first (in case record doesn't exist yet)
+      await supabase
+        .from('user_skills')
+        .upsert({ user_id: user.id, skills: updatedSkills })
+        .eq('user_id', user.id)
+    }
   }
 
   async function restoreAllHidden() {
@@ -129,12 +165,20 @@ export function SettingsPage() {
     setSkills(updated)
     setSkillInput('')
     localStorage.setItem('jobseeker_skills', updated.join(','))
+    saveSkillsToSupabase(updated)
   }
 
   function removeSkill(skill) {
     const updated = skills.filter(s => s !== skill)
     setSkills(updated)
     localStorage.setItem('jobseeker_skills', updated.join(','))
+    saveSkillsToSupabase(updated)
+  }
+
+  function clearAllSkills() {
+    setSkills([])
+    localStorage.setItem('jobseeker_skills', '')
+    saveSkillsToSupabase([])
   }
 
   function handleSkillKeyDown(e) {
@@ -333,7 +377,7 @@ export function SettingsPage() {
                       </button>
                     </span>
                   ))}
-                  <button onClick={() => { setSkills([]); localStorage.removeItem('jobseeker_skills') }}
+                  <button onClick={clearAllSkills}
                     className="text-xs text-gray-600 hover:text-red-400 px-2 py-1 transition-colors">
                     Clear all
                   </button>
@@ -343,7 +387,7 @@ export function SettingsPage() {
               )}
             </div>
 
-            <p className="text-xs text-gray-400">Skills are stored locally in your browser and never sent to the server.</p>
+            <p className="text-xs text-gray-400">Skills are stored in your account and used to filter job results.</p>
           </div>
         )}
 

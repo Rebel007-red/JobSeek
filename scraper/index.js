@@ -8,6 +8,9 @@ import { fetchSuccessFactorsJobs } from './successfactors.js';
 import { fetchJSearchJobs } from './jsearch.js';
 import { fetchLinkedInJobs } from './linkedin.js';
 import { fetchNaukriJobs } from './naukri.js';
+import { fetchMedpaceJobs } from './medpace.js';
+import { fetchGoogleJobsJobs } from './google-jobs.js';
+import { loadFilterSkills } from './load-user-skills.js';
 
 // ── Environment ──────────────────────────────────────────────
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -32,7 +35,10 @@ async function loadCompanies(mode = 'all') {
   const BOARD_COMPANIES = [
     { id: '00000001-0000-0000-0000-000000000001', name: 'JSearch', ats_type: 'jsearch', api_url: 'data engineer python pyspark databricks', slug: 'jsearch', disabled: false },
     { id: '00000001-0000-0000-0000-000000000002', name: 'LinkedIn Jobs', ats_type: 'linkedin', api_url: 'data engineer python pyspark databricks', slug: 'linkedin', disabled: false },
+    { id: '00000001-0000-0000-0000-000000000006', name: 'Google Jobs', ats_type: 'google-jobs', api_url: '', slug: 'google-jobs', disabled: false },
     { id: '00000001-0000-0000-0000-000000000003', name: 'Naukri.com', ats_type: 'naukri', api_url: 'data engineer python pyspark databricks', slug: 'naukri', disabled: true },  // Disabled: requires reCAPTCHA
+    { id: '00000001-0000-0000-0000-000000000004', name: 'Accenture', ats_type: 'workday', api_url: 'https://accenture.wd103.myworkdayjobs.com/wday/cxs/accenture/AccentureCareers/jobs', slug: 'accenture', disabled: false },
+    { id: '00000001-0000-0000-0000-000000000005', name: 'Medpace', ats_type: 'medpace', api_url: '', slug: 'medpace', disabled: false },
   ]
 
   // For board mode, return hardcoded list (bypass database constraint issue)
@@ -78,17 +84,27 @@ async function upsertJobs(companyId, jobs) {
     return true;
   });
 
-  const rows = uniqueJobs.map((job) => ({
-    company_id: companyId,
-    job_id: String(job.job_id),
-    title: job.title || 'Untitled',
-    location: job.location || null,
-    department: job.department || null,
-    url: job.url || '',
-    posted_at: safeDate(job.posted_at),   // sanitize — rejects "Posted X Days Ago"
-    last_seen_at: now,
-    is_active: true,
-  }));
+  const rows = uniqueJobs
+    .filter(job => {
+      // Filter: only keep jobs posted in last 24 hours
+      const postedDate = job.posted_at ? new Date(job.posted_at).getTime() : null
+      if (postedDate && Date.now() - postedDate > 24 * 3600 * 1000) {
+        return false  // Skip jobs older than 24 hours
+      }
+      return true
+    })
+    .map((job) => ({
+      company_id: companyId,
+      job_id: String(job.job_id),
+      title: job.title || 'Untitled',
+      location: job.location || null,
+      department: job.department || null,
+      url: job.url || '',
+      posted_at: safeDate(job.posted_at),   // sanitize — rejects "Posted X Days Ago"
+      last_seen_at: now,
+      is_active: true,
+      skills: Array.isArray(job.skills) ? job.skills : [],
+    }));
 
   // Chunk into batches of 500 to avoid payload / dedup issues
   const CHUNK = 500;
@@ -113,13 +129,24 @@ async function run() {
     : process.argv.includes('--all') ? 'all'
     : 'companies'
 
+  // Load user's preferred skills for filtering
+  const filterSkills = await loadFilterSkills()
+  console.log(`\n📋 Filter Skills: ${filterSkills.join(', ')}\n`)
+
   let totalInserted = 0;
   const errors = [];
+  const MAX_TOTAL_JOBS = 75  // Global limit: max 75 high-quality jobs across all sources
 
   const companies = await loadCompanies(mode);
   console.log(`Loaded ${companies.length} companies [mode=${mode}].\n`);
 
   for (const company of companies) {
+    // Stop if we've reached global limit
+    if (totalInserted >= MAX_TOTAL_JOBS) {
+      console.log(`\n⚠️  Reached global limit of ${MAX_TOTAL_JOBS} jobs. Stopping scrapers.`);
+      break;
+    }
+
     console.log(`\nScraping: ${company.name} (${company.ats_type})`);
     try {
       let jobs = [];
@@ -141,6 +168,10 @@ async function run() {
         jobs = await fetchLinkedInJobs(company);
       } else if (company.ats_type === 'naukri') {
         jobs = await fetchNaukriJobs(company);
+      } else if (company.ats_type === 'medpace') {
+        jobs = await fetchMedpaceJobs(company);
+      } else if (company.ats_type === 'google-jobs') {
+        jobs = await fetchGoogleJobsJobs(company);
       } else {
         console.warn(`  Unknown ats_type "${company.ats_type}" — skipping`);
         continue;
@@ -149,7 +180,7 @@ async function run() {
       console.log(`  Found ${jobs.length} jobs`);
       const count = await upsertJobs(company.id, jobs);
       totalInserted += count;
-      console.log(`  Upserted ${count} jobs`);
+      console.log(`  Upserted ${count} jobs (total: ${totalInserted}/${MAX_TOTAL_JOBS})`);
     } catch (err) {
       console.error(`  ERROR: ${err.message}`);
       errors.push({ company: company.name, error: err.message });
