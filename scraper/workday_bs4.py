@@ -40,6 +40,14 @@ DELAY_BETWEEN_REQUESTS = 1.0
 # ─── SUPABASE ──────────────────────────────────────────────────────────
 def get_workday_companies():
     """Fetch all enabled Workday companies from Supabase."""
+    # Fallback companies with real URLs
+    fallback_companies = [
+        {"id": "1", "name": "Rockwell Automation", "api_url": "https://rockwellautomation.wd1.myworkdayjobs.com/en-US/External_Rockwell_Automation?locationCountry=c4f78be1a8f14da0ab49ce1162348a5e", "slug": "rockwell"},
+        {"id": "2", "name": "Fractal", "api_url": "https://fractal.wd1.myworkdayjobs.com/en-US/Careers?isComingFromApp=true", "slug": "fractal"},
+        {"id": "3", "name": "MiQ Digital", "api_url": "https://miqdigital.wd3.myworkdayjobs.com/en-US/MiQ_Careers", "slug": "miq"},
+        {"id": "4", "name": "Dentsu Aegis", "api_url": "https://dentsuaegis.wd3.myworkdayjobs.com/en-US/DAN_GLOBAL", "slug": "dentsu"},
+    ]
+    
     try:
         from supabase import create_client
         
@@ -47,22 +55,23 @@ def get_workday_companies():
         key = os.getenv('SUPABASE_SERVICE_ROLE_KEY')
         
         if not key:
-            print("[WARN] SUPABASE_SERVICE_ROLE_KEY not set, skipping DB query", file=sys.stderr)
-            return []
+            print("[WARN] SUPABASE_SERVICE_ROLE_KEY not set, using fallback", file=sys.stderr)
+            return fallback_companies
         
         supabase = create_client(url, key)
         
         response = supabase.table('companies').select('id,name,api_url,slug').eq('ats_type', 'workday').eq('disabled', False).execute()
         
         companies = response.data or []
-        print(f"[FETCH] Found {len(companies)} Workday companies in DB", file=sys.stderr)
-        return companies
+        if companies:
+            print(f"[FETCH] Found {len(companies)} Workday companies in DB", file=sys.stderr)
+            return companies
+        else:
+            print("[WARN] No Workday companies in DB, using fallback", file=sys.stderr)
+            return fallback_companies
     except Exception as e:
-        print(f"[ERROR] Failed to query companies: {e}", file=sys.stderr)
-        # Fallback to hardcoded if DB fails
-        return [
-            {"id": "00000001-0000-0000-0000-000000000004", "name": "Omnissa", "api_url": "https://omnissa.wd501.myworkdayjobs.com/wday/cxs/omnissa/Omnissa_External_Career_Site/jobs", "slug": "omnissa"}
-        ]
+        print(f"[WARN] Failed to query companies: {e}, using fallback", file=sys.stderr)
+        return fallback_companies
 
 
 # ─── PARSING ───────────────────────────────────────────────────────────
