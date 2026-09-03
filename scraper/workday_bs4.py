@@ -41,21 +41,36 @@ def get_workday_companies():
     fallback_companies = [
         {
             "id": "1",
+            "name": "Accenture",
+            "api_url": "https://accenture.wd103.myworkdayjobs.com/wday/cxs/accenture/AccentureCareers/jobs",
+        },
+        {
+            "id": "2",
+            "name": "Omnissa",
+            "api_url": "https://omnissa.wd501.myworkdayjobs.com/wday/cxs/omnissa/Omnissa_External_Career_Site/jobs",
+        },
+        {
+            "id": "3",
+            "name": "Google",
+            "api_url": "https://google.wd501.myworkdayjobs.com/wday/cxs/google/GOCJobs/jobs",
+        },
+        {
+            "id": "4",
             "name": "Rockwell Automation",
             "api_url": "https://rockwellautomation.wd1.myworkdayjobs.com/en-US/External_Rockwell_Automation",
         },
         {
-            "id": "2",
+            "id": "5",
             "name": "Fractal",
             "api_url": "https://fractal.wd1.myworkdayjobs.com/en-US/Careers",
         },
         {
-            "id": "3",
+            "id": "6",
             "name": "MiQ Digital",
             "api_url": "https://miqdigital.wd3.myworkdayjobs.com/en-US/MiQ_Careers",
         },
         {
-            "id": "4",
+            "id": "7",
             "name": "Dentsu Aegis",
             "api_url": "https://dentsuaegis.wd3.myworkdayjobs.com/en-US/DAN_GLOBAL",
         },
