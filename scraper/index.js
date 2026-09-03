@@ -44,17 +44,35 @@ async function loadCompanies(mode = 'all') {
     { id: '00000001-0000-0000-0000-000000000005', name: 'Medpace', ats_type: 'phenom', api_url: '', slug: 'medpace', disabled: false },
   ]
 
+  // Hardcoded regular companies (not job boards, need API URLs)
+  // These query the API endpoints for jobs
+  const REGULAR_COMPANIES = [
+    { id: '00000001-0000-0000-0000-000000000004', name: 'Accenture', ats_type: 'workday', api_url: 'https://accenture.wd103.myworkdayjobs.com/wday/cxs/accenture/AccentureCareers/jobs', slug: 'accenture', disabled: false },
+    { id: '00000001-0000-0000-0000-000000000005', name: 'Medpace', ats_type: 'phenom', api_url: '', slug: 'medpace', disabled: false },
+    { id: '00000001-0000-0000-0000-000000000008', name: 'Omnissa', ats_type: 'workday', api_url: 'https://omnissa.wd501.myworkdayjobs.com/wday/cxs/omnissa/Omnissa_External_Career_Site/jobs', slug: 'omnissa', disabled: false },
+    { id: '00000001-0000-0000-0000-000000000009', name: 'Google', ats_type: 'workday', api_url: 'https://google.wd501.myworkdayjobs.com/wday/cxs/google/GOCJobs/jobs', slug: 'google', disabled: false },
+    { id: '00000001-0000-0000-0000-000000000010', name: 'NTT Data', ats_type: 'phenom', api_url: 'https://careers.services.global.ntt/global/en', slug: 'ntt-data', disabled: false },
+    { id: '00000001-0000-0000-0000-000000000011', name: 'PwC Acceleration Centers', ats_type: 'phenom', api_url: 'https://jobs-ta.pwc.com/global/en', slug: 'pwc', disabled: false },
+    { id: '00000001-0000-0000-0000-000000000012', name: 'JPMorgan Chase', ats_type: 'oracle', api_url: 'https://jpmc.fa.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1001', slug: 'jpm', disabled: false },
+  ]
+
   // For board mode, return hardcoded list (bypass database constraint issue)
   if (mode === 'boards') {
     return BOARD_COMPANIES
   }
 
-  let query = supabase.from('companies').select('*').eq('disabled', false).order('name')
-
+  // For companies mode, use hardcoded list (no database sync required)
   if (mode === 'companies') {
-    // Exclude job boards — they run on a separate daily schedule
-    query = query.not('ats_type', 'in', `(${BOARD_TYPES.map(t => `"${t}"`).join(',')})`)
+    return REGULAR_COMPANIES
   }
+
+  // For 'all' mode, combine both
+  if (mode === 'all') {
+    return [...BOARD_COMPANIES, ...REGULAR_COMPANIES]
+  }
+
+  // Fallback: query database if no mode matches
+  let query = supabase.from('companies').select('*').eq('disabled', false).order('name')
 
   const { data, error } = await query
   if (error) throw new Error(`Failed to load companies: ${error.message}`)

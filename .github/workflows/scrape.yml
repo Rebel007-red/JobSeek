@@ -23,6 +23,18 @@ jobs:
           cache: 'npm'
           cache-dependency-path: scraper/package.json
 
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: pip install beautifulsoup4 playwright requests
+
+      - name: Install Playwright browsers
+        run: playwright install chromium
+
       - name: Install scraper dependencies
         run: npm install
         working-directory: scraper
