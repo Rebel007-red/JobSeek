@@ -1,8 +1,7 @@
 /**
- * Workday Jobs Scraper - Python BS4 Edition
+ * Indeed Jobs Scraper - Python BS4 Edition
  * 
- * Fetches jobs from all Workday companies (Rockwell, Fractal, MiQ, Dentsu)
- * using BeautifulSoup4 HTML parsing.
+ * Searches Indeed.com for Data Engineer + Databricks jobs in India
  */
 
 import { execSync } from 'child_process'
@@ -11,12 +10,12 @@ import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-export async function fetchWorkdayJobs(company) {
+export async function fetchIndeedJobs(company) {
   try {
-    console.log(`    → Workday (Python BS4)`)
+    console.log(`    → Indeed (Python BS4)`)
 
     // Execute Python scraper script
-    const pythonScript = path.join(__dirname, 'workday_bs4.py')
+    const pythonScript = path.join(__dirname, 'indeed_bs4.py')
     const output = execSync(`python "${pythonScript}"`, {
       encoding: 'utf-8',
       maxBuffer: 50 * 1024 * 1024,
@@ -41,43 +40,13 @@ export async function fetchWorkdayJobs(company) {
       url: job.url,
       posted_at: job.posted_at,
       description: job.description,
-      skills: extractSkillsArray(job.description),
+      skills: job.skills || [],
     }))
 
     console.log(`      ✓ Found ${formattedJobs.length} jobs`)
     return formattedJobs
   } catch (err) {
-    console.error(`      ✗ Workday scraper error:`, err.message)
+    console.error(`      ✗ Indeed scraper error:`, err.message)
     return []
   }
-}
-
-/**
- * Extract skill keywords from job description
- */
-function extractSkillsArray(description) {
-  if (!description) return []
-
-  const skills = []
-  const keywords = [
-    'pyspark',
-    'databricks',
-    'spark',
-    'sql',
-    'python',
-    'aws',
-    'gcp',
-    'azure',
-    'scala',
-    'java',
-  ]
-  const text = (description || '').toLowerCase()
-
-  for (const skill of keywords) {
-    if (text.includes(skill)) {
-      skills.push(skill)
-    }
-  }
-
-  return [...new Set(skills)]
 }

@@ -10,6 +10,7 @@ import { fetchLinkedInJobs } from './linkedin.js';
 import { fetchNaukriJobs } from './naukri.js';
 import { fetchMedpaceJobs } from './medpace.js';
 import { fetchGoogleJobsJobs } from './google-jobs.js';
+import { fetchIndeedJobs } from './indeed.js';
 import { loadFilterSkills } from './load-user-skills.js';
 
 // ── Environment ──────────────────────────────────────────────
@@ -36,6 +37,7 @@ async function loadCompanies(mode = 'all') {
     { id: '00000001-0000-0000-0000-000000000001', name: 'JSearch', ats_type: 'jsearch', api_url: 'data engineer python pyspark databricks', slug: 'jsearch', disabled: false },
     { id: '00000001-0000-0000-0000-000000000002', name: 'LinkedIn Jobs', ats_type: 'linkedin', api_url: 'data engineer python pyspark databricks', slug: 'linkedin', disabled: false },
     { id: '230f9132-8381-4646-9d6d-9b2d1ed44f7e', name: 'Databricks Greenhouse', ats_type: 'greenhouse', api_url: '', slug: 'databricks', disabled: false },
+    { id: '00000001-0000-0000-0000-000000000007', name: 'Indeed', ats_type: 'indeed', api_url: '', slug: 'indeed', disabled: false },
     { id: '00000001-0000-0000-0000-000000000006', name: 'Google Jobs', ats_type: 'google-jobs', api_url: '', slug: 'google-jobs', disabled: false },
     { id: '00000001-0000-0000-0000-000000000003', name: 'Naukri.com', ats_type: 'naukri', api_url: 'data engineer python pyspark databricks', slug: 'naukri', disabled: true },  // Disabled: requires reCAPTCHA
     { id: '00000001-0000-0000-0000-000000000004', name: 'Accenture', ats_type: 'workday', api_url: 'https://accenture.wd103.myworkdayjobs.com/wday/cxs/accenture/AccentureCareers/jobs', slug: 'accenture', disabled: false },
@@ -167,6 +169,8 @@ async function run() {
         jobs = await fetchJSearchJobs(company);
       } else if (company.ats_type === 'linkedin') {
         jobs = await fetchLinkedInJobs(company);
+      } else if (company.ats_type === 'indeed') {
+        jobs = await fetchIndeedJobs(company);
       } else if (company.ats_type === 'naukri') {
         jobs = await fetchNaukriJobs(company);
       } else if (company.ats_type === 'medpace') {
