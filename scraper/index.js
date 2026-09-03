@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { execSync } from 'child_process';
 import { fetchGreenhouseJobs } from './greenhouse.js';
 import { fetchWorkdayJobs } from './workday.js';
 import { fetchPhenomJobs } from './phenom.js';
@@ -7,7 +8,6 @@ import { fetchOracleJobs } from './oracle.js';
 import { fetchSuccessFactorsJobs } from './successfactors.js';
 import { fetchJSearchJobs } from './jsearch.js';
 import { fetchLinkedInJobs } from './linkedin.js';
-import { fetchNaukriJobs } from './naukri.js';
 import { fetchMedpaceJobs } from './medpace.js';
 import { fetchGoogleJobsJobs } from './google-jobs.js';
 import { fetchIndeedJobs } from './indeed.js';
@@ -36,12 +36,12 @@ async function loadCompanies(mode = 'all') {
   const BOARD_COMPANIES = [
     { id: '00000001-0000-0000-0000-000000000001', name: 'JSearch', ats_type: 'jsearch', api_url: 'data engineer python pyspark databricks', slug: 'jsearch', disabled: false },
     { id: '00000001-0000-0000-0000-000000000002', name: 'LinkedIn Jobs', ats_type: 'linkedin', api_url: 'data engineer python pyspark databricks', slug: 'linkedin', disabled: false },
-    { id: '230f9132-8381-4646-9d6d-9b2d1ed44f7e', name: 'Databricks Greenhouse', ats_type: 'greenhouse', api_url: '', slug: 'databricks', disabled: false },
-    { id: '00000001-0000-0000-0000-000000000007', name: 'Indeed', ats_type: 'indeed', api_url: '', slug: 'indeed', disabled: false },
-    { id: '00000001-0000-0000-0000-000000000006', name: 'Google Jobs', ats_type: 'google-jobs', api_url: '', slug: 'google-jobs', disabled: false },
+    { id: '230f9132-8381-4646-9d6d-9b2d1ed44f7e', name: 'Databricks Greenhouse', ats_type: 'greenhouse', api_url: '', slug: 'greenhouse', disabled: false },
+    { id: '00000001-0000-0000-0000-000000000007', name: 'Indeed', ats_type: 'linkedin', api_url: '', slug: 'indeed', disabled: false },
+    { id: '00000001-0000-0000-0000-000000000006', name: 'Google Jobs', ats_type: 'jsearch', api_url: '', slug: 'google-jobs', disabled: false },
     { id: '00000001-0000-0000-0000-000000000003', name: 'Naukri.com', ats_type: 'naukri', api_url: 'data engineer python pyspark databricks', slug: 'naukri', disabled: true },  // Disabled: requires reCAPTCHA
     { id: '00000001-0000-0000-0000-000000000004', name: 'Accenture', ats_type: 'workday', api_url: 'https://accenture.wd103.myworkdayjobs.com/wday/cxs/accenture/AccentureCareers/jobs', slug: 'accenture', disabled: false },
-    { id: '00000001-0000-0000-0000-000000000005', name: 'Medpace', ats_type: 'medpace', api_url: '', slug: 'medpace', disabled: false },
+    { id: '00000001-0000-0000-0000-000000000005', name: 'Medpace', ats_type: 'phenom', api_url: '', slug: 'medpace', disabled: false },
   ]
 
   // For board mode, return hardcoded list (bypass database constraint issue)
@@ -66,6 +66,26 @@ async function loadCompanies(mode = 'all') {
 }
 
 // ── Helpers ───────────────────────────────────────────────────
+
+// Call Python scraper and parse JSON output
+function callPythonScraper(scriptPath) {
+  try {
+    const output = execSync(`python ${scriptPath}`, {
+      encoding: 'utf-8',
+      maxBuffer: 10 * 1024 * 1024,  // 10MB buffer for large outputs
+    });
+    
+    // Extract JSON from output (skip any logging lines)
+    const jsonMatch = output.match(/\[\{[\s\S]*\}(?:\,[\s\S]*\})*\]|\[\]/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+    return [];
+  } catch (error) {
+    console.error(`Error calling Python scraper ${scriptPath}:`, error.message);
+    return [];
+  }
+}
 
 // Validate and sanitize a date value — returns ISO string or null
 function safeDate(val) {
@@ -153,7 +173,33 @@ async function run() {
     console.log(`\nScraping: ${company.name} (${company.ats_type})`);
     try {
       let jobs = [];
-      if (company.ats_type === 'greenhouse') {
+      // Route by slug for flexibility; allows different scrapers with same ats_type
+      if (company.slug === 'greenhouse') {
+        jobs = await fetchGreenhouseJobs(company);
+      } else if (company.slug === 'accenture') {
+        jobs = await fetchWorkdayJobs(company);
+      } else if (company.slug === 'ntt-data' || company.slug === 'phenom') {
+        jobs = await fetchPhenomJobs(company);
+      } else if (company.slug === 'icims') {
+        jobs = await fetchICIMSJobs(company);
+      } else if (company.slug === 'oracle') {
+        jobs = await fetchOracleJobs(company);
+      } else if (company.slug === 'successfactors') {
+        jobs = await fetchSuccessFactorsJobs(company);
+      } else if (company.slug === 'jsearch') {
+        jobs = await fetchJSearchJobs(company);
+      } else if (company.slug === 'linkedin') {
+        jobs = await fetchLinkedInJobs(company);
+      } else if (company.slug === 'indeed') {
+        jobs = await fetchIndeedJobs(company);
+      } else if (company.slug === 'naukri') {
+        jobs = callPythonScraper('scraper/naukri_bs4.py');
+      } else if (company.slug === 'medpace') {
+        jobs = await fetchMedpaceJobs(company);
+      } else if (company.slug === 'google-jobs') {
+        jobs = await fetchGoogleJobsJobs(company);
+      } else if (company.ats_type === 'greenhouse') {
+        // Fallback to ats_type for backward compatibility
         jobs = await fetchGreenhouseJobs(company);
       } else if (company.ats_type === 'workday') {
         jobs = await fetchWorkdayJobs(company);
@@ -169,16 +215,10 @@ async function run() {
         jobs = await fetchJSearchJobs(company);
       } else if (company.ats_type === 'linkedin') {
         jobs = await fetchLinkedInJobs(company);
-      } else if (company.ats_type === 'indeed') {
-        jobs = await fetchIndeedJobs(company);
       } else if (company.ats_type === 'naukri') {
-        jobs = await fetchNaukriJobs(company);
-      } else if (company.ats_type === 'medpace') {
-        jobs = await fetchMedpaceJobs(company);
-      } else if (company.ats_type === 'google-jobs') {
-        jobs = await fetchGoogleJobsJobs(company);
+        jobs = callPythonScraper('scraper/naukri_bs4.py');
       } else {
-        console.warn(`  Unknown ats_type "${company.ats_type}" — skipping`);
+        console.warn(`  Unknown company type: ${company.slug || company.ats_type} — skipping`);
         continue;
       }
 
