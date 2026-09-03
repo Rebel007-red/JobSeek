@@ -17,6 +17,32 @@ dist-ssr
 .env.local
 .env.*.local
 
+# Test and debug files (keep locally, don't commit)
+test_*.py
+test_*.js
+test_*.mjs
+debug_*.py
+inspect_*.py
+analyze_*.py
+find_*.py
+*_output.json
+*_output.txt
+*_sample.html
+*_approot.json
+*_jobs.json
+*.sample.json
+scraper_output.txt
+scraper-output.txt
+count-jobs.mjs
+add-companies.js
+add-companies.mjs
+add_enum_values.mjs
+list-companies.js
+list_companies.mjs
+query-companies.mjs
+setup_companies.mjs
+insert-greenhouse.js
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
