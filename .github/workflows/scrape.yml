@@ -39,8 +39,8 @@ jobs:
         run: npm install
         working-directory: scraper
 
-      - name: Run scraper
-        run: node index.js
+      - name: Run board scraper (Indeed + LinkedIn)
+        run: node index.js --boards
         working-directory: scraper
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
