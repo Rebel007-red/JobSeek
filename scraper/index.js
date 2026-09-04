@@ -1,16 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { execSync } from 'child_process';
-import { fetchGreenhouseJobs } from './greenhouse.js';
 import { fetchWorkdayJobs } from './workday_html.js';
-import { fetchPhenomJobs } from './phenom.js';
-import { fetchICIMSJobs } from './icims.js';
-import { fetchOracleJobs } from './oracle.js';
-import { fetchSuccessFactorsJobs } from './successfactors.js';
-import { fetchJSearchJobs } from './jsearch.js';
-import { fetchLinkedInJobs } from './linkedin.js';
-import { fetchMedpaceJobs } from './medpace.js';
-import { fetchGoogleJobsJobs } from './google-jobs.js';
-import { fetchIndeedJobs } from './indeed.js';
 import { loadFilterSkills } from './load-user-skills.js';
 
 // ── Environment ──────────────────────────────────────────────
@@ -142,52 +131,12 @@ async function run() {
     console.log(`\nScraping: ${company.name} (${company.ats_type})`);
     try {
       let jobs = [];
-      // Route by slug for flexibility; allows different scrapers with same ats_type
-      if (company.slug === 'greenhouse') {
-        jobs = await fetchGreenhouseJobs(company);
-      } else if (company.slug === 'accenture') {
+      
+      // Currently only supporting Workday
+      if (company.ats_type === 'workday') {
         jobs = await fetchWorkdayJobs(company);
-      } else if (company.slug === 'ntt-data' || company.slug === 'phenom') {
-        jobs = await fetchPhenomJobs(company);
-      } else if (company.slug === 'icims') {
-        jobs = await fetchICIMSJobs(company);
-      } else if (company.slug === 'oracle') {
-        jobs = await fetchOracleJobs(company);
-      } else if (company.slug === 'successfactors') {
-        jobs = await fetchSuccessFactorsJobs(company);
-      } else if (company.slug === 'jsearch') {
-        jobs = await fetchJSearchJobs(company);
-      } else if (company.slug === 'linkedin') {
-        jobs = await fetchLinkedInJobs(company);
-      } else if (company.slug === 'indeed') {
-        jobs = await fetchIndeedJobs(company);
-      } else if (company.slug === 'naukri') {
-        jobs = callPythonScraper('scraper/naukri_bs4.py');
-      } else if (company.slug === 'medpace') {
-        jobs = await fetchMedpaceJobs(company);
-      } else if (company.slug === 'google-jobs') {
-        jobs = await fetchGoogleJobsJobs(company);
-      } else if (company.ats_type === 'greenhouse') {
-        // Fallback to ats_type for backward compatibility
-        jobs = await fetchGreenhouseJobs(company);
-      } else if (company.ats_type === 'workday') {
-        jobs = await fetchWorkdayJobs(company);
-      } else if (company.ats_type === 'phenom') {
-        jobs = await fetchPhenomJobs(company);
-      } else if (company.ats_type === 'icims') {
-        jobs = await fetchICIMSJobs(company);
-      } else if (company.ats_type === 'oracle') {
-        jobs = await fetchOracleJobs(company);
-      } else if (company.ats_type === 'successfactors') {
-        jobs = await fetchSuccessFactorsJobs(company);
-      } else if (company.ats_type === 'jsearch') {
-        jobs = await fetchJSearchJobs(company);
-      } else if (company.ats_type === 'linkedin') {
-        jobs = await fetchLinkedInJobs(company);
-      } else if (company.ats_type === 'naukri') {
-        jobs = callPythonScraper('scraper/naukri_bs4.py');
       } else {
-        console.warn(`  Unknown company type: ${company.slug || company.ats_type} — skipping`);
+        console.warn(`  Unsupported ATS type: ${company.ats_type} — skipping`);
         continue;
       }
 
