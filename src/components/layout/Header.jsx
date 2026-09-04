@@ -6,33 +6,45 @@ export function Header({ stats = {}, onSkillsToggle, skillsActive, userSkills })
   const { signOut } = useAuth()
 
   return (
-    <header className="sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm">
-      <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
+    <header className="sticky top-0 z-20 bg-white/95 backdrop-blur-sm border-b border-gray-200 shadow-sm">
+      <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between gap-6">
         
         {/* Left: Logo & Stats */}
-        <div className="flex items-center gap-3 min-w-0">
-          <h1 className="text-lg font-bold text-gray-900">
-            <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-              Job Seeker
-            </span>
-          </h1>
+        <div className="flex items-center gap-6 min-w-0 flex-1">
+          {/* Logo */}
+          <div className="flex-shrink-0">
+            <h1 className="text-2xl font-bold text-gray-900">
+              <span className="bg-gradient-to-r from-indigo-600 to-indigo-700 bg-clip-text text-transparent">
+                JobSeeker
+              </span>
+            </h1>
+          </div>
           
+          {/* Stats Pills */}
           {stats.total > 0 && (
-            <div className="hidden sm:flex items-center gap-3 ml-4 pl-4 border-l border-gray-200">
-              <div className="text-sm">
-                <span className="font-semibold text-gray-900">{stats.total}</span>
-                <span className="text-gray-600"> jobs</span>
+            <div className="hidden md:flex items-center gap-3 ml-2 pl-6 border-l border-gray-200">
+              {/* Total Jobs */}
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg border border-indigo-200">
+                <span className="text-xs text-gray-600">Jobs</span>
+                <span className="text-sm font-bold text-indigo-900">{stats.total}</span>
               </div>
+
+              {/* New Jobs */}
               {stats.new > 0 && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold text-emerald-700 bg-emerald-100 rounded-full">
-                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
-                  {stats.new} new
-                </span>
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg border border-emerald-200">
+                  <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+                  <span className="text-xs text-gray-600">New</span>
+                  <span className="text-sm font-bold text-emerald-900">{stats.new}</span>
+                </div>
               )}
-              {stats.matched > 0 && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold text-indigo-700 bg-indigo-100 rounded-full">
-                  ✦ {stats.matched} match
-                </span>
+
+              {/* Matched Skills */}
+              {stats.matched > 0 && userSkills.length > 0 && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg border border-purple-200">
+                  <span className="text-lg">✨</span>
+                  <span className="text-xs text-gray-600">Match</span>
+                  <span className="text-sm font-bold text-purple-900">{stats.matched}</span>
+                </div>
               )}
             </div>
           )}
@@ -40,25 +52,28 @@ export function Header({ stats = {}, onSkillsToggle, skillsActive, userSkills })
 
         {/* Right: Actions */}
         <div className="flex items-center gap-2">
+          {/* Skills Toggle */}
           {userSkills.length > 0 && (
             <button
               onClick={onSkillsToggle}
-              className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-lg font-medium text-sm transition-all ${
+              className={`hidden sm:inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 ${
                 skillsActive
-                  ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-300'
-                  : 'text-gray-700 hover:bg-gray-100'
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'
               }`}
+              title="Toggle skill filter"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               Skills
             </button>
           )}
 
+          {/* Settings */}
           <button
             onClick={() => navigate('/settings')}
-            className="p-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors duration-200"
             title="Settings"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -67,9 +82,10 @@ export function Header({ stats = {}, onSkillsToggle, skillsActive, userSkills })
             </svg>
           </button>
 
+          {/* Sign Out */}
           <button
             onClick={signOut}
-            className="p-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors duration-200"
             title="Sign out"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

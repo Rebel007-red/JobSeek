@@ -136,17 +136,12 @@ async function run() {
 
   let totalInserted = 0;
   const errors = [];
-  const MAX_TOTAL_JOBS = 20  // Global limit: max 20 jobs per 4-hour run
+  // NO GLOBAL JOB LIMIT - fetch all available jobs from all companies
 
   const companies = await loadCompanies();
   console.log(`Loaded ${companies.length} companies from Supabase.\n`);
 
   for (const company of companies) {
-    // Stop if we've reached global limit
-    if (totalInserted >= MAX_TOTAL_JOBS) {
-      console.log(`\n⚠️  Reached global limit of ${MAX_TOTAL_JOBS} jobs. Stopping scrapers.`);
-      break;
-    }
 
     console.log(`\nScraping: ${company.name} (${company.ats_type})`);
     try {
@@ -203,7 +198,7 @@ async function run() {
       console.log(`  Found ${jobs.length} jobs`);
       const count = await upsertJobs(company.id, jobs);
       totalInserted += count;
-      console.log(`  Upserted ${count} jobs (total: ${totalInserted}/${MAX_TOTAL_JOBS})`);
+      console.log(`  Upserted ${count} jobs (total: ${totalInserted})`);
     } catch (err) {
       console.error(`  ERROR: ${err.message}`);
       errors.push({ company: company.name, error: err.message });
