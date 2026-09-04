@@ -139,7 +139,7 @@ async function run() {
   const MAX_TOTAL_JOBS = 20  // Global limit: max 20 jobs per 4-hour run
 
   const companies = await loadCompanies();
-  console.log(`Loaded ${companies.length} companies [mode=${mode}].\n`);
+  console.log(`Loaded ${companies.length} companies from Supabase.\n`);
 
   for (const company of companies) {
     // Stop if we've reached global limit
