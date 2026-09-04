@@ -26,6 +26,7 @@ const TECH_SKILLS = [
   'scikit-learn', 'tensorflow', 'pytorch', 'huggingface',
   'machine learning', 'deep learning', 'nlp', 'llm', 'generative ai',
   'data engineering', 'data science', 'power bi', 'tableau', 'looker',
+  'data analytics', 'analytics', 'data', 'ai',
   // ── Cloud / Infra ──────────────────────────────────────────────────────
   'aws', 'azure', 'gcp', 'google cloud',
   'kubernetes', 'k8s', 'docker', 'terraform', 'ansible', 'helm',
@@ -36,6 +37,11 @@ const TECH_SKILLS = [
   'rest', 'graphql', 'grpc', 'api',
   'agile', 'scrum', 'git',
   'security', 'blockchain', 'ios', 'android', 'mobile',
+  // ── Enterprise / Business Tools ────────────────────────────────────────
+  'salesforce', 'workday', 'oracle', 'sap', 'adobe', 'workfront',
+  'servicenow', 'tableau', 'excel', 'power bi',
+  // ── Generic Roles / Skills ─────────────────────────────────────────────
+  'architect', 'engineer', 'developer', 'lead', 'manager', 'consultant',
 ]
 
 /**
