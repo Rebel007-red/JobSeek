@@ -158,21 +158,21 @@ export function JobsPage() {
         userSkills={userSkills}
       />
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main className="max-w-7xl mx-auto px-3 py-4">
         
         {/* Filter & Tabs Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
           <div className="flex-1">
             <SearchFilter filters={filters} companies={companies} onChange={setFilters} />
           </div>
           
           {/* Tabs */}
-          <div className="flex items-center gap-2 bg-slate-800/50 rounded-lg p-1 border border-slate-700 shadow-sm">
+          <div className="flex items-center gap-1 bg-slate-800/50 rounded p-0.5 border border-slate-700 shadow-sm">
             {['all', 'pending', 'applied'].map(tab => (
               <button
                 key={tab}
                 onClick={() => { setActiveTab(tab); setPage(0) }}
-                className={`px-4 py-2.5 text-sm font-semibold rounded-md transition-all duration-200 ${
+                className={`px-3 py-1.5 text-xs font-semibold rounded transition-all duration-200 ${
                   activeTab === tab
                     ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-sm'
                     : 'text-slate-400 hover:bg-slate-700/50'
@@ -180,13 +180,13 @@ export function JobsPage() {
               >
                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
                 {tab === 'all' && jobs.length > 0 && (
-                  <span className="ml-2 text-xs font-medium opacity-75">({visibleJobs.length})</span>
+                  <span className="ml-1 text-xs font-medium opacity-75">({visibleJobs.length})</span>
                 )}
                 {tab === 'pending' && jobs.length > 0 && (
-                  <span className="ml-2 text-xs font-medium opacity-75">({visibleJobs.filter(j => !j.job.applied_at).length})</span>
+                  <span className="ml-1 text-xs font-medium opacity-75">({visibleJobs.filter(j => !j.job.applied_at).length})</span>
                 )}
                 {tab === 'applied' && jobs.length > 0 && (
-                  <span className="ml-2 text-xs font-medium opacity-75">({visibleJobs.filter(j => j.job.applied_at).length})</span>
+                  <span className="ml-1 text-xs font-medium opacity-75">({visibleJobs.filter(j => j.job.applied_at).length})</span>
                 )}
               </button>
             ))}
@@ -195,11 +195,11 @@ export function JobsPage() {
 
         {/* Loading State */}
         {loading && jobs.length === 0 && (
-          <div className="flex items-center justify-center py-20">
+          <div className="flex items-center justify-center py-16">
             <div className="text-center">
-              <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4"></div>
-              <p className="text-slate-400 font-medium">Loading jobs...</p>
-              <p className="text-slate-600 text-sm mt-1">This may take a moment</p>
+              <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-3"></div>
+              <p className="text-slate-400 font-medium text-sm">Loading jobs...</p>
+              <p className="text-slate-600 text-xs mt-1">This may take a moment</p>
             </div>
           </div>
         )}
@@ -207,7 +207,7 @@ export function JobsPage() {
         {/* Job Grid */}
         {visibleJobs.length > 0 && (
           <div className="animate-fadeIn">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {visibleJobs.map(({ job, matched }) => (
                 <JobCard
                   key={job.id}
@@ -223,33 +223,33 @@ export function JobsPage() {
 
         {/* Empty State */}
         {!loading && visibleJobs.length === 0 && jobs.length > 0 && (
-          <div className="flex items-center justify-center py-20">
+          <div className="flex items-center justify-center py-12">
             <div className="text-center max-w-md">
-              <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-12 h-12 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-3">
+                <svg className="w-6 h-6 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m0 0h6m-6-6h-6m0 0H3" />
                 </svg>
               </div>
-              <p className="text-slate-300 font-semibold text-lg">No matching jobs</p>
-              <p className="text-slate-400 text-sm mt-2">Try adjusting your filters or check back later</p>
+              <p className="text-slate-300 font-semibold text-base">No matching jobs</p>
+              <p className="text-slate-400 text-xs mt-1">Try adjusting your filters or check back later</p>
             </div>
           </div>
         )}
 
         {/* Complete Empty State */}
         {!loading && jobs.length === 0 && (
-          <div className="flex items-center justify-center py-20">
+          <div className="flex items-center justify-center py-12">
             <div className="text-center max-w-md">
-              <div className="w-20 h-20 bg-indigo-900/30 rounded-full flex items-center justify-center mx-auto mb-5">
-                <svg className="w-10 h-10 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-14 h-14 bg-indigo-900/30 rounded-full flex items-center justify-center mx-auto mb-3">
+                <svg className="w-7 h-7 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
                 </svg>
               </div>
-              <p className="text-slate-200 font-bold text-xl">No jobs yet</p>
-              <p className="text-slate-400 text-sm mt-2">Jobs will appear here as they are posted. Check back soon!</p>
+              <p className="text-slate-200 font-bold text-lg">No jobs yet</p>
+              <p className="text-slate-400 text-xs mt-1">Jobs will appear here as they are posted. Check back soon!</p>
               <button
                 onClick={() => window.location.reload()}
-                className="mt-6 px-6 py-2.5 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
+                className="mt-4 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded hover:bg-indigo-700 transition-colors"
               >
                 Refresh
               </button>
@@ -259,20 +259,20 @@ export function JobsPage() {
 
         {/* Load More Button */}
         {hasMore && !loading && (
-          <div className="flex items-center justify-center mt-12">
+          <div className="flex items-center justify-center mt-6">
             <button
               onClick={() => setPage(p => p + 1)}
-              className="px-8 py-3 text-base font-semibold text-white bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
+              className="px-6 py-2 text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 rounded shadow-md hover:shadow-lg transition-all duration-200"
             >
-              Load More Jobs
+              Load More
             </button>
           </div>
         )}
 
         {/* Footer */}
         {visibleJobs.length > 0 && !hasMore && jobs.length >= 10 && (
-          <div className="flex items-center justify-center mt-12">
-            <p className="text-slate-500 text-sm">
+          <div className="flex items-center justify-center mt-6">
+            <p className="text-slate-500 text-xs">
               Showing all {jobs.length} jobs
             </p>
           </div>
