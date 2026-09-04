@@ -48,12 +48,24 @@ export function JobCard({ job, matchedSkills = [], onHide, onApplied }) {
 
   return (
     <article 
-      className={`group bg-slate-800/50 border border-slate-700 rounded p-2 hover:shadow-lg hover:border-indigo-600/50 transition-all duration-200 flex flex-col h-full swipeable ${
+      className={`group bg-slate-800/50 border border-slate-700 rounded p-2 hover:shadow-lg hover:border-indigo-600/50 transition-all duration-200 flex flex-col h-full swipeable relative ${
         swipeDirection ? 'opacity-50' : ''
       }`}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
+      {/* Swipe Action Feedback */}
+      {swipeDirection && (
+        <div className="absolute inset-0 flex items-center justify-center rounded">
+          <span className={`text-2xl font-bold transition-all ${
+            swipeDirection === 'right' 
+              ? 'text-emerald-400' 
+              : 'text-red-400'
+          }`}>
+            {swipeDirection === 'right' ? '✓ Applied' : '✕ Hide'}
+          </span>
+        </div>
+      )}
       
       {/* Header: Title */}
       <h3 className="text-xs font-bold text-slate-100 line-clamp-2 group-hover:text-indigo-400 transition-colors mb-0.5">
