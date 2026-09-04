@@ -161,8 +161,8 @@ export function JobsPage() {
       <main className="max-w-7xl mx-auto px-3 py-4">
         
         {/* Filter & Tabs Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
-          <div className="flex-1">
+        <div className="flex items-center justify-between gap-2 mb-4">
+          <div className="flex-shrink-0">
             <SearchFilter filters={filters} companies={companies} onChange={setFilters} />
           </div>
           
