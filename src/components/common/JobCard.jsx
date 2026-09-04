@@ -79,8 +79,8 @@ export function JobCard({ job, matchedSkills = [], onHide, onApplied }) {
           
           {applied_at && (
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-semibold text-emerald-400 bg-emerald-900/50 rounded">
-              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
               </svg>
               Applied
             </span>
@@ -109,10 +109,10 @@ export function JobCard({ job, matchedSkills = [], onHide, onApplied }) {
         )}
       </div>
 
-      {/* Skills Tags - More Compact */}
+      {/* Skills Tags - Show All That Fit */}
       {storedSkills.length > 0 && (
         <div className="flex flex-wrap gap-0.5 mb-1">
-          {storedSkills.slice(0, 3).map(skill => (
+          {storedSkills.map(skill => (
             <span
               key={skill}
               className={`inline-flex items-center px-1 py-0 rounded text-xs font-medium transition-colors ${
@@ -124,11 +124,6 @@ export function JobCard({ job, matchedSkills = [], onHide, onApplied }) {
               {skill}
             </span>
           ))}
-          {storedSkills.length > 3 && (
-            <span className="text-xs text-slate-500 px-0.5">
-              +{storedSkills.length - 3}
-            </span>
-          )}
         </div>
       )}
 
