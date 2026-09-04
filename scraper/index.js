@@ -27,41 +27,25 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 });
 
 // ── Load companies from Supabase ──────────────────────────────
-// mode: 'companies' (default, used by 30-min cron) or 'boards' (daily job board search)
-async function loadCompanies(mode = 'all') {
-  const BOARD_TYPES = ['jsearch', 'linkedin', 'naukri']
-  
-  // Hardcoded board companies (no database lookup needed)
-  // Using stable IDs so job references don't break
-  const BOARD_COMPANIES = [
-    { id: '00000001-0000-0000-0000-000000000002', name: 'LinkedIn Jobs', ats_type: 'linkedin', api_url: 'data engineer python pyspark databricks', slug: 'linkedin', disabled: false },
-    { id: '00000001-0000-0000-0000-000000000007', name: 'Indeed', ats_type: 'linkedin', api_url: '', slug: 'indeed', disabled: false },
-  ]
-
-  // Hardcoded regular companies (not job boards, need API URLs)
-  // DISABLED: Companies mode is disabled — only job boards run
-  // To enable: populate Supabase companies table with proper API URLs
-  const REGULAR_COMPANIES = []
-
-  // For board mode, return hardcoded list (bypass database constraint issue)
-  if (mode === 'boards') {
-    return BOARD_COMPANIES
-  }
-
-  // For companies mode, return empty (disabled)
-  if (mode === 'companies') {
-    console.warn(`⚠️  Companies mode disabled — only job boards (Indeed, LinkedIn, Greenhouse) are scraped.`)
+// Query disabled=false companies from database
+async function loadCompanies() {
+  try {
+    const { data, error } = await supabase
+      .from('companies')
+      .select('*')
+      .eq('disabled', false)
+      .order('name')
+    
+    if (error) throw new Error(`Failed to load companies: ${error.message}`)
+    if (!data || data.length === 0) {
+      console.warn(`⚠️  No enabled companies found in Supabase.`)
+      return []
+    }
+    return data
+  } catch (err) {
+    console.error(`Failed to load companies from Supabase: ${err.message}`)
     return []
   }
-
-  // For 'all' mode, just return boards (no fallback to companies)
-  if (mode === 'all') {
-    return BOARD_COMPANIES
-  }
-
-  // No other modes supported — avoid database fallback
-  console.warn(`Unknown mode: ${mode} — using boards mode only`)
-  return BOARD_COMPANIES
 }
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -146,20 +130,15 @@ async function upsertJobs(companyId, jobs) {
 // ── Main ──────────────────────────────────────────────────────
 
 async function run() {
-  // mode passed via CLI: node index.js --boards  (daily)  or default (every 30 min)
-  const mode = process.argv.includes('--boards') ? 'boards'
-    : process.argv.includes('--all') ? 'all'
-    : 'companies'
-
   // Load user's preferred skills for filtering
   const filterSkills = await loadFilterSkills()
   console.log(`\n📋 Filter Skills: ${filterSkills.join(', ')}\n`)
 
   let totalInserted = 0;
   const errors = [];
-  const MAX_TOTAL_JOBS = 75  // Global limit: max 75 high-quality jobs across all sources
+  const MAX_TOTAL_JOBS = 20  // Global limit: max 20 jobs per 4-hour run
 
-  const companies = await loadCompanies(mode);
+  const companies = await loadCompanies();
   console.log(`Loaded ${companies.length} companies [mode=${mode}].\n`);
 
   for (const company of companies) {
