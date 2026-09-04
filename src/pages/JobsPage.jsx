@@ -150,7 +150,7 @@ export function JobsPage() {
   }, [jobs, jobsWithMatches])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-50 to-slate-100">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
       <Header
         stats={stats}
         onSkillsToggle={() => setShowMatchedOnly(v => !v)}
@@ -167,7 +167,7 @@ export function JobsPage() {
           </div>
           
           {/* Tabs */}
-          <div className="flex items-center gap-2 bg-white rounded-lg p-1 border border-gray-200 shadow-sm">
+          <div className="flex items-center gap-2 bg-slate-800/50 rounded-lg p-1 border border-slate-700 shadow-sm">
             {['all', 'pending', 'applied'].map(tab => (
               <button
                 key={tab}
@@ -175,7 +175,7 @@ export function JobsPage() {
                 className={`px-4 py-2.5 text-sm font-semibold rounded-md transition-all duration-200 ${
                   activeTab === tab
                     ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-sm'
-                    : 'text-gray-700 hover:bg-gray-50'
+                    : 'text-slate-400 hover:bg-slate-700/50'
                 }`}
               >
                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -198,8 +198,8 @@ export function JobsPage() {
           <div className="flex items-center justify-center py-20">
             <div className="text-center">
               <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4"></div>
-              <p className="text-gray-600 font-medium">Loading jobs...</p>
-              <p className="text-gray-500 text-sm mt-1">This may take a moment</p>
+              <p className="text-slate-400 font-medium">Loading jobs...</p>
+              <p className="text-slate-600 text-sm mt-1">This may take a moment</p>
             </div>
           </div>
         )}
@@ -207,7 +207,7 @@ export function JobsPage() {
         {/* Job Grid */}
         {visibleJobs.length > 0 && (
           <div className="animate-fadeIn">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {visibleJobs.map(({ job, matched }) => (
                 <JobCard
                   key={job.id}
@@ -225,13 +225,13 @@ export function JobsPage() {
         {!loading && visibleJobs.length === 0 && jobs.length > 0 && (
           <div className="flex items-center justify-center py-20">
             <div className="text-center max-w-md">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m0 0h6m-6-6h-6m0 0H3" />
                 </svg>
               </div>
-              <p className="text-gray-700 font-semibold text-lg">No matching jobs</p>
-              <p className="text-gray-600 text-sm mt-2">Try adjusting your filters or check back later</p>
+              <p className="text-slate-300 font-semibold text-lg">No matching jobs</p>
+              <p className="text-slate-400 text-sm mt-2">Try adjusting your filters or check back later</p>
             </div>
           </div>
         )}
@@ -240,13 +240,13 @@ export function JobsPage() {
         {!loading && jobs.length === 0 && (
           <div className="flex items-center justify-center py-20">
             <div className="text-center max-w-md">
-              <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-5">
-                <svg className="w-10 h-10 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-20 h-20 bg-indigo-900/30 rounded-full flex items-center justify-center mx-auto mb-5">
+                <svg className="w-10 h-10 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
                 </svg>
               </div>
-              <p className="text-gray-800 font-bold text-xl">No jobs yet</p>
-              <p className="text-gray-600 text-sm mt-2">Jobs will appear here as they are posted. Check back soon!</p>
+              <p className="text-slate-200 font-bold text-xl">No jobs yet</p>
+              <p className="text-slate-400 text-sm mt-2">Jobs will appear here as they are posted. Check back soon!</p>
               <button
                 onClick={() => window.location.reload()}
                 className="mt-6 px-6 py-2.5 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
@@ -272,7 +272,7 @@ export function JobsPage() {
         {/* Footer */}
         {visibleJobs.length > 0 && !hasMore && jobs.length >= 10 && (
           <div className="flex items-center justify-center mt-12">
-            <p className="text-gray-600 text-sm">
+            <p className="text-slate-500 text-sm">
               Showing all {jobs.length} jobs
             </p>
           </div>

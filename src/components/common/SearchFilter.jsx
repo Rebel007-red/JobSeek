@@ -15,8 +15,8 @@ export function SearchFilter({ filters, companies, onChange }) {
         onClick={() => setIsOpen(!isOpen)}
         className={`inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-lg border transition-all duration-200 ${
           isOpen || hasActiveFilters
-            ? 'bg-indigo-50 border-indigo-300 text-indigo-700 shadow-sm'
-            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+            ? 'bg-indigo-900/40 border-indigo-600 text-indigo-300 shadow-sm'
+            : 'bg-slate-800/50 border-slate-700 text-slate-300 hover:bg-slate-700/50'
         }`}
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -31,14 +31,14 @@ export function SearchFilter({ filters, companies, onChange }) {
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 mt-2 w-96 bg-white border border-gray-300 rounded-xl shadow-2xl p-6 z-50">
+        <div className="absolute top-full left-0 mt-2 w-96 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl p-6 z-50">
           
           {/* Header */}
-          <div className="flex items-center justify-between mb-5 pb-4 border-b border-gray-200">
-            <h3 className="text-lg font-bold text-gray-900">Filter Jobs</h3>
+          <div className="flex items-center justify-between mb-5 pb-4 border-b border-slate-700">
+            <h3 className="text-lg font-bold text-slate-100">Filter Jobs</h3>
             <button
               onClick={() => setIsOpen(false)}
-              className="p-1 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-1 text-slate-600 hover:text-slate-400 hover:bg-slate-700 rounded-lg transition-colors"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -48,7 +48,7 @@ export function SearchFilter({ filters, companies, onChange }) {
 
           {/* Keyword */}
           <div className="mb-5">
-            <label className="block text-sm font-semibold text-gray-900 mb-2">
+            <label className="block text-sm font-semibold text-slate-300 mb-2">
               Keyword
             </label>
             <input
@@ -56,19 +56,19 @@ export function SearchFilter({ filters, companies, onChange }) {
               value={filters.keyword}
               onChange={e => handleChange('keyword', e.target.value)}
               placeholder="e.g., Python, Data, Engineering"
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors"
+              className="w-full px-4 py-2.5 border border-slate-600 bg-slate-900 text-slate-100 placeholder:text-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors"
             />
           </div>
 
           {/* Company */}
           <div className="mb-5">
-            <label className="block text-sm font-semibold text-gray-900 mb-2">
+            <label className="block text-sm font-semibold text-slate-300 mb-2">
               Company
             </label>
             <select
               value={filters.companyId}
               onChange={e => handleChange('companyId', e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors bg-white"
+              className="w-full px-4 py-2.5 border border-slate-600 bg-slate-900 text-slate-100 placeholder:text-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors"
             >
               <option value="">All companies</option>
               {companies.map(c => (
@@ -81,7 +81,7 @@ export function SearchFilter({ filters, companies, onChange }) {
 
           {/* Location */}
           <div className="mb-5">
-            <label className="block text-sm font-semibold text-gray-900 mb-2">
+            <label className="block text-sm font-semibold text-slate-300 mb-2">
               Location
             </label>
             <input
@@ -89,13 +89,13 @@ export function SearchFilter({ filters, companies, onChange }) {
               value={filters.location}
               onChange={e => handleChange('location', e.target.value)}
               placeholder="e.g., India, Remote, Bangalore"
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors"
+              className="w-full px-4 py-2.5 border border-slate-600 bg-slate-900 text-slate-100 placeholder:text-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors"
             />
           </div>
 
           {/* Department */}
           <div className="mb-6">
-            <label className="block text-sm font-semibold text-gray-900 mb-2">
+            <label className="block text-sm font-semibold text-slate-300 mb-2">
               Department
             </label>
             <input
@@ -103,18 +103,18 @@ export function SearchFilter({ filters, companies, onChange }) {
               value={filters.department}
               onChange={e => handleChange('department', e.target.value)}
               placeholder="e.g., Engineering, Product"
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors"
+              className="w-full px-4 py-2.5 border border-slate-600 bg-slate-900 text-slate-100 placeholder:text-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors"
             />
           </div>
 
           {/* Action Buttons */}
-          <div className="flex gap-3 pt-4 border-t border-gray-200">
+          <div className="flex gap-3 pt-4 border-t border-slate-700">
             {hasActiveFilters && (
               <button
                 onClick={() => {
                   onChange({ keyword: '', companyId: '', location: '', department: '' })
                 }}
-                className="flex-1 px-4 py-2.5 text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                className="flex-1 px-4 py-2.5 text-sm font-semibold text-slate-300 bg-slate-700/50 hover:bg-slate-600/50 rounded-lg transition-colors"
               >
                 Clear
               </button>

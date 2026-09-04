@@ -13,13 +13,13 @@
   --primary-800: #3730a3;
   --primary-900: #312e81;
 
-  /* Semantic Colors */
+  /* Semantic Colors - Dark Theme */
   --success: #10b981;
-  --success-light: #d1fae5;
+  --success-light: #064e3b;
   --warning: #f59e0b;
-  --warning-light: #fef3c7;
+  --warning-light: #78350f;
   --error: #ef4444;
-  --error-light: #fee2e2;
+  --error-light: #7f1d1d;
 
   font-family: system-ui, "Segoe UI", Roboto, sans-serif;
   line-height: 1.6;
@@ -38,8 +38,8 @@ html {
 body {
   margin: 0;
   padding: 0;
-  background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
-  color: #1f2937;
+  background: #0f172a;
+  color: #e2e8f0;
   font-size: 16px;
   line-height: 1.6;
 }
@@ -73,28 +73,45 @@ small {
 }
 
 ::-webkit-scrollbar-track {
-  background: #f3f4f6;
+  background: #1e293b;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #a5b4fc, #6366f1);
+  background: linear-gradient(180deg, #4f46e5, #6366f1);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #818cf8, #4f46e5);
+  background: linear-gradient(180deg, #818cf8, #a5b4fc);
 }
 
 /* Focus Visible */
 :focus-visible {
-  outline: 2px solid #4f46e5;
+  outline: 2px solid #6366f1;
   outline-offset: 2px;
+}
+
+/* Dark theme scrolling smoothness */
+@supports (scroll-behavior: smooth) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Swipe gesture cursor */
+.swipeable {
+  touch-action: pan-y;
+  cursor: grab;
+}
+
+.swipeable:active {
+  cursor: grabbing;
 }
 
 /* Selection */
 ::selection {
-  background-color: #e0e7ff;
-  color: #312e81;
+  background-color: #4f46e5;
+  color: #f1f5f9;
 }
 
 /* Badge Styles */
