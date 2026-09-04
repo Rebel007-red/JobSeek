@@ -55,14 +55,36 @@ export function JobCard({ job, matchedSkills = [], onHide, onApplied }) {
       onTouchEnd={handleTouchEnd}
     >
       
-      {/* Header: Title + Company */}
-      <div className="mb-1">
-        <h3 className="text-xs font-bold text-slate-100 line-clamp-2 group-hover:text-indigo-400 transition-colors">
-          {title}
-        </h3>
-        <p className="text-xs text-indigo-400 font-semibold mt-0.5">
+      {/* Header: Title */}
+      <h3 className="text-xs font-bold text-slate-100 line-clamp-2 group-hover:text-indigo-400 transition-colors mb-0.5">
+        {title}
+      </h3>
+
+      {/* Source Row: Company | Date | New | Applied */}
+      <div className="flex items-center gap-1 mb-1.5 text-xs">
+        <span className="text-indigo-400 font-semibold flex-shrink-0">
           {companyName}
-        </p>
+        </span>
+        <span className="text-slate-500">•</span>
+        <span className="text-slate-400 flex-shrink-0">
+          {formatDate(posted_at || first_seen_at)}
+        </span>
+        
+        <div className="flex items-center gap-0.5 ml-auto">
+          {isNew && !applied_at && (
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0 text-xs font-semibold text-amber-400 bg-amber-900/40 rounded border border-amber-700/50">
+              <span className="w-1 h-1 bg-amber-400 rounded-full animate-pulse"></span>
+            </span>
+          )}
+          
+          {applied_at && (
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0 text-xs font-semibold text-emerald-400 bg-emerald-900/40 rounded border border-emerald-700/50">
+              <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Meta: Location + Department */}
@@ -108,34 +130,6 @@ export function JobCard({ job, matchedSkills = [], onHide, onApplied }) {
           )}
         </div>
       )}
-
-      {/* Badges Row - Compact */}
-      <div className="flex flex-wrap gap-1 mb-1.5 pt-1 border-t border-slate-700/50">
-        {applied_at && (
-          <span className="inline-flex items-center gap-0.5 px-1.5 py-0 text-xs font-semibold text-emerald-400 bg-emerald-900/40 rounded border border-emerald-700/50">
-            <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-            </svg>
-            ✓
-          </span>
-        )}
-        
-        {isNew && !applied_at && (
-          <span className="inline-flex items-center gap-0.5 px-1.5 py-0 text-xs font-semibold text-amber-400 bg-amber-900/40 rounded border border-amber-700/50">
-            <span className="w-1 h-1 bg-amber-400 rounded-full animate-pulse"></span>
-          </span>
-        )}
-        
-        {matchedSkills.length > 0 && (
-          <span className="inline-flex items-center gap-0.5 px-1.5 py-0 text-xs font-semibold text-purple-400 bg-purple-900/40 rounded border border-purple-700/50">
-            ✨{matchScore}%
-          </span>
-        )}
-
-        <span className="text-xs text-slate-600 px-1 py-0 ml-auto">
-          {formatDate(posted_at || first_seen_at)}
-        </span>
-      </div>
 
       {/* Footer: Actions - Icon Only */}
       <div className="flex items-center justify-between pt-1 border-t border-slate-700/50 mt-auto gap-1">
@@ -203,13 +197,6 @@ export function JobCard({ job, matchedSkills = [], onHide, onApplied }) {
           )}
         </div>
       </div>
-
-      {/* Swipe Hint - For Touch Devices */}
-      {(onHide || onApplied) && (
-        <div className="text-xs text-slate-600 text-center mt-1 hidden sm:hidden lg:block">
-          💬 Swipe left to hide, right to apply
-        </div>
-      )}
     </article>
   )
 }
