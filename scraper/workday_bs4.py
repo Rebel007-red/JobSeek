@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """
-Workday Jobs Scraper - Direct API Approach
+Workday Jobs Scraper - Single Company Focus
 
-Fetches jobs directly from Workday API endpoint (POST /jobs)
-Much more efficient and reliable than DOM parsing or Playwright
-Companies: Rockwell Automation, Fractal, MiQ Digital, Dentsu Aegis
+Fetches jobs from a specific Workday company using API
 """
 
 import requests
@@ -24,7 +22,6 @@ if sys.platform == 'win32':
 SKILL_KEYWORDS = ["pyspark", "databricks", "spark", "sql", "python", "data", "aws", "gcp", "azure"]
 MIN_SKILL_KEYWORDS = 1
 MAX_JOBS_PER_COMPANY = 100
-MAX_TOTAL_JOBS = 200
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -33,84 +30,6 @@ HEADERS = {
 
 TIMEOUT = 15
 DELAY_BETWEEN_REQUESTS = 0.5
-
-
-# ─── SUPABASE ──────────────────────────────────────────────────────────
-def get_workday_companies():
-    """Fetch all enabled Workday companies from Supabase."""
-    fallback_companies = [
-        {
-            "id": "1",
-            "name": "Accenture",
-            "api_url": "https://accenture.wd103.myworkdayjobs.com/wday/cxs/accenture/AccentureCareers/jobs",
-        },
-        {
-            "id": "2",
-            "name": "Omnissa",
-            "api_url": "https://omnissa.wd501.myworkdayjobs.com/wday/cxs/omnissa/Omnissa_External_Career_Site/jobs",
-        },
-        {
-            "id": "3",
-            "name": "Google",
-            "api_url": "https://google.wd501.myworkdayjobs.com/wday/cxs/google/GOCJobs/jobs",
-        },
-        {
-            "id": "4",
-            "name": "Rockwell Automation",
-            "api_url": "https://rockwellautomation.wd1.myworkdayjobs.com/en-US/External_Rockwell_Automation",
-        },
-        {
-            "id": "5",
-            "name": "Fractal",
-            "api_url": "https://fractal.wd1.myworkdayjobs.com/en-US/Careers",
-        },
-        {
-            "id": "6",
-            "name": "MiQ Digital",
-            "api_url": "https://miqdigital.wd3.myworkdayjobs.com/en-US/MiQ_Careers",
-        },
-        {
-            "id": "7",
-            "name": "Dentsu Aegis",
-            "api_url": "https://dentsuaegis.wd3.myworkdayjobs.com/en-US/DAN_GLOBAL",
-        },
-    ]
-
-    try:
-        from supabase import create_client
-
-        url = os.getenv("VITE_SUPABASE_URL") or "https://deczscnmmxpgpayyxglk.supabase.co"
-        key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-
-        if not key:
-            print("[WARN] SUPABASE_SERVICE_ROLE_KEY not set, using fallback", file=sys.stderr)
-            return fallback_companies
-
-        supabase = create_client(url, key)
-        response = (
-            supabase.table("companies")
-            .select("id,name,api_url")
-            .eq("ats_type", "workday")
-            .eq("disabled", False)
-            .execute()
-        )
-
-        companies = response.data or []
-        if companies:
-            print(
-                f"[FETCH] Found {len(companies)} Workday companies in DB",
-                file=sys.stderr,
-            )
-            return companies
-        else:
-            print("[WARN] No Workday companies in DB, using fallback", file=sys.stderr)
-            return fallback_companies
-    except Exception as e:
-        print(
-            f"[WARN] Failed to query companies: {e}, using fallback",
-            file=sys.stderr,
-        )
-        return fallback_companies
 
 
 # ─── API CALL ──────────────────────────────────────────────────────────
@@ -270,26 +189,33 @@ def parse_workday_job(job_posting, base_url):
 
 
 # ─── MAIN ──────────────────────────────────────────────────────────────
-# ─── MAIN ──────────────────────────────────────────────────────────────
 def main():
-    """Main scraper function."""
-    companies = get_workday_companies()
-    all_jobs = []
+    """Main scraper function. Reads company JSON from stdin."""
+    try:
+        # Read company JSON from stdin
+        company_json = sys.stdin.read().strip()
+        if not company_json:
+            print("[]", flush=True)
+            return
 
-    for company in companies:
-        time.sleep(DELAY_BETWEEN_REQUESTS)
+        company = json.loads(company_json)
+    except (json.JSONDecodeError, EOFError):
+        print("[]", flush=True)
+        return
 
-        name = company.get("name", "Unknown")
-        api_url = company.get("api_url", "")
+    name = company.get("name", "Unknown")
+    api_url = company.get("api_url", "")
 
-        print(f"\n[SCRAPE] {name}", file=sys.stderr)
+    if not api_url:
+        print("[]", flush=True)
+        return
 
+    print(f"[SCRAPE] Workday: {name}", file=sys.stderr)
+
+    try:
         job_postings = fetch_workday_jobs_api(api_url)
-
-        # Limit jobs per company
         job_postings = job_postings[:MAX_JOBS_PER_COMPANY]
 
-        # Parse and filter jobs
         jobs = []
         for posting in job_postings:
             job = parse_workday_job(posting, api_url)
@@ -301,20 +227,17 @@ def main():
             file=sys.stderr,
         )
 
-        all_jobs.extend(jobs)
+        # Output as JSON for Node.js wrapper
+        print(json.dumps(jobs, ensure_ascii=False), flush=True)
 
-        # Stop if we reach max total jobs
-        if len(all_jobs) >= MAX_TOTAL_JOBS:
-            all_jobs = all_jobs[:MAX_TOTAL_JOBS]
-            break
+        if jobs:
+            print(f"[SUCCESS] {name}: {len(jobs)} jobs", file=sys.stderr)
+        else:
+            print(f"[NOTICE] {name}: No jobs found", file=sys.stderr)
 
-    # Output as JSON for Node.js wrapper
-    print(json.dumps(all_jobs, ensure_ascii=False), flush=True)
-
-    if all_jobs:
-        print(f"[SUCCESS] Total jobs: {len(all_jobs)}", file=sys.stderr)
-    else:
-        print("[NOTICE] No jobs found", file=sys.stderr)
+    except Exception as e:
+        print(f"[ERROR] Failed to scrape {name}: {e}", file=sys.stderr)
+        print("[]", flush=True)
 
 
 if __name__ == "__main__":

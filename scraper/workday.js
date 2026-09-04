@@ -13,11 +13,18 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export async function fetchWorkdayJobs(company) {
   try {
-    console.log(`    → Workday (Python BS4)`)
+    console.log(`    → Workday: ${company.name}`)
 
-    // Execute Python scraper script
+    // Execute Python scraper script with company JSON via stdin
     const pythonScript = path.join(__dirname, 'workday_bs4.py')
+    const companyJSON = JSON.stringify({
+      id: company.id,
+      name: company.name,
+      api_url: company.api_url,
+    })
+
     const output = execSync(`python "${pythonScript}"`, {
+      input: companyJSON,
       encoding: 'utf-8',
       maxBuffer: 50 * 1024 * 1024,
       timeout: 300000,
