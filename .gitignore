@@ -1,52 +1,21 @@
+# Build
+node_modules
+dist
+dist-ssr
+
 # Logs
-logs
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# Local dev
 *.local
-
-# Environment variables — never commit real secrets
-.env
+.venv
 .env.local
-.env.*.local
 
-# Test and debug files (keep locally, don't commit)
-test_*.py
-test_*.js
-test_*.mjs
-debug_*.py
-inspect_*.py
-analyze_*.py
-find_*.py
-*_output.json
-*_output.txt
-*_sample.html
-*_approot.json
-*_jobs.json
-*.sample.json
-scraper_output.txt
-scraper-output.txt
-count-jobs.mjs
-add-companies.js
-add-companies.mjs
-add_enum_values.mjs
-list-companies.js
-list_companies.mjs
-query-companies.mjs
-setup_companies.mjs
-insert-greenhouse.js
-*.har
-*.rendered.html
-test-jobs-in-db.js
-
-# Editor directories and files
+# IDE
 .vscode/*
 !.vscode/extensions.json
 .idea
