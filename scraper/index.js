@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { execSync } from 'child_process';
 import { fetchGreenhouseJobs } from './greenhouse.js';
-import { fetchWorkdayJobs } from './workday.js';
+import { fetchWorkdayJobs } from './workday_html.js';
 import { fetchPhenomJobs } from './phenom.js';
 import { fetchICIMSJobs } from './icims.js';
 import { fetchOracleJobs } from './oracle.js';
@@ -90,15 +90,11 @@ async function upsertJobs(companyId, jobs) {
     return true;
   });
 
+  // NOTE: Freshness filtering (24-hour window) is now handled by individual scrapers
+  // (e.g., workday_html.js has filterByFreshness() called BEFORE skill matching)
+  // Each ATS type must implement its own date parsing and freshness filter
+  
   const rows = uniqueJobs
-    .filter(job => {
-      // Filter: only keep jobs posted in last 24 hours
-      const postedDate = job.posted_at ? new Date(job.posted_at).getTime() : null
-      if (postedDate && Date.now() - postedDate > 24 * 3600 * 1000) {
-        return false  // Skip jobs older than 24 hours
-      }
-      return true
-    })
     .map((job) => ({
       company_id: companyId,
       job_id: String(job.job_id),
@@ -106,7 +102,7 @@ async function upsertJobs(companyId, jobs) {
       location: job.location || null,
       department: job.department || null,
       url: job.url || '',
-      posted_at: safeDate(job.posted_at),   // sanitize — rejects "Posted X Days Ago"
+      posted_at: safeDate(job.posted_at),
       last_seen_at: now,
       is_active: true,
       skills: Array.isArray(job.skills) ? job.skills : [],

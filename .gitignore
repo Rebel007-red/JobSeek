@@ -42,6 +42,9 @@ list_companies.mjs
 query-companies.mjs
 setup_companies.mjs
 insert-greenhouse.js
+*.har
+*.rendered.html
+test-jobs-in-db.js
 
 # Editor directories and files
 .vscode/*

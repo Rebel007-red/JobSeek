@@ -170,10 +170,9 @@ def parse_workday_job(job_posting, base_url):
         else:
             job_url = ""
 
-        # Skill filtering
-        if not matches_skills(title):
-            return None
-
+        # Note: Skill filtering disabled for Workday (API doesn't provide full descriptions)
+        # Accept all jobs and let frontend filter by user skills
+        
         return {
             "job_id": job_id or title.lower().replace(" ", "_"),
             "title": title,

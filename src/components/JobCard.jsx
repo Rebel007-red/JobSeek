@@ -35,6 +35,7 @@ export function JobCard({ job, matchedSkills = [], onHide, onApplied }) {
 
   // Swipe state
   const [offset, setOffset] = useState(0)
+  const [exitColor, setExitColor] = useState(null)  // 'red' or 'green' for exit animation
   const touchStartX = useRef(null)
   const swiping = useRef(false)
 
@@ -53,16 +54,23 @@ export function JobCard({ job, matchedSkills = [], onHide, onApplied }) {
 
   function handleTouchEnd() {
     if (offset > SWIPE_THRESHOLD && onHide) {
-      // Swipe right → animate off screen then hide
-      setOffset(400)
-      setTimeout(() => onHide(job.id), 200)
-    } else if (offset < -SWIPE_THRESHOLD && onApplied) {
-      // Swipe left → bounce, call onApplied, snap back so badge shows
-      setOffset(-100)
+      // Swipe right → red background, slide and fade out
+      setExitColor('red')
       setTimeout(() => {
-        onApplied(job.id, !applied_at)
-        setOffset(0)
-      }, 150)
+        setOffset(400)
+        setTimeout(() => onHide(job.id), 300)
+      }, 50)
+    } else if (offset < -SWIPE_THRESHOLD && onApplied) {
+      // Swipe left → green background, slide and fade out, then call onApplied
+      setExitColor('green')
+      setTimeout(() => {
+        setOffset(-400)
+        setTimeout(() => {
+          onApplied(job.id, !applied_at)
+          setOffset(0)
+          setExitColor(null)
+        }, 300)
+      }, 50)
     } else {
       setOffset(0)
     }
@@ -76,6 +84,15 @@ export function JobCard({ job, matchedSkills = [], onHide, onApplied }) {
 
   return (
     <div className="relative overflow-hidden rounded-lg h-full">
+      {/* Exit background (shows when swiped off) */}
+      {exitColor && (
+        <div
+          className={`absolute inset-0 rounded-lg transition-opacity duration-300 ${
+            exitColor === 'red' ? 'bg-red-500/80' : 'bg-green-500/80'
+          }`}
+        />
+      )}
+
       {/* Swipe reveal backgrounds */}
       <div
         className="absolute inset-0 flex items-center justify-start px-4 rounded-lg"
@@ -97,7 +114,9 @@ export function JobCard({ job, matchedSkills = [], onHide, onApplied }) {
         onTouchEnd={handleTouchEnd}
         style={{
           transform: `translateX(${offset}px)`,
-          transition: swiping.current ? 'none' : 'transform 0.25s ease',
+          transition: swiping.current ? 'none' : 'transform 0.3s ease-out',
+          opacity: exitColor ? (1 - Math.abs(offset) / 500) : 1,
+        }}
         }}
         className={`relative rounded-lg p-3 flex flex-col gap-2.5 border h-full backdrop-blur-sm ${
           matchCount > 0

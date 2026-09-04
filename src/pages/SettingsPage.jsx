@@ -95,11 +95,16 @@ export function SettingsPage() {
   async function saveSkillsToSupabase(updatedSkills) {
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
-      // Try upsert first (in case record doesn't exist yet)
-      await supabase
+      // Upsert: Insert or update the user_skills row
+      const { error } = await supabase
         .from('user_skills')
-        .upsert({ user_id: user.id, skills: updatedSkills })
-        .eq('user_id', user.id)
+        .upsert({ user_id: user.id, skills: updatedSkills }, { onConflict: 'user_id' })
+      
+      if (error) {
+        console.error('Failed to save skills:', error)
+      } else {
+        console.log('✓ Skills saved to Supabase:', updatedSkills)
+      }
     }
   }
 
@@ -211,28 +216,28 @@ export function SettingsPage() {
   return (
     <div className="min-h-screen bg-slate-950">
       {/* Header */}
-      <header className="bg-gray-900 border-b border-gray-800 sticky top-0 z-10">
+      <header className="bg-slate-900/50 border-b border-slate-800 sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 py-2.5 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={() => navigate('/')} className="text-gray-500 hover:text-gray-300">
+            <button onClick={() => navigate('/')} className="text-slate-500 hover:text-slate-300">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
-            <h1 className="text-sm font-bold text-gray-100">Settings</h1>
+            <h1 className="text-sm font-bold text-slate-200">Settings</h1>
           </div>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-4">
         {/* Tabs */}
-        <div className="flex gap-1 bg-gray-800 border border-gray-700 rounded-lg p-1 w-fit mb-6">
+        <div className="flex gap-1 bg-slate-800 border border-slate-700 rounded-lg p-1 w-fit mb-6">
           {['companies', 'skills', 'hidden'].map(t => (
             <button key={t} onClick={() => setTab(t)}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium capitalize transition-colors flex items-center gap-1.5 ${tab === t ? 'bg-gray-700 text-gray-100 shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}>
+              className={`px-4 py-1.5 rounded-md text-sm font-medium capitalize transition-colors flex items-center gap-1.5 ${tab === t ? 'bg-slate-700 text-slate-200 shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}>
               {t}
               {t === 'hidden' && hiddenCount > 0 && (
-                <span className="text-[10px] bg-gray-600 text-gray-300 px-1.5 py-0.5 rounded-full font-bold">{hiddenCount}</span>
+                <span className="text-[10px] bg-slate-600 text-slate-200 px-1.5 py-0.5 rounded-full font-bold">{hiddenCount}</span>
               )}
             </button>
           ))}
@@ -242,8 +247,8 @@ export function SettingsPage() {
         {tab === 'companies' && (
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
-              <p className="text-xs text-gray-400">
-                Companies are scraped every 30 minutes via GitHub Actions.
+              <p className="text-xs text-slate-400">
+                Companies are scraped every 4 hours via GitHub Actions.
                 Changes take effect on the next run.
               </p>
               <button onClick={() => { setShowForm(true); setForm(EMPTY_FORM); setFormError('') }}
@@ -257,48 +262,48 @@ export function SettingsPage() {
 
             {/* Add company form */}
             {showForm && (
-              <form onSubmit={saveCompany} className="bg-gray-800 border border-indigo-700/50 rounded-lg p-4 flex flex-col gap-4 shadow-sm">
-                <h3 className="font-semibold text-gray-100">Add New Company</h3>
+              <form onSubmit={saveCompany} className="bg-slate-800/50 border border-indigo-700/50 rounded-lg p-4 flex flex-col gap-4 shadow-sm">
+                <h3 className="font-semibold text-slate-200">Add New Company</h3>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-1">Company Name *</label>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Company Name *</label>
                     <input type="text" required value={form.name}
                       onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                       placeholder="e.g. Stripe, Acme Corp"
-                      className="w-full bg-gray-900 border border-gray-700 text-gray-100 placeholder:text-gray-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                      className="w-full bg-slate-900 border border-slate-700 text-slate-200 placeholder:text-slate-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
                     {companies.some(c => c.name.toLowerCase() === form.name.trim().toLowerCase()) && form.name.trim() && (
                       <p className="text-xs text-red-400 mt-1">⚠ This company already exists</p>
                     )}
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-1">ATS Type *</label>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">ATS Type *</label>
                     <select value={form.ats_type} onChange={e => setForm(f => ({ ...f, ats_type: e.target.value, slug: '', api_url: '' }))}
-                      className="w-full bg-gray-900 border border-gray-700 text-gray-100 placeholder:text-gray-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                      className="w-full bg-slate-900 border border-slate-700 text-slate-200 placeholder:text-slate-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
                       {ATS_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
 
                   {help?.slug && (
                     <div className="sm:col-span-2">
-                      <label className="block text-xs font-medium text-gray-400 mb-1">{help.slug.label} *</label>
+                      <label className="block text-xs font-medium text-slate-400 mb-1">{help.slug.label} *</label>
                       <input type="text" required value={form.slug}
                         onChange={e => setForm(f => ({ ...f, slug: e.target.value }))}
                         placeholder={help.slug.placeholder}
-                        className="w-full bg-gray-900 border border-gray-700 text-gray-100 placeholder:text-gray-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
-                      <p className="text-xs text-gray-600 mt-0.5">{help.slug.help}</p>
+                        className="w-full bg-slate-900 border border-slate-700 text-slate-200 placeholder:text-slate-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                      <p className="text-xs text-slate-600 mt-0.5">{help.slug.help}</p>
                     </div>
                   )}
 
                   {help?.api_url && (
                     <div className="sm:col-span-2">
-                      <label className="block text-xs font-medium text-gray-400 mb-1">{help.api_url.label} *</label>
+                      <label className="block text-xs font-medium text-slate-400 mb-1">{help.api_url.label} *</label>
                       <input type="url" required value={form.api_url}
                         onChange={e => setForm(f => ({ ...f, api_url: e.target.value }))}
                         placeholder={help.api_url.placeholder}
-                        className="w-full bg-gray-900 border border-gray-700 text-gray-100 placeholder:text-gray-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
-                      <p className="text-xs text-gray-600 mt-0.5">{help.api_url.help}</p>
+                        className="w-full bg-slate-900 border border-slate-700 text-slate-200 placeholder:text-slate-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                      <p className="text-xs text-slate-600 mt-0.5">{help.api_url.help}</p>
                     </div>
                   )}
                 </div>
@@ -307,7 +312,7 @@ export function SettingsPage() {
 
                 <div className="flex gap-2 justify-end">
                   <button type="button" onClick={() => { setShowForm(false); setFormError('') }}
-                    className="px-3 py-1.5 text-xs text-gray-400 border border-gray-700 rounded-md hover:bg-gray-700">
+                    className="px-3 py-1.5 text-xs text-slate-400 border border-slate-700 rounded-md hover:bg-slate-700">
                     Cancel
                   </button>
                   <button type="submit" disabled={saving || !form.name.trim() || !form.ats_type}
@@ -320,40 +325,40 @@ export function SettingsPage() {
 
             {/* Company list */}
             {loading ? (
-              <div className="text-xs text-gray-600 py-8 text-center">Loading…</div>
+              <div className="text-xs text-slate-600 py-8 text-center">Loading…</div>
             ) : companies.length === 0 ? (
-              <div className="text-xs text-gray-600 py-8 text-center">No companies yet. Add one above.</div>
+              <div className="text-xs text-slate-600 py-8 text-center">No companies yet. Add one above.</div>
             ) : (
-              <div className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
+              <div className="bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden">
                 <table className="w-full text-sm">
-                  <thead className="bg-gray-900/50 border-b border-gray-700">
+                  <thead className="bg-slate-900/50 border-b border-slate-700">
                     <tr>
-                      <th className="text-left px-3 py-2.5 font-medium text-gray-500 text-xs">Company</th>
-                      <th className="text-left px-3 py-2.5 font-medium text-gray-500 text-xs hidden sm:table-cell">ATS</th>
-                      <th className="text-left px-3 py-2.5 font-medium text-gray-500 text-xs hidden md:table-cell">Slug / URL</th>
-                      <th className="px-3 py-2.5 font-medium text-gray-500 text-xs text-right">Status</th>
-                      <th className="px-3 py-2.5 font-medium text-gray-500 text-xs"></th>
+                      <th className="text-left px-3 py-2.5 font-medium text-slate-500 text-xs">Company</th>
+                      <th className="text-left px-3 py-2.5 font-medium text-slate-500 text-xs hidden sm:table-cell">ATS</th>
+                      <th className="text-left px-3 py-2.5 font-medium text-slate-500 text-xs hidden md:table-cell">Slug / URL</th>
+                      <th className="px-3 py-2.5 font-medium text-slate-500 text-xs text-right">Status</th>
+                      <th className="px-3 py-2.5 font-medium text-slate-500 text-xs"></th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-700/50">
+                  <tbody className="divide-y divide-slate-700/50">
                     {companies.map(company => (
                       <tr key={company.id} className={company.disabled ? 'opacity-50' : ''}>
-                        <td className="px-3 py-2.5 font-medium text-gray-200 text-sm">{company.name}</td>
-                        <td className="px-3 py-2.5 text-gray-500 hidden sm:table-cell">
-                          <span className="px-2 py-0.5 bg-gray-100 rounded text-xs">{company.ats_type}</span>
+                        <td className="px-3 py-2.5 font-medium text-slate-200 text-sm">{company.name}</td>
+                        <td className="px-3 py-2.5 text-slate-500 hidden sm:table-cell">
+                          <span className="px-2 py-0.5 bg-slate-700/60 rounded text-xs text-slate-200">{company.ats_type}</span>
                         </td>
-                        <td className="px-3 py-2.5 text-gray-600 hidden md:table-cell text-xs font-mono truncate max-w-[200px]">
+                        <td className="px-3 py-2.5 text-slate-600 hidden md:table-cell text-xs font-mono truncate max-w-[200px]">
                           {company.slug || company.api_url || '—'}
                         </td>
                         <td className="px-3 py-2.5 text-right">
                           <button onClick={() => toggleDisabled(company)}
-                            className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${company.disabled ? 'bg-gray-700/60 text-gray-500 hover:bg-green-900/40 hover:text-green-300' : 'bg-green-900/40 text-green-300 border border-green-700/50 hover:bg-gray-700/60 hover:text-gray-400'}`}>
+                            className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${company.disabled ? 'bg-slate-700/60 text-slate-500 hover:bg-green-900/40 hover:text-green-300' : 'bg-green-900/40 text-green-300 border border-green-700/50 hover:bg-slate-700/60 hover:text-slate-400'}`}>
                             {company.disabled ? 'Disabled' : 'Enabled'}
                           </button>
                         </td>
                         <td className="px-3 py-2.5 text-right">
                           <button onClick={() => deleteCompany(company)}
-                            className="text-gray-700 hover:text-red-400 transition-colors p-1">
+                            className="text-slate-700 hover:text-red-400 transition-colors p-1">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                             </svg>
@@ -371,18 +376,18 @@ export function SettingsPage() {
         {/* ── SKILLS TAB ── */}
         {tab === 'skills' && (
           <div className="flex flex-col gap-5">
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-slate-400">
               Enter your skills to highlight matching jobs. Jobs are scored and sorted by how many of your skills appear in the job title and department.
             </p>
 
             {/* Tag input */}
-            <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 flex flex-col gap-3">
+            <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 flex flex-col gap-3">
               <div className="flex gap-2">
                 <input type="text" value={skillInput}
                   onChange={e => setSkillInput(e.target.value)}
                   onKeyDown={handleSkillKeyDown}
                   placeholder="Type a skill and press Enter or comma…"
-                  className="flex-1 bg-gray-900 border border-gray-700 text-gray-100 placeholder:text-gray-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                  className="flex-1 bg-slate-900 border border-slate-700 text-slate-200 placeholder:text-slate-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
                 <button onClick={addSkill}
                   className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-md transition-colors">
                   Add
@@ -407,26 +412,26 @@ export function SettingsPage() {
                   </button>
                 </div>
               ) : (
-                <p className="text-xs text-gray-600">No skills added yet.</p>
+                <p className="text-xs text-slate-600">No skills added yet.</p>
               )}
             </div>
 
-            <p className="text-xs text-gray-400">Skills are stored in your account and used to filter job results.</p>
+            <p className="text-xs text-slate-400">Skills are stored in your account and used to filter job results.</p>
           </div>
         )}
 
         {/* ── HIDDEN JOBS TAB ── */}
         {tab === 'hidden' && (
           <div className="flex flex-col gap-4">
-            <div className="bg-gray-800 border border-gray-700 rounded-lg p-5 flex flex-col gap-4">
+            <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-5 flex flex-col gap-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-200">
+                  <p className="text-sm font-medium text-slate-200">
                     {hiddenCount > 0
                       ? <>{hiddenCount} job{hiddenCount > 1 ? 's' : ''} hidden</>
                       : 'No hidden jobs'}
                   </p>
-                  <p className="text-xs text-gray-500 mt-0.5">
+                  <p className="text-xs text-slate-500 mt-0.5">
                     Jobs you dismiss with the × button are hidden across all sessions.
                     They reappear if a new scrape finds them again — unless you restore them here first.
                   </p>
@@ -443,7 +448,7 @@ export function SettingsPage() {
               </div>
 
               {hiddenCount === 0 && (
-                <p className="text-xs text-gray-600 text-center py-4">
+                <p className="text-xs text-slate-600 text-center py-4">
                   Hover over any job card and click × to hide it.
                 </p>
               )}
