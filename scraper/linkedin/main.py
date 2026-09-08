@@ -1,6 +1,7 @@
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
 import aiohttp
+import asyncio
 import os
 import sys
 import re
