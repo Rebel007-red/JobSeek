@@ -1,0 +1,40 @@
+name: Scrape Jobs (Every 6 Hours)
+
+on:
+  schedule:
+    # Run every 6 hours: 00:00, 06:00, 12:00, 18:00 UTC
+    - cron: '0 0,6,12,18 * * *'
+  
+  # Allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.14'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install python-dotenv aiohttp beautifulsoup4 playwright sqlalchemy psycopg2
+          playwright install chromium
+      
+      - name: Run job scraper
+        env:
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        working-directory: ./scraper
+        run: |
+          python main.py
+        continue-on-error: true
+      
+      - name: Log completion
+        run: echo "Job scraping run completed at $(date -u +'%Y-%m-%d %H:%M:%S UTC')"

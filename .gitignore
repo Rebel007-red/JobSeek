@@ -10,10 +10,24 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+*.egg
+build/
+.Python
+
 # Local dev
 *.local
 .venv
+venv/
+env/
+.env
 .env.local
+.env.*.local
 
 # IDE
 .vscode/*
@@ -25,3 +39,8 @@ pnpm-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+# Scraper temp files
+output.txt
+*.db
+scraper/output*
