@@ -11,7 +11,7 @@ load_dotenv()
 
 BASE_URL = "https://deczscnmmxpgpayyxglk.supabase.co/rest/v1"
 HEADERS = {
-    'apikey': os.getenv("VITE_SUPABASE_ANON_KEY"),
+    'apikey': os.getenv("SUPABASE_SERVICE_ROLE_KEY"),
     'Content-Type': 'application/json'
 }
 
