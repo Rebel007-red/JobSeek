@@ -1,9 +1,13 @@
-import requests
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
 import aiohttp
 import os
+import sys
 from datetime import datetime
+from pathlib import Path
+
+# Add parent directory to sys.path to import skill_Filter
+sys.path.insert(0, str(Path(__file__).parent.parent))
 from skill_Filter import SkillFilter
 
 class Scraper:
