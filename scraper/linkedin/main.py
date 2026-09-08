@@ -23,11 +23,34 @@ class Scraper:
         # Initialize SkillFilter with user skills
         self.skill_filter = SkillFilter(company.get('user_skills', []))
         
+        # Build LinkedIn search URL from api_url keywords
+        self.search_url = self._build_search_url(company.get('api_url', ''))
+        
         print(f"[INIT] LinkedIn scraper for: {company['name']} (Skills: {len(self.skill_filter.skills)} skills)")
+    
+    def _build_search_url(self, keywords_str):
+        """Build LinkedIn search URL from keywords in api_url field"""
+        # Extract keywords from api_url (e.g., "Data Engineer, PySpark")
+        if not keywords_str:
+            return None
+        
+        # URL encode the keywords
+        from urllib.parse import quote
+        encoded_keywords = quote(keywords_str.strip())
+        
+        # Build full LinkedIn search URL with location=India and max distance
+        search_url = f"https://www.linkedin.com/jobs/search/?keywords={encoded_keywords}&location=India&distance=25&f_TPR=r21600"
+        
+        print(f"    [URL] {search_url}")
+        return search_url
     
     async def scrape(self):
         """Scrape jobs from LinkedIn using headless browser"""
-        print(f"[SCRAPE] {self.company['name']} at {self.company['api_url']}")
+        print(f"[SCRAPE] {self.company['name']} with keywords: {self.company.get('api_url', 'N/A')}")
+        
+        if not self.search_url:
+            print(f"    [ERROR] No keywords provided in api_url field")
+            return []
         
         try:
             async with async_playwright() as p:
@@ -35,7 +58,7 @@ class Scraper:
                 page = await browser.new_page()
                 
                 # Navigate to LinkedIn search URL (URL handles location + 6-hour filter)
-                search_url = self.company['api_url']
+                search_url = self.search_url
                 
                 await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
                 await page.wait_for_selector('div[class*="base-card"]', timeout=10000)
