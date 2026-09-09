@@ -61,12 +61,19 @@ async def insert_jobs_to_db(jobs, ats_type):
     if not jobs:
         return
     
-    url = f"{BASE_URL}/jobs"
-    print(f"    [INSERT] Inserting {len(jobs)} jobs to database...")
+    url = f"{BASE_URL}/jobs?on_conflict=company_id,job_id"
+    print(f"    [UPSERT] Upserting {len(jobs)} jobs to database...")
     
     # Normalize fields to match Supabase schema
     # Schema: company_id, job_id, title, location, url, posted_at, skills
+    def _canonical_key(company_id, job_id):
+        return (
+            str(company_id or "").strip().lower(),
+            str(job_id or "").strip().lower()
+        )
+
     normalized_jobs = []
+    seen_keys = set()
     for job in jobs:
         normalized = {
             'company_id': job.get('company_id'),
@@ -77,16 +84,46 @@ async def insert_jobs_to_db(jobs, ats_type):
             'posted_at': job.get('posted_at'),
             'skills': job.get('matched_skills') or job.get('skills', [])
         }
+
+        # Deduplicate aggressively to avoid ON CONFLICT affecting the same row twice.
+        dedupe_key = _canonical_key(normalized['company_id'], normalized['job_id'])
+        if dedupe_key in seen_keys:
+            continue
+
+        seen_keys.add(dedupe_key)
         normalized_jobs.append(normalized)
+
+    dropped_count = len(jobs) - len(normalized_jobs)
+    if dropped_count > 0:
+        print(f"    [UPSERT] Dropped {dropped_count} duplicate jobs in current batch")
     
     try:
+        upsert_headers = {
+            **HEADERS,
+            'Prefer': 'resolution=merge-duplicates,return=minimal'
+        }
+
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=normalized_jobs, headers=HEADERS) as response:
+            async with session.post(url, json=normalized_jobs, headers=upsert_headers) as response:
                 if response.status in [200, 201]:
-                    print(f"    [OK] Inserted {len(normalized_jobs)} jobs successfully")
+                    print(f"    [OK] Upserted {len(normalized_jobs)} jobs successfully")
                 else:
                     error_text = await response.text()
-                    print(f"    [ERROR] API error ({response.status}): {error_text[:200]}")
+                    # Fallback for Postgres 21000: same constrained row affected twice in one statement.
+                    if response.status == 500 and '"code":"21000"' in error_text:
+                        print("    [WARN] Bulk upsert conflict in one statement; retrying row-by-row")
+                        success_count = 0
+                        fail_count = 0
+                        for row in normalized_jobs:
+                            async with session.post(url, json=[row], headers=upsert_headers) as single_resp:
+                                if single_resp.status in [200, 201]:
+                                    success_count += 1
+                                else:
+                                    fail_count += 1
+
+                        print(f"    [OK] Row-wise upsert complete: {success_count} succeeded, {fail_count} failed")
+                    else:
+                        print(f"    [ERROR] API error ({response.status}): {error_text[:200]}")
     except Exception as e:
         print(f"    [ERROR] Insert failed: {str(e)}")
 
@@ -174,7 +211,8 @@ async def scrape_all():
                     print(f"    Location: {sample['location']}")
                     print(f"    Posted: {sample['posted_time']}")
                     print(f"    Description: {sample['description'][:80]}...")
-                    # NOTE: LinkedIn jobs not inserted to DB yet
+                    # INSERT LINKEDIN JOBS TO DB
+                    await insert_jobs_to_db(jobs, ats_type)
                 else:
                     print(f"    No jobs found after filtering")
                 

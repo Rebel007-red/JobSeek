@@ -1,7 +1,5 @@
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
-import aiohttp
-import asyncio
 import os
 import sys
 import re
@@ -25,6 +23,11 @@ class Scraper:
         
         # Build LinkedIn search URL from api_url keywords
         self.search_url = self._build_search_url(company.get('api_url', ''))
+        self.target_jobs = int(company.get('linkedin_target_jobs', 250) or 250)
+        self.max_pages = int(company.get('linkedin_max_pages', 20) or 20)
+        self.fetch_descriptions = bool(company.get('linkedin_fetch_descriptions', False))
+        # Wait between pagination attempts to reduce throttling/authwall frequency.
+        self.pagination_delay_seconds = int(company.get('linkedin_pagination_delay_seconds', 5) or 5)
         
         print(f"[INIT] LinkedIn scraper for: {company['name']} (Skills: {len(self.skill_filter.skills)} skills)")
     
@@ -38,7 +41,7 @@ class Scraper:
         from urllib.parse import quote
         encoded_keywords = quote(keywords_str.strip())
         
-        # Build full LinkedIn search URL with location=India and max distance
+        # Keep the 6-hour recency filter and fetch more by loading additional results.
         search_url = f"https://www.linkedin.com/jobs/search/?keywords={encoded_keywords}&location=India&distance=25&f_TPR=r21600"
         
         print(f"    [URL] {search_url}")
@@ -57,36 +60,46 @@ class Scraper:
                 browser = await p.chromium.launch(headless=True)
                 page = await browser.new_page()
                 
-                # Navigate to LinkedIn search URL (URL handles location + 6-hour filter)
+                # Navigate to LinkedIn search URL (URL handles location + recency filter)
                 search_url = self.search_url
                 
                 await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
                 await page.wait_for_selector('div[class*="base-card"]', timeout=10000)
-                
-                # Get page content
-                content = await page.content()
-                
-                # STEP 1: Parse jobs from LinkedIn
-                all_jobs = self._parse_linkedin_jobs(content)
+
+                # STEP 1: Crawl paginated results to reach target volume.
+                all_jobs = await self._collect_jobs_across_pages(page)
                 print(f"    [TOTAL] {len(all_jobs)} jobs fetched from LinkedIn")
                 
-                # STEP 2: Fetch descriptions for all jobs
-                for i, job in enumerate(all_jobs):
-                    try:
-                        job_url = job.get('job_url')
-                        if job_url:
-                            await page.goto(job_url, wait_until="domcontentloaded", timeout=20000)
-                            await page.wait_for_timeout(1000)
-                            
-                            # Get description from detail page
-                            description = await page.text_content()
-                            all_jobs[i]['description'] = description[:500] if description else "No description"
-                    except Exception as e:
-                        all_jobs[i]['description'] = "Description unavailable"
+                # DEBUG: Show job list in pipe-separated format
+                if all_jobs:
+                    jobs_list = " | ".join([f"{i+1}. {job['title'][:30]}" for i, job in enumerate(all_jobs)])
+                    print(f"    [JOBS] {jobs_list}")
+                
+                # STEP 2: Fetch descriptions only when explicitly enabled.
+                if self.fetch_descriptions:
+                    for i, job in enumerate(all_jobs):
+                        try:
+                            job_url = job.get('job_url')
+                            if job_url:
+                                await page.goto(job_url, wait_until="domcontentloaded", timeout=20000)
+                                await page.wait_for_timeout(1000)
+
+                                # Get description from detail page
+                                description = await page.text_content()
+                                all_jobs[i]['description'] = description[:500] if description else "No description"
+                        except Exception:
+                            all_jobs[i]['description'] = "Description unavailable"
+                else:
+                    for job in all_jobs:
+                        if not job.get('description'):
+                            job['description'] = "Description not fetched"
                 
                 await browser.close()
                 
-                print(f"    [COMPLETE] {len(all_jobs)} jobs with descriptions ready")
+                if self.fetch_descriptions:
+                    print(f"    [COMPLETE] {len(all_jobs)} jobs with descriptions ready")
+                else:
+                    print(f"    [COMPLETE] {len(all_jobs)} jobs ready (description fetch skipped)")
                 
                 # STEP 3: Filter by skills
                 filtered_jobs = all_jobs
@@ -99,11 +112,102 @@ class Scraper:
                 # STEP 4: Sort by freshness (most recent first)
                 filtered_jobs = self._sort_by_freshness(filtered_jobs)
                 
+                # DEBUG: Show filtered jobs list in pipe-separated format
+                if filtered_jobs:
+                    matched_list = " | ".join([f"{i+1}. {job['title'][:35]} ({job['location'][:15]})" for i, job in enumerate(filtered_jobs)])
+                    print(f"    [MATCHED] {matched_list}")
+                    
+                    # FULL LIST: title | posted | location
+                    print(f"\n    [FULL LIST]")
+                    for i, job in enumerate(filtered_jobs):
+                        print(f"    {i+1}. {job['title']} | {job['posted_time']} | {job['location']}")
+                    print()
+                
                 return filtered_jobs
         
         except Exception as e:
             print(f"    [ERROR] {str(e)}")
             return []
+
+    async def _load_more_results(self, page, max_rounds=8):
+        """Expand LinkedIn results on a single search page via scroll + 'See more jobs'."""
+        previous_count = 0
+        no_growth_rounds = 0
+        saw_load_more_button = False
+
+        for round_num in range(1, max_rounds + 1):
+            if round_num > 1:
+                print(f"    [PAGE] Waiting {self.pagination_delay_seconds}s before next scroll attempt")
+                await page.wait_for_timeout(self.pagination_delay_seconds * 1000)
+
+            cards_locator = page.locator('div.base-card')
+            current_count = await cards_locator.count()
+
+            if current_count <= previous_count:
+                no_growth_rounds += 1
+            else:
+                no_growth_rounds = 0
+
+            print(f"    [PAGE] Round {round_num}: {current_count} cards")
+
+            if no_growth_rounds >= 2 and saw_load_more_button:
+                break
+
+            previous_count = current_count
+
+            if current_count >= self.target_jobs:
+                print(f"    [PAGE] Target reached ({self.target_jobs})")
+                break
+
+            # Scroll to trigger lazy-loading.
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            await page.wait_for_timeout(1200)
+
+            # Click load-more button when it appears.
+            load_more = page.locator("button.infinite-scroller__show-more-button")
+            if await load_more.count() > 0 and await load_more.first.is_visible():
+                if not saw_load_more_button:
+                    print("    [PAGE] Detected 'See more jobs' button")
+                saw_load_more_button = True
+                try:
+                    await load_more.first.click(timeout=5000)
+                    print("    [PAGE] Clicked 'See more jobs'")
+                    await page.wait_for_timeout(1500)
+                except Exception:
+                    # LinkedIn may show an auth/sign-in overlay that intercepts clicks.
+                    # Stop pagination and continue scraping currently loaded cards.
+                    print("    [PAGE] Load-more blocked by overlay; continuing with loaded cards")
+                    break
+
+        final_count = await page.locator('div.base-card').count()
+        if not saw_load_more_button:
+            print("    [PAGE] 'See more jobs' button was not shown in this run")
+        print(f"    [PAGE] Final loaded cards: {final_count}")
+
+    async def _collect_jobs_across_pages(self, page):
+        """Collect jobs from a single LinkedIn search result page using scroll/load-more rounds."""
+        await self._load_more_results(page, max_rounds=self.max_pages)
+
+        content = await page.content()
+        all_jobs = self._parse_linkedin_jobs(content)
+        all_jobs = self._dedupe_jobs(all_jobs)
+
+        print(f"    [PAGE] Scroll collection complete: {len(all_jobs)} unique jobs")
+        return all_jobs
+
+    def _dedupe_jobs(self, jobs):
+        """Deduplicate parsed jobs by (company_id, job_id)."""
+        deduped = []
+        seen = set()
+
+        for job in jobs:
+            key = (job.get('company_id'), job.get('job_id'))
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(job)
+
+        return deduped
     
     def _parse_linkedin_jobs(self, html_content):
         """Parse job listings from LinkedIn HTML"""

@@ -5,6 +5,7 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urljoin
 
 # Add parent directory to sys.path to import skill_Filter
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -118,13 +119,8 @@ class Scraper:
                 # STEP 4: Fetch descriptions ONLY for filtered jobs
                 for i, job in enumerate(filtered_jobs):
                     try:
-                        job_link = job.get('job_url')
-                        if job_link:
-                            # Construct detail URL
-                            if job_link.startswith('/'):
-                                detail_url = self.company['api_url'].split('/en-US')[0] + job_link
-                            else:
-                                detail_url = self.company['api_url'] + '/' + job_link
+                        detail_url = job.get('job_url')
+                        if detail_url:
                             
                             # Navigate to detail page with increased timeout
                             try:
@@ -185,7 +181,8 @@ class Scraper:
                     continue
                 
                 title = title_link.get_text(strip=True)
-                job_url = title_link.get('href', '')
+                raw_job_url = title_link.get('href', '')
+                job_url = self._normalize_workday_url(raw_job_url)
                 
                 # Extract location
                 location = "Not specified"
@@ -228,6 +225,22 @@ class Scraper:
                 continue
         
         return jobs
+
+    def _normalize_workday_url(self, raw_url):
+        """Return an absolute Workday job URL for UI and DB storage."""
+        if not raw_url:
+            return ""
+
+        base = self.company.get('api_url', '')
+        raw = raw_url.strip()
+
+        if raw.startswith('http://') or raw.startswith('https://'):
+            return raw
+
+        if raw.startswith('/'):
+            return urljoin(base, raw)
+
+        return f"{base.rstrip('/')}/{raw.lstrip('/')}"
     
     def _is_old_job(self, posted_date):
         """Check if a job is old (2+ days ago) - used to stop pagination early"""
