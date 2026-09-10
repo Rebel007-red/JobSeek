@@ -23,6 +23,7 @@ class Scraper:
         
         # Build LinkedIn search URL from api_url keywords
         self.search_url = self._build_search_url(company.get('api_url', ''))
+        self.search_terms = self._build_search_terms(company.get('api_url', ''))
         self.target_jobs = int(company.get('linkedin_target_jobs', 250) or 250)
         self.max_pages = int(company.get('linkedin_max_pages', 20) or 20)
         self.fetch_descriptions = bool(company.get('linkedin_fetch_descriptions', False))
@@ -46,6 +47,17 @@ class Scraper:
         
         print(f"    [URL] {search_url}")
         return search_url
+
+    def _build_search_terms(self, keywords_str):
+        if not keywords_str:
+            return []
+
+        terms = []
+        for term in keywords_str.split(','):
+            cleaned = term.strip().lower()
+            if cleaned:
+                terms.append(cleaned)
+        return terms
     
     async def scrape(self):
         """Scrape jobs from LinkedIn using headless browser"""
@@ -83,10 +95,8 @@ class Scraper:
                             if job_url:
                                 await page.goto(job_url, wait_until="domcontentloaded", timeout=20000)
                                 await page.wait_for_timeout(1000)
-
-                                # Get description from detail page
-                                description = await page.text_content()
-                                all_jobs[i]['description'] = description[:500] if description else "No description"
+                                description = await self._fetch_description(page)
+                                all_jobs[i]['description'] = description or "Description unavailable"
                         except Exception:
                             all_jobs[i]['description'] = "Description unavailable"
                 else:
@@ -105,6 +115,7 @@ class Scraper:
                 filtered_jobs = all_jobs
                 if self.skill_filter.skills and len(filtered_jobs) > 0:
                     filtered_jobs = self.skill_filter.filter(filtered_jobs)
+                    filtered_jobs = self._filter_relevant_matches(filtered_jobs)
                     stats = self.skill_filter.get_stats()
                     matched_skills = stats.get('matched_skills_used', [])
                     print(f"    [FILTER] Skills filter: {stats.get('total_matched', 0)} jobs matched (Skills: {matched_skills})")
@@ -128,6 +139,45 @@ class Scraper:
         except Exception as e:
             print(f"    [ERROR] {str(e)}")
             return []
+
+    def _filter_relevant_matches(self, jobs):
+        if not jobs or not self.search_terms:
+            return jobs
+
+        relevant_jobs = []
+        dropped_count = 0
+
+        for job in jobs:
+            title = str(job.get('title', '')).lower()
+            if any(term in title for term in self.search_terms):
+                relevant_jobs.append(job)
+            else:
+                dropped_count += 1
+
+        if dropped_count > 0:
+            print(f"    [FILTER] Dropped {dropped_count} LinkedIn jobs whose titles do not match configured search terms")
+
+        return relevant_jobs
+
+    async def _fetch_description(self, page):
+        selectors = [
+            '.show-more-less-html__markup',
+            '.description__text',
+            '[data-job-id] .show-more-less-html__markup',
+            'section.show-more-less-html'
+        ]
+
+        for selector in selectors:
+            locator = page.locator(selector)
+            if await locator.count() == 0:
+                continue
+
+            text = await locator.first.text_content()
+            cleaned_text = text.strip() if text else ""
+            if cleaned_text:
+                return cleaned_text[:2000]
+
+        return None
 
     async def _load_more_results(self, page, max_rounds=8):
         """Expand LinkedIn results on a single search page via scroll + 'See more jobs'."""

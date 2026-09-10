@@ -10,17 +10,31 @@ from linkedin.main import Scraper as LinkedInScraper
 load_dotenv()
 
 BASE_URL = "https://deczscnmmxpgpayyxglk.supabase.co/rest/v1"
-HEADERS = {
-    'apikey': os.getenv("SUPABASE_SERVICE_ROLE_KEY"),
-    'Content-Type': 'application/json'
-}
+
+
+def build_headers(extra_headers=None):
+    headers = {'Content-Type': 'application/json'}
+    api_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("VITE_SUPABASE_ANON_KEY")
+    if api_key:
+        headers['apikey'] = api_key
+    if extra_headers:
+        headers.update(extra_headers)
+    return headers
+
+
+HEADERS = build_headers()
+
 
 async def fetch_componies():
     table_name = "companies"
     # Try without limit first to see all data
     url = f"{BASE_URL}/{table_name}"
     print(f"[API] Fetching: {url}")
-    
+
+    if not HEADERS.get('apikey'):
+        print("    [WARN] No Supabase API key configured. Skipping company fetch.")
+        return {table_name: []}
+
     async with aiohttp.ClientSession() as session:
         async with session.get(url, headers=HEADERS) as response:
             print(f"    Status: {response.status}")
@@ -32,13 +46,17 @@ async def fetch_user_skills():
     """Fetch all user skills from database"""
     url = f"{BASE_URL}/user_skills?select=skills"
     print(f"[API] Fetching: {url}")
-    
+
+    if not HEADERS.get('apikey'):
+        print("    [WARN] No Supabase API key configured. Skipping user skills fetch.")
+        return []
+
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=HEADERS) as response:
                 print(f"    Status: {response.status}")
                 data = await response.json()
-                
+
                 # Flatten all skills from all users into one list
                 all_skills = []
                 for user_skill in data:
@@ -48,7 +66,7 @@ async def fetch_user_skills():
                     elif isinstance(skills, str):
                         # Handle string format like "skill1, skill2, skill3"
                         all_skills.extend([s.strip() for s in skills.split(',')])
-                
+
                 print(f"    Found {len(set(all_skills))} unique skills: {list(set(all_skills))[:10]}...")
                 return list(set(all_skills))  # Return unique skills
     except Exception as e:
@@ -60,7 +78,11 @@ async def insert_jobs_to_db(jobs, ats_type):
     """Insert jobs into Supabase jobs table"""
     if not jobs:
         return
-    
+
+    if not HEADERS.get('apikey'):
+        print("    [WARN] No Supabase API key configured. Skipping database insert.")
+        return
+
     url = f"{BASE_URL}/jobs?on_conflict=company_id,job_id"
     print(f"    [UPSERT] Upserting {len(jobs)} jobs to database...")
     
@@ -218,6 +240,37 @@ async def scrape_all():
                 
                 print()
                     
+            except Exception as e:
+                print(f"[ERROR] {company['name']}: {str(e)}\n")
+
+        elif ats_type == "indeed":
+            try:
+                print(f"[SCRAPER] Indeed: {company['name']}")
+                from indeed.main import Scraper as IndeedScraper
+                scraper = IndeedScraper(company)
+                jobs = await scraper.scrape()
+
+                all_results.append({
+                    "company": company['name'],
+                    "ats_type": ats_type,
+                    "jobs_found": len(jobs),
+                    "jobs": jobs
+                })
+
+                print(f"[RESULT] {company['name']}: {len(jobs)} jobs ready")
+
+                if jobs:
+                    sample = jobs[0]
+                    print(f"    Sample: {sample['title']}")
+                    print(f"    Location: {sample['location']}")
+                    print(f"    Posted: {sample['posted_time']}")
+                    print(f"    Description: {sample['description'][:80]}...")
+                    await insert_jobs_to_db(jobs, ats_type)
+                else:
+                    print(f"    No jobs found after filtering")
+
+                print()
+
             except Exception as e:
                 print(f"[ERROR] {company['name']}: {str(e)}\n")
         
