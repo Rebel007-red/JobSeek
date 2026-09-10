@@ -114,11 +114,10 @@ class Scraper:
                 # STEP 3: Filter by skills
                 filtered_jobs = all_jobs
                 if self.skill_filter.skills and len(filtered_jobs) > 0:
-                    filtered_jobs = self.skill_filter.filter(filtered_jobs)
-                    filtered_jobs = self._filter_relevant_matches(filtered_jobs)
+                    filtered_jobs = self._filter_linkedin_relevance(filtered_jobs)
                     stats = self.skill_filter.get_stats()
                     matched_skills = stats.get('matched_skills_used', [])
-                    print(f"    [FILTER] Skills filter: {stats.get('total_matched', 0)} jobs matched (Skills: {matched_skills})")
+                    print(f"    [FILTER] Skill keywords seen: {matched_skills}")
                 
                 # STEP 4: Sort by freshness (most recent first)
                 filtered_jobs = self._sort_by_freshness(filtered_jobs)
@@ -140,24 +139,47 @@ class Scraper:
             print(f"    [ERROR] {str(e)}")
             return []
 
-    def _filter_relevant_matches(self, jobs):
-        if not jobs or not self.search_terms:
+    def _filter_linkedin_relevance(self, jobs):
+        if not jobs:
             return jobs
 
-        relevant_jobs = []
-        dropped_count = 0
+        # SkillFilter mutates jobs with matched_skills and stores stats used by the caller.
+        skill_matched_jobs = self.skill_filter.filter(jobs)
+        skill_ids = {job.get('job_id') for job in skill_matched_jobs}
 
+        if not self.search_terms:
+            return skill_matched_jobs
+
+        title_matched_jobs = []
+        title_ids = set()
         for job in jobs:
             title = str(job.get('title', '')).lower()
             if any(term in title for term in self.search_terms):
-                relevant_jobs.append(job)
-            else:
-                dropped_count += 1
+                title_matched_jobs.append(job)
+                title_ids.add(job.get('job_id'))
 
-        if dropped_count > 0:
-            print(f"    [FILTER] Dropped {dropped_count} LinkedIn jobs whose titles do not match configured search terms")
+        # Keep jobs that match title OR skills.
+        combined_jobs = []
+        seen_ids = set()
+        for job in jobs:
+            job_id = job.get('job_id')
+            if job_id in seen_ids:
+                continue
+            if job_id in skill_ids or job_id in title_ids:
+                combined_jobs.append(job)
+                seen_ids.add(job_id)
 
-        return relevant_jobs
+        overlap_count = len(skill_ids.intersection(title_ids))
+        title_only_count = len(title_ids - skill_ids)
+        skill_only_count = len(skill_ids - title_ids)
+        dropped_count = max(0, len(jobs) - len(combined_jobs))
+
+        print(
+            "    [FILTER] LinkedIn relevance: "
+            f"title-only={title_only_count}, skill-only={skill_only_count}, overlap={overlap_count}, dropped={dropped_count}"
+        )
+
+        return combined_jobs
 
     async def _fetch_description(self, page):
         selectors = [
@@ -184,6 +206,7 @@ class Scraper:
         previous_count = 0
         no_growth_rounds = 0
         saw_load_more_button = False
+        plateau_card_threshold = min(self.target_jobs, 80)
 
         for round_num in range(1, max_rounds + 1):
             if round_num > 1:
@@ -200,13 +223,14 @@ class Scraper:
 
             print(f"    [PAGE] Round {round_num}: {current_count} cards")
 
-            if no_growth_rounds >= 2 and saw_load_more_button:
-                break
-
             previous_count = current_count
 
             if current_count >= self.target_jobs:
                 print(f"    [PAGE] Target reached ({self.target_jobs})")
+                break
+
+            if no_growth_rounds >= 2 and (saw_load_more_button or current_count >= plateau_card_threshold):
+                print(f"    [PAGE] Card count plateaued at {current_count}; stopping pagination")
                 break
 
             # Scroll to trigger lazy-loading.
