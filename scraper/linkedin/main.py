@@ -139,12 +139,25 @@ class Scraper:
             print(f"    [ERROR] {str(e)}")
             return []
 
+    def _is_excluded_title(self, title):
+        if not title:
+            return False
+        normalized = str(title).lower()
+        return "senior" in normalized or "lead" in normalized
+
     def _filter_linkedin_relevance(self, jobs):
         if not jobs:
             return jobs
 
+        filtered_jobs = []
+        for job in jobs:
+            title = job.get('title', '')
+            if self._is_excluded_title(title):
+                continue
+            filtered_jobs.append(job)
+
         # SkillFilter mutates jobs with matched_skills and stores stats used by the caller.
-        skill_matched_jobs = self.skill_filter.filter(jobs)
+        skill_matched_jobs = self.skill_filter.filter(filtered_jobs)
         skill_ids = {job.get('job_id') for job in skill_matched_jobs}
 
         if not self.search_terms:
@@ -152,7 +165,7 @@ class Scraper:
 
         title_matched_jobs = []
         title_ids = set()
-        for job in jobs:
+        for job in filtered_jobs:
             title = str(job.get('title', '')).lower()
             if any(term in title for term in self.search_terms):
                 title_matched_jobs.append(job)
@@ -161,7 +174,7 @@ class Scraper:
         # Keep jobs that match title OR skills.
         combined_jobs = []
         seen_ids = set()
-        for job in jobs:
+        for job in filtered_jobs:
             job_id = job.get('job_id')
             if job_id in seen_ids:
                 continue
@@ -172,7 +185,7 @@ class Scraper:
         overlap_count = len(skill_ids.intersection(title_ids))
         title_only_count = len(title_ids - skill_ids)
         skill_only_count = len(skill_ids - title_ids)
-        dropped_count = max(0, len(jobs) - len(combined_jobs))
+        dropped_count = max(0, len(filtered_jobs) - len(combined_jobs))
 
         print(
             "    [FILTER] LinkedIn relevance: "
