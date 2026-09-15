@@ -9,7 +9,8 @@ from linkedin.main import Scraper as LinkedInScraper
 # Load environment variables from .env
 load_dotenv()
 
-BASE_URL = "https://deczscnmmxpgpayyxglk.supabase.co/rest/v1"
+SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").rstrip("/")
+BASE_URL = f"{SUPABASE_URL}/rest/v1" if SUPABASE_URL else ""
 
 
 def build_headers(extra_headers=None):
@@ -27,6 +28,10 @@ HEADERS = build_headers()
 
 async def fetch_componies():
     table_name = "companies"
+    if not BASE_URL:
+        print("    [WARN] SUPABASE_URL not configured. Skipping company fetch.")
+        return {table_name: []}
+
     # Try without limit first to see all data
     url = f"{BASE_URL}/{table_name}"
     print(f"[API] Fetching: {url}")

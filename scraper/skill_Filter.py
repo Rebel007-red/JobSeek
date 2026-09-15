@@ -5,7 +5,8 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-BASE_URL = "https://deczscnmmxpgpayyxglk.supabase.co/rest/v1"
+SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").rstrip("/")
+BASE_URL = f"{SUPABASE_URL}/rest/v1" if SUPABASE_URL else ""
 HEADERS = {
     'apikey': os.getenv("VITE_SUPABASE_ANON_KEY"),
     'Content-Type': 'application/json'

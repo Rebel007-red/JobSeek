@@ -13,7 +13,8 @@ from skill_Filter import SkillFilter
 class Scraper:
     def __init__(self, company):
         self.company = company
-        self.base_url = "https://deczscnmmxpgpayyxglk.supabase.co/rest/v1"
+        supabase_url = (os.getenv("SUPABASE_URL") or "").rstrip("/")
+        self.base_url = f"{supabase_url}/rest/v1" if supabase_url else ""
         self.headers = {
             'apikey': os.getenv("VITE_SUPABASE_ANON_KEY"),
             'Content-Type': 'application/json'
