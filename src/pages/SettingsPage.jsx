@@ -37,6 +37,7 @@ export function SettingsPage() {
   const navigate = useNavigate()
   const [tab, setTab] = useState('companies')
   const [companies, setCompanies] = useState([])
+  const [companyStatusMap, setCompanyStatusMap] = useState({})
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -46,6 +47,7 @@ export function SettingsPage() {
   // Hidden jobs state
   const [hiddenCount, setHiddenCount] = useState(0)
   const [restoring, setRestoring] = useState(false)
+  const [cleaningStale, setCleaningStale] = useState(false)
 
   // Skills state (localStorage)
   const [skillInput, setSkillInput] = useState('')
@@ -115,10 +117,85 @@ export function SettingsPage() {
     setRestoring(false)
   }
 
+  async function cleanupStaleJobs() {
+    setCleaningStale(true)
+    const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+    const { data, error } = await supabase
+      .from('jobs')
+      .select('id, posted_at, first_seen_at')
+      .or(`posted_at.lt.${cutoff},first_seen_at.lt.${cutoff}`)
+
+    if (error) {
+      console.error('Failed to find stale jobs:', error)
+      setCleaningStale(false)
+      return
+    }
+
+    const staleIds = (data || []).map(job => job.id)
+    if (staleIds.length > 0) {
+      const { error: updateError } = await supabase
+        .from('jobs')
+        .update({ hidden: true })
+        .in('id', staleIds)
+
+      if (updateError) {
+        console.error('Failed to hide stale jobs:', updateError)
+      }
+    }
+
+    await loadHiddenCount()
+    await loadCompanies()
+    setCleaningStale(false)
+  }
+
   async function loadCompanies() {
     setLoading(true)
     const { data } = await supabase.from('companies').select('*').order('name')
-    setCompanies(data || [])
+    const list = data || []
+    setCompanies(list)
+
+    if (list.length > 0) {
+      const companyIds = list.map(company => company.id)
+      const { data: jobsData } = await supabase
+        .from('jobs')
+        .select('company_id, posted_at, first_seen_at')
+        .in('company_id', companyIds)
+        .order('posted_at', { ascending: false, nullsFirst: false })
+
+      const statusMap = {}
+      const rows = jobsData || []
+
+      list.forEach(company => {
+        const latestJob = rows
+          .filter(row => row.company_id === company.id)
+          .map(row => row.posted_at || row.first_seen_at)
+          .filter(Boolean)
+          .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0]
+
+        if (!latestJob) {
+          statusMap[company.id] = { label: 'No data', tone: 'pending' }
+          return
+        }
+
+        const latestDate = new Date(latestJob).getTime()
+        const now = Date.now()
+        const daysSince = (now - latestDate) / (1000 * 60 * 60 * 24)
+
+        if (company.disabled) {
+          statusMap[company.id] = { label: 'Paused', tone: 'muted' }
+        } else if (daysSince <= 7) {
+          statusMap[company.id] = { label: 'Live', tone: 'success' }
+        } else {
+          statusMap[company.id] = { label: 'Stale', tone: 'warning' }
+        }
+      })
+
+      setCompanyStatusMap(statusMap)
+    } else {
+      setCompanyStatusMap({})
+    }
+
     setLoading(false)
   }
 
@@ -212,249 +289,244 @@ export function SettingsPage() {
   }
 
   const help = ATS_HELP[form.ats_type]
+  const enabledCompanies = companies.filter(company => !company.disabled).length
+  const disabledCompanies = companies.length - enabledCompanies
 
   return (
-    <div className="min-h-screen bg-slate-950">
-      {/* Header */}
-      <header className="bg-slate-900/50 border-b border-slate-800 sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 py-2.5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button onClick={() => navigate('/')} className="text-slate-500 hover:text-slate-300">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <div className="settings-page min-h-screen">
+      <header className="topbar settings-topbar">
+        <div className="topbar-inner">
+          <div className="brand-wrap">
+            <button onClick={() => navigate('/')} className="icon-button" aria-label="Back home" title="Back to jobs">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
-            <h1 className="text-sm font-bold text-slate-200">Settings</h1>
+            <div>
+              <div className="brand-kicker">Workspace</div>
+              <h1>Settings</h1>
+            </div>
           </div>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 py-4">
-        {/* Tabs */}
-        <div className="flex gap-1 bg-slate-800 border border-slate-700 rounded-lg p-1 w-fit mb-6">
-          {['companies', 'skills', 'hidden'].map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium capitalize transition-colors flex items-center gap-1.5 ${tab === t ? 'bg-slate-700 text-slate-200 shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}>
-              {t}
-              {t === 'hidden' && hiddenCount > 0 && (
-                <span className="text-[10px] bg-slate-600 text-slate-200 px-1.5 py-0.5 rounded-full font-bold">{hiddenCount}</span>
-              )}
-            </button>
-          ))}
-        </div>
-
-        {/* ── COMPANIES TAB ── */}
-        {tab === 'companies' && (
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-slate-400">
-                Companies are scraped every 4 hours via GitHub Actions.
-                Changes take effect on the next run.
-              </p>
-              <button onClick={() => { setShowForm(true); setForm(EMPTY_FORM); setFormError('') }}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-md transition-colors">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Add Company
-              </button>
+      <main className="page-content settings-content">
+        <div className="settings-shell panel">
+          <div className="settings-header">
+            <div>
+              <p className="eyebrow">Preferences</p>
+              <h2>Manage sources & fit</h2>
             </div>
-
-            {/* Add company form */}
-            {showForm && (
-              <form onSubmit={saveCompany} className="bg-slate-800/50 border border-indigo-700/50 rounded-lg p-4 flex flex-col gap-4 shadow-sm">
-                <h3 className="font-semibold text-slate-200">Add New Company</h3>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">Company Name *</label>
-                    <input type="text" required value={form.name}
-                      onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                      placeholder="e.g. Stripe, Acme Corp"
-                      className="w-full bg-slate-900 border border-slate-700 text-slate-200 placeholder:text-slate-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
-                    {companies.some(c => c.name.toLowerCase() === form.name.trim().toLowerCase()) && form.name.trim() && (
-                      <p className="text-xs text-red-400 mt-1">⚠ This company already exists</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">ATS Type *</label>
-                    <select value={form.ats_type} onChange={e => setForm(f => ({ ...f, ats_type: e.target.value, slug: '', api_url: '' }))}
-                      className="w-full bg-slate-900 border border-slate-700 text-slate-200 placeholder:text-slate-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
-                      {ATS_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </div>
-
-                  {help?.slug && (
-                    <div className="sm:col-span-2">
-                      <label className="block text-xs font-medium text-slate-400 mb-1">{help.slug.label} *</label>
-                      <input type="text" required value={form.slug}
-                        onChange={e => setForm(f => ({ ...f, slug: e.target.value }))}
-                        placeholder={help.slug.placeholder}
-                        className="w-full bg-slate-900 border border-slate-700 text-slate-200 placeholder:text-slate-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
-                      <p className="text-xs text-slate-600 mt-0.5">{help.slug.help}</p>
-                    </div>
-                  )}
-
-                  {help?.api_url && (
-                    <div className="sm:col-span-2">
-                      <label className="block text-xs font-medium text-slate-400 mb-1">{help.api_url.label} *</label>
-                      <input type="url" required value={form.api_url}
-                        onChange={e => setForm(f => ({ ...f, api_url: e.target.value }))}
-                        placeholder={help.api_url.placeholder}
-                        className="w-full bg-slate-900 border border-slate-700 text-slate-200 placeholder:text-slate-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
-                      <p className="text-xs text-slate-600 mt-0.5">{help.api_url.help}</p>
-                    </div>
-                  )}
-                </div>
-
-                {formError && <p className="text-xs text-red-400 bg-red-900/20 border border-red-800/50 rounded-md px-3 py-2">{formError}</p>}
-
-                <div className="flex gap-2 justify-end">
-                  <button type="button" onClick={() => { setShowForm(false); setFormError('') }}
-                    className="px-3 py-1.5 text-xs text-slate-400 border border-slate-700 rounded-md hover:bg-slate-700">
-                    Cancel
-                  </button>
-                  <button type="submit" disabled={saving || !form.name.trim() || !form.ats_type}
-                    className="px-3 py-1.5 text-xs font-medium bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-md transition-colors">
-                    {saving ? 'Adding…' : 'Add Company'}
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {/* Company list */}
-            {loading ? (
-              <div className="text-xs text-slate-600 py-8 text-center">Loading…</div>
-            ) : companies.length === 0 ? (
-              <div className="text-xs text-slate-600 py-8 text-center">No companies yet. Add one above.</div>
-            ) : (
-              <div className="bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-900/50 border-b border-slate-700">
-                    <tr>
-                      <th className="text-left px-3 py-2.5 font-medium text-slate-500 text-xs">Company</th>
-                      <th className="text-left px-3 py-2.5 font-medium text-slate-500 text-xs hidden sm:table-cell">ATS</th>
-                      <th className="text-left px-3 py-2.5 font-medium text-slate-500 text-xs hidden md:table-cell">Slug / URL</th>
-                      <th className="px-3 py-2.5 font-medium text-slate-500 text-xs text-right">Status</th>
-                      <th className="px-3 py-2.5 font-medium text-slate-500 text-xs"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-700/50">
-                    {companies.map(company => (
-                      <tr key={company.id} className={company.disabled ? 'opacity-50' : ''}>
-                        <td className="px-3 py-2.5 font-medium text-slate-200 text-sm">{company.name}</td>
-                        <td className="px-3 py-2.5 text-slate-500 hidden sm:table-cell">
-                          <span className="px-2 py-0.5 bg-slate-700/60 rounded text-xs text-slate-200">{company.ats_type}</span>
-                        </td>
-                        <td className="px-3 py-2.5 text-slate-600 hidden md:table-cell text-xs font-mono truncate max-w-[200px]">
-                          {company.slug || company.api_url || '—'}
-                        </td>
-                        <td className="px-3 py-2.5 text-right">
-                          <button onClick={() => toggleDisabled(company)}
-                            className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${company.disabled ? 'bg-slate-700/60 text-slate-500 hover:bg-green-900/40 hover:text-green-300' : 'bg-green-900/40 text-green-300 border border-green-700/50 hover:bg-slate-700/60 hover:text-slate-400'}`}>
-                            {company.disabled ? 'Disabled' : 'Enabled'}
-                          </button>
-                        </td>
-                        <td className="px-3 py-2.5 text-right">
-                          <button onClick={() => deleteCompany(company)}
-                            className="text-slate-700 hover:text-red-400 transition-colors p-1">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <div className="settings-tabs" role="tablist" aria-label="Settings sections">
+              {['companies', 'skills', 'hidden'].map(t => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setTab(t)}
+                  className={`settings-tab ${tab === t ? 'active' : ''}`}
+                  aria-selected={tab === t}
+                >
+                  <span>{t}</span>
+                  {t === 'hidden' && hiddenCount > 0 && <em>{hiddenCount}</em>}
+                </button>
+              ))}
+            </div>
           </div>
-        )}
 
-        {/* ── SKILLS TAB ── */}
-        {tab === 'skills' && (
-          <div className="flex flex-col gap-5">
-            <p className="text-xs text-slate-400">
-              Enter your skills to highlight matching jobs. Jobs are scored and sorted by how many of your skills appear in the job title and department.
-            </p>
-
-            {/* Tag input */}
-            <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 flex flex-col gap-3">
-              <div className="flex gap-2">
-                <input type="text" value={skillInput}
-                  onChange={e => setSkillInput(e.target.value)}
-                  onKeyDown={handleSkillKeyDown}
-                  placeholder="Type a skill and press Enter or comma…"
-                  className="flex-1 bg-slate-900 border border-slate-700 text-slate-200 placeholder:text-slate-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
-                <button onClick={addSkill}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-md transition-colors">
-                  Add
+          {tab === 'companies' && (
+            <div className="settings-panel settings-panel-animate">
+              <div className="settings-summary-row">
+                <p>
+                  Companies are scraped every 4 hours via GitHub Actions. Changes take effect on the next run.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { setShowForm(true); setForm(EMPTY_FORM); setFormError('') }}
+                  className="primary-button"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add Company
                 </button>
               </div>
 
-              {skills.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {skills.map(skill => (
-                    <span key={skill} className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-900/50 text-indigo-300 border border-indigo-700/40 text-sm rounded-full">
-                      {skill}
-                      <button onClick={() => removeSkill(skill)} className="text-indigo-400 hover:text-indigo-300 leading-none">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </span>
-                  ))}
-                  <button onClick={clearAllSkills}
-                    className="text-xs text-gray-600 hover:text-red-400 px-2 py-1 transition-colors">
-                    Clear all
-                  </button>
-                </div>
+              {showForm && (
+                <form onSubmit={saveCompany} className="settings-card settings-form-panel">
+                  <div className="settings-card-header">
+                    <h3>Add New Company</h3>
+                  </div>
+
+                  <div className="settings-form-grid">
+                    <div className="settings-field">
+                      <label>Company Name *</label>
+                      <input type="text" required value={form.name}
+                        onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                        placeholder="e.g. Stripe, Acme Corp"
+                        className="settings-input" />
+                      {companies.some(c => c.name.toLowerCase() === form.name.trim().toLowerCase()) && form.name.trim() && (
+                        <p className="settings-inline-error">This company already exists</p>
+                      )}
+                    </div>
+
+                    <div className="settings-field">
+                      <label>ATS Type *</label>
+                      <select value={form.ats_type} onChange={e => setForm(f => ({ ...f, ats_type: e.target.value, slug: '', api_url: '' }))}
+                        className="settings-input settings-select">
+                        {ATS_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+
+                    {help?.slug && (
+                      <div className="settings-field settings-field-full">
+                        <label>{help.slug.label} *</label>
+                        <input type="text" required value={form.slug}
+                          onChange={e => setForm(f => ({ ...f, slug: e.target.value }))}
+                          placeholder={help.slug.placeholder}
+                          className="settings-input" />
+                        <small>{help.slug.help}</small>
+                      </div>
+                    )}
+
+                    {help?.api_url && (
+                      <div className="settings-field settings-field-full">
+                        <label>{help.api_url.label} *</label>
+                        <input type="url" required value={form.api_url}
+                          onChange={e => setForm(f => ({ ...f, api_url: e.target.value }))}
+                          placeholder={help.api_url.placeholder}
+                          className="settings-input" />
+                        <small>{help.api_url.help}</small>
+                      </div>
+                    )}
+                  </div>
+
+                  {formError && <p className="settings-form-error">{formError}</p>}
+
+                  <div className="settings-actions-row">
+                    <button type="button" onClick={() => { setShowForm(false); setFormError('') }} className="secondary-button">
+                      Cancel
+                    </button>
+                    <button type="submit" disabled={saving || !form.name.trim() || !form.ats_type} className="primary-button">
+                      {saving ? 'Adding…' : 'Add Company'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {loading ? (
+                <div className="settings-empty-state">Loading…</div>
+              ) : companies.length === 0 ? (
+                <div className="settings-empty-state">No companies yet. Add one above.</div>
               ) : (
-                <p className="text-xs text-slate-600">No skills added yet.</p>
+                <div className="settings-card settings-list-card">
+                  <div className="settings-list-head">
+                    <span>Company list</span>
+                    <strong>{companies.length}</strong>
+                  </div>
+
+                  <div className="settings-list">
+                    {companies.map(company => {
+                      const status = companyStatusMap[company.id] || { label: 'No data', tone: 'pending' }
+
+                      return (
+                        <div key={company.id} className={`settings-row ${company.disabled ? 'muted' : ''}`}>
+                          <div className="settings-row-main">
+                            <div className="settings-company-name">{company.name}</div>
+                            <div className="settings-company-meta">
+                              <span className="settings-chip">{company.ats_type}</span>
+                              {company.slug || company.api_url ? <span>{company.slug || company.api_url}</span> : <span>details pending</span>}
+                              <span className={`company-health ${status.tone}`}>{status.label}</span>
+                            </div>
+                          </div>
+
+                          <div className="settings-row-actions">
+                            <button onClick={() => toggleDisabled(company)} className={`status-pill ${company.disabled ? 'off' : 'on'}`}>
+                              {company.disabled ? 'Disabled' : 'Enabled'}
+                            </button>
+                            <button onClick={() => deleteCompany(company)} className="trash-button" aria-label={`Delete ${company.name}`}>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
               )}
             </div>
+          )}
 
-            <p className="text-xs text-slate-400">Skills are stored in your account and used to filter job results.</p>
-          </div>
-        )}
-
-        {/* ── HIDDEN JOBS TAB ── */}
-        {tab === 'hidden' && (
-          <div className="flex flex-col gap-4">
-            <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-5 flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-200">
-                    {hiddenCount > 0
-                      ? <>{hiddenCount} job{hiddenCount > 1 ? 's' : ''} hidden</>
-                      : 'No hidden jobs'}
-                  </p>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Jobs you dismiss with the × button are hidden across all sessions.
-                    They reappear if a new scrape finds them again — unless you restore them here first.
-                  </p>
+          {tab === 'skills' && (
+            <div className="settings-panel settings-panel-animate">
+              <div className="settings-card">
+                <div className="settings-card-header">
+                  <h3>Skills that match your target roles</h3>
                 </div>
-                {hiddenCount > 0 && (
-                  <button
-                    onClick={restoreAllHidden}
-                    disabled={restoring}
-                    className="shrink-0 px-3 py-1.5 text-xs font-medium bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-md transition-colors"
-                  >
-                    {restoring ? 'Restoring…' : `Restore all ${hiddenCount}`}
-                  </button>
+                <p className="settings-copy">
+                  Enter your skills to highlight matching jobs. Jobs are scored and sorted by how many of your skills appear in the title and department.
+                </p>
+
+                <div className="settings-input-row">
+                  <input type="text" value={skillInput}
+                    onChange={e => setSkillInput(e.target.value)}
+                    onKeyDown={handleSkillKeyDown}
+                    placeholder="Type a skill and press Enter or comma…"
+                    className="settings-input" />
+                  <button onClick={addSkill} className="primary-button compact-button">Add</button>
+                </div>
+
+                {skills.length > 0 ? (
+                  <div className="settings-skill-list">
+                    {skills.map(skill => (
+                      <span key={skill} className="skill-chip">
+                        {skill}
+                        <button type="button" onClick={() => removeSkill(skill)} aria-label={`Remove ${skill}`}>
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </span>
+                    ))}
+                    <button type="button" onClick={clearAllSkills} className="text-button">Clear all</button>
+                  </div>
+                ) : (
+                  <p className="settings-empty-state inline-empty">No skills added yet.</p>
                 )}
               </div>
-
-              {hiddenCount === 0 && (
-                <p className="text-xs text-slate-600 text-center py-4">
-                  Hover over any job card and click × to hide it.
-                </p>
-              )}
             </div>
-          </div>
-        )}
+          )}
+
+          {tab === 'hidden' && (
+            <div className="settings-panel settings-panel-animate">
+              <div className="settings-card hidden-card">
+                <div className="settings-card-header">
+                  <h3>{hiddenCount > 0 ? `${hiddenCount} hidden ${hiddenCount === 1 ? 'job' : 'jobs'}` : 'No hidden jobs'}</h3>
+                  {hiddenCount > 0 && (
+                    <button type="button" onClick={restoreAllHidden} disabled={restoring} className="primary-button compact-button">
+                      {restoring ? 'Restoring…' : 'Restore all'}
+                    </button>
+                  )}
+                </div>
+
+                <p className="settings-copy">
+                  Jobs you dismiss with the × button are hidden across all sessions. They reappear if a new scrape finds them again unless you restore them here.
+                </p>
+
+                <div className="settings-actions-row compact-actions">
+                  <button type="button" onClick={cleanupStaleJobs} disabled={cleaningStale} className="secondary-button compact-button">
+                    {cleaningStale ? 'Cleaning…' : 'Hide stale jobs'}
+                  </button>
+                </div>
+
+                {hiddenCount === 0 && (
+                  <div className="settings-empty-state inline-empty">Hover over any job card and click × to hide it.</div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </main>
     </div>
   )

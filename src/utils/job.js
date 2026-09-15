@@ -6,6 +6,25 @@ export function formatDate(dateStr) {
   return isNaN(d) ? null : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
+export function formatRelativeAge(dateStr) {
+  if (!dateStr) return null
+
+  const date = new Date(dateStr)
+  if (Number.isNaN(date.getTime())) return null
+
+  const diffMs = Date.now() - date.getTime()
+  const diffHours = diffMs / (1000 * 60 * 60)
+
+  if (diffHours < 1) return 'Now'
+  if (diffHours < 24) return `${Math.max(1, Math.round(diffHours))}h ago`
+
+  const diffDays = Math.round(diffHours / 24)
+  if (diffDays === 1) return '1d ago'
+  if (diffDays < 7) return `${diffDays}d ago`
+
+  return 'Older'
+}
+
 export function isNewJob(postedAt, firstSeenAt) {
   const ref = postedAt || firstSeenAt
   return ref ? Date.now() - new Date(ref).getTime() < NEW_JOB_MS : false

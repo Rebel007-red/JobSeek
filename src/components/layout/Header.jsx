@@ -1,92 +1,97 @@
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 
+function SparkIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M12 2.75l1.8 5.45L19.25 10l-5.45 1.8-1.8 5.45-1.8-5.45L4.75 10l5.45-1.8L12 2.75zm7 13.5l.72 2.18L22 18.97l-2.28.54L19 21.7l-.72-2.19L16 18.97l2.28-.54L19 16.25zm-14 0l.72 2.18L8 18.97l-2.28.54L5 21.7l-.72-2.19L2 18.97l2.28-.54L5 16.25z" fill="currentColor" />
+    </svg>
+  )
+}
+
+function SettingsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 00.12-.64l-1.92-3.32a.5.5 0 00-.61-.18l-2.39.96a7.18 7.18 0 00-1.63-.94L14.5 2.8a.5.5 0 00-.5-.34h-3.99a.5.5 0 00-.5.34l-.34 2.46c-.58.24-1.12.57-1.63.94l-2.39-.96a.5.5 0 00-.61.18L2.71 8.84a.5.5 0 00.12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94L2.83 14.52a.5.5 0 00-.12.64l1.92 3.32c.13.22.39.31.61.18l2.39-.96c.51.37 1.05.7 1.63.94l.34 2.46c.05.19.25.34.5.34h3.99c.25 0 .45-.15.5-.34l.34-2.46c.58-.24 1.12-.57 1.63-.94l2.39.96c.22.13.48.04.61-.18l1.92-3.32a.5.5 0 00-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1112 8a3.5 3.5 0 010 7.5z" fill="currentColor" />
+    </svg>
+  )
+}
+
+function SignOutIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M10 17l5-5-5-5v3H3v4h7v3zm9-11h-7v2h7v10h-7v2h7a2 2 0 002-2V8a2 2 0 00-2-2z" fill="currentColor" />
+    </svg>
+  )
+}
+
 export function Header({ stats = {}, onSkillsToggle, skillsActive, userSkills }) {
   const navigate = useNavigate()
   const { signOut } = useAuth()
 
   return (
-    <header className="sticky top-0 z-20 h-12 bg-slate-900/95 backdrop-blur-sm border-b border-slate-800 shadow-sm">
-      <div className="max-w-7xl mx-auto px-3 h-full flex items-center justify-between gap-2">
-        
-        {/* Left: Logo & Stats */}
-        <div className="flex items-center gap-3 min-w-0 flex-1">
-          {/* Logo */}
-          <div className="flex-shrink-0">
-            <h1 className="text-lg font-bold text-white">
-              <span className="bg-gradient-to-r from-indigo-400 to-indigo-500 bg-clip-text text-transparent">
-                JobSeeker
-              </span>
-            </h1>
+    <header className="topbar">
+      <div className="topbar-inner">
+        <div className="brand-wrap">
+          <div className="brand-mark">J</div>
+          <div>
+            <p className="brand-kicker">Workspace</p>
+            <h1>JobSeeker</h1>
           </div>
-          
-          {/* Stats Pills */}
-          {stats.total > 0 && (
-            <div className="hidden md:flex items-center gap-2 ml-1 pl-3 border-l border-slate-700">
-              {/* Total Jobs */}
-              <div className="flex items-center gap-1 px-2 py-0.5 bg-slate-800/50 rounded border border-slate-700">
-                <span className="text-xs font-bold text-slate-200">{stats.total}</span>
-              </div>
-
-              {/* New Jobs */}
-              {stats.new > 0 && (
-                <div className="flex items-center gap-1 px-2 py-0.5 bg-emerald-900/30 rounded border border-emerald-700/50">
-                  <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></span>
-                  <span className="text-xs font-bold text-emerald-300">{stats.new}</span>
-                </div>
-              )}
-
-              {/* Matched Skills */}
-              {stats.matched > 0 && userSkills.length > 0 && (
-                <div className="flex items-center gap-1 px-2 py-0.5 bg-purple-900/30 rounded border border-purple-700/50">
-                  <span className="text-sm">✨</span>
-                  <span className="text-xs font-bold text-purple-300">{stats.matched}</span>
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
-        {/* Right: Actions */}
-        <div className="flex items-center gap-1">
-          {/* Skills Toggle */}
+        {stats.total > 0 && (
+          <div className="topbar-stats">
+            <div className="mini-stat">
+              <span>Total</span>
+              <strong>{stats.total}</strong>
+            </div>
+            {stats.new > 0 && (
+              <div className="mini-stat success">
+                <span>New</span>
+                <strong>{stats.new}</strong>
+              </div>
+            )}
+            {stats.matched > 0 && userSkills.length > 0 && (
+              <div className="mini-stat accent">
+                <span>Match</span>
+                <strong>{stats.matched}</strong>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="topbar-actions">
           {userSkills.length > 0 && (
             <button
+              type="button"
               onClick={onSkillsToggle}
-              className={`hidden sm:inline-flex p-1.5 rounded transition-all duration-200 ${
-                skillsActive
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800'
-              }`}
+              className={`icon-button ${skillsActive ? 'active' : ''}`}
               title="Toggle skill filter"
+              aria-label="Toggle skill filter"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+              <SparkIcon />
             </button>
           )}
 
-          {/* Settings */}
           <button
+            type="button"
             onClick={() => navigate('/settings')}
-            className="p-1.5 text-slate-400 hover:text-slate-300 hover:bg-slate-800 rounded transition-colors duration-200"
+            className="icon-button"
             title="Settings"
+            aria-label="Settings"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
+            <SettingsIcon />
           </button>
 
-          {/* Sign Out */}
           <button
+            type="button"
             onClick={signOut}
-            className="p-1.5 text-slate-400 hover:text-slate-300 hover:bg-slate-800 rounded transition-colors duration-200"
+            className="icon-button"
             title="Sign out"
+            aria-label="Sign out"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
+            <SignOutIcon />
           </button>
         </div>
       </div>

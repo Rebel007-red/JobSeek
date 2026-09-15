@@ -1,5 +1,45 @@
 import { useState } from 'react'
-import { formatDate, getMatchScore, isNewJob } from '../../utils/job'
+import { formatDate, formatRelativeAge, getMatchScore, isNewJob } from '../../utils/job'
+
+function LocationIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M12 21s6-5.4 6-11a6 6 0 10-12 0c0 5.6 6 11 6 11zm0-8.5A2.5 2.5 0 1012 7a2.5 2.5 0 000 5.5z" fill="currentColor" />
+    </svg>
+  )
+}
+
+function CheckIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M9.55 16.2L5.3 12l-1.4 1.4 5.65 5.65 10.85-10.85L18.9 6.9 9.55 16.2z" fill="currentColor" />
+    </svg>
+  )
+}
+
+function CircleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  )
+}
+
+function ExternalLinkIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M14 4h6v6M20 4l-8.5 8.5M18 14v4a2 2 0 01-2 2H6a2 2 0 01-2-2V8a2 2 0 012-2h4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
 
 export function JobCard({ job, matchedSkills = [], onHide, onApplied }) {
   const {
@@ -11,199 +51,139 @@ export function JobCard({ job, matchedSkills = [], onHide, onApplied }) {
     posted_at,
     applied_at,
     companies,
+    description,
   } = job
 
   const [touchStart, setTouchStart] = useState(0)
-  const [touchEnd, setTouchEnd] = useState(0)
+  const [dragOffset, setDragOffset] = useState(0)
   const [swipeDirection, setSwipeDirection] = useState(null)
 
   const companyName = companies?.name ?? 'Unknown'
   const storedSkills = Array.isArray(job.skills) ? job.skills : []
   const matchScore = getMatchScore(job, matchedSkills.length)
   const isNew = isNewJob(posted_at, first_seen_at)
+  const relativeAge = formatRelativeAge(posted_at || first_seen_at)
 
-  // Swipe detection (minDistance: 50px)
   const handleTouchStart = (e) => {
     setTouchStart(e.targetTouches[0].clientX)
+    setDragOffset(0)
+    setSwipeDirection(null)
+  }
+
+  const handleTouchMove = (e) => {
+    if (swipeDirection) return
+    const nextOffset = e.touches[0].clientX - touchStart
+    setDragOffset(Math.max(Math.min(nextOffset, 120), -120))
   }
 
   const handleTouchEnd = (e) => {
-    setTouchEnd(e.changedTouches[0].clientX)
-    detectSwipe(e.targetTouches[0]?.clientX || e.changedTouches[0].clientX)
-  }
-
-  const detectSwipe = (endX) => {
+    const endX = e.changedTouches[0].clientX
     const distance = touchStart - endX
-    const isLeftSwipe = distance > 50
-    const isRightSwipe = distance < -50
+    const isLeftSwipe = distance > 70
+    const isRightSwipe = distance < -70
 
     if (isLeftSwipe && onHide) {
       setSwipeDirection('left')
-      setTimeout(() => onHide(job.id), 150)
+      setTimeout(() => {
+        setSwipeDirection(null)
+        setDragOffset(0)
+        setTouchStart(0)
+        onHide(job.id)
+      }, 180)
     } else if (isRightSwipe && onApplied) {
       setSwipeDirection('right')
-      setTimeout(() => onApplied(job.id, !applied_at), 150)
+      setTimeout(() => {
+        setSwipeDirection(null)
+        setDragOffset(0)
+        setTouchStart(0)
+        onApplied(job.id, true)
+      }, 180)
+    } else {
+      setDragOffset(0)
+      setTouchStart(0)
     }
   }
 
   return (
-    <article 
-      className={`group bg-slate-800/50 border border-slate-700 rounded p-2 hover:shadow-lg hover:border-indigo-600/50 transition-all duration-200 flex flex-col h-full swipeable relative ${
-        swipeDirection ? 'opacity-50' : ''
-      }`}
+    <article
+      className={`job-card ${swipeDirection ? 'card-swipe' : ''} ${dragOffset !== 0 ? 'dragging' : ''}`}
+      style={dragOffset !== 0 && !swipeDirection ? { transform: `translateX(${dragOffset}px) rotate(${dragOffset / 18}deg)` } : undefined}
       onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Swipe Action Feedback */}
       {swipeDirection && (
-        <div className="absolute inset-0 flex items-center justify-center rounded">
-          <span className={`text-2xl font-bold transition-all ${
-            swipeDirection === 'right' 
-              ? 'text-emerald-400' 
-              : 'text-red-400'
-          }`}>
-            {swipeDirection === 'right' ? '✓ Applied' : '✕ Hide'}
+        <div className="swipe-feedback">
+          <span className={swipeDirection === 'right' ? 'approve' : 'decline'}>
+            {swipeDirection === 'right' ? 'Applied' : 'Hidden'}
           </span>
         </div>
       )}
-      
-      {/* Header: Title */}
-      <h3 className="text-xs font-bold text-slate-100 line-clamp-2 group-hover:text-indigo-400 transition-colors mb-0.5">
-        {title}
-      </h3>
 
-      {/* Source Row: Company | Date | New | Applied */}
-      <div className="flex items-center gap-2 mb-1.5 text-xs">
-        <span className="text-indigo-400 font-semibold flex-shrink-0">
-          {companyName}
-        </span>
-        <span className="text-slate-400 flex-shrink-0">
-          {formatDate(posted_at || first_seen_at)}
-        </span>
-        
-        <div className="flex items-center gap-0.5 ml-auto">
-          {isNew && !applied_at && (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-semibold text-amber-400 bg-amber-900/50 rounded">
-              <span className="w-1 h-1 bg-amber-400 rounded-full animate-pulse"></span>
-              New
-            </span>
-          )}
-          
+      <div className="job-card-header">
+        <div>
+          <p className="job-company">{companyName}</p>
+          <h3>{title}</h3>
+        </div>
+
+        <div className="job-meta-badges">
+          {isNew && !applied_at && <span className="badge new-badge">New</span>}
           {applied_at && (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-semibold text-emerald-400 bg-emerald-900/50 rounded">
-              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
-              </svg>
-              Applied
+            <span className="badge applied-badge">
+              Applied {formatDate(applied_at) ? `on ${formatDate(applied_at)}` : ''}
             </span>
           )}
+          {matchScore > 0 && <span className="badge match-badge">{matchScore}% match</span>}
         </div>
       </div>
 
-      {/* Meta: Location + Department */}
-      <div className="space-y-0.5 mb-1.5 text-xs text-slate-400">
-        {location && (
-          <div className="flex items-center gap-1">
-            <svg className="w-3 h-3 flex-shrink-0 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            <span className="line-clamp-1 text-xs">{location}</span>
-          </div>
-        )}
-        {department && (
-          <div className="flex items-center gap-1">
-            <svg className="w-3 h-3 flex-shrink-0 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-            </svg>
-            <span className="line-clamp-1 text-xs">{department}</span>
-          </div>
-        )}
+      <div className="job-card-row">
+        <span className="job-card-location">
+          <LocationIcon />
+          <span>{location || 'Remote'}</span>
+        </span>
+        <span className="job-card-separator" aria-hidden="true" />
+        <span>{formatDate(posted_at || first_seen_at) || 'Recently'}</span>
+        {relativeAge && <span className={`job-age-pill ${isNew ? 'new' : 'older'}`}>{relativeAge}</span>}
       </div>
 
-      {/* Skills Tags - Show All That Fit */}
+      {department && <div className="job-department">{department}</div>}
+
+      {description && (
+        <p className="job-description">{description.replace(/\s+/g, ' ').trim().slice(0, 140)}{description.length > 140 ? '…' : ''}</p>
+      )}
+
       {storedSkills.length > 0 && (
-        <div className="flex flex-wrap gap-0.5 mb-1">
-          {storedSkills.map(skill => (
-            <span
-              key={skill}
-              className={`inline-flex items-center px-1 py-0 rounded text-xs font-medium transition-colors ${
-                matchedSkills.includes(skill)
-                  ? 'bg-indigo-900/60 text-indigo-300'
-                  : 'bg-slate-700/50 text-slate-400'
-              }`}
-            >
+        <div className="skill-tags">
+          {storedSkills.slice(0, 4).map(skill => (
+            <span key={skill} className={matchedSkills.includes(skill) ? 'skill-tag active' : 'skill-tag'}>
               {skill}
             </span>
           ))}
         </div>
       )}
 
-      {/* Footer: Actions - Icon Only */}
-      <div className="flex items-center justify-between pt-1 border-t border-slate-700/50 mt-auto gap-1">
-        {onApplied && (
-          <button
-            onClick={() => onApplied(job.id, !applied_at)}
-            className={`inline-flex items-center justify-center w-6 h-6 rounded transition-all duration-200 ${
-              applied_at
-                ? 'text-emerald-400 hover:bg-emerald-900/40'
-                : 'text-slate-400 hover:text-indigo-400 hover:bg-slate-700/50'
-            }`}
-            title={applied_at ? 'Mark as unapplied' : 'Mark as applied'}
-          >
-            <svg
-              className="w-4 h-4"
-              fill={applied_at ? 'currentColor' : 'none'}
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-          </button>
+      <div className="job-card-actions">
+        <button
+          type="button"
+          onClick={() => onApplied?.(job.id, !applied_at)}
+          className={`action-button ${applied_at ? 'success' : ''}`}
+          title={applied_at ? 'Mark as unapplied' : 'Mark as applied'}
+        >
+          {applied_at ? <CheckIcon /> : <CircleIcon />}
+        </button>
+
+        {url && url !== '#' && (
+          <a href={url} target="_blank" rel="noreferrer" className="external-link" title="Open job posting">
+            <ExternalLinkIcon />
+          </a>
         )}
 
-        <div className="flex items-center gap-0.5 ml-auto">
-          {url && url !== '#' && (
-            <a
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center w-6 h-6 text-indigo-400 hover:bg-indigo-900/40 rounded transition-all duration-200"
-              title="Open job posting"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                />
-              </svg>
-            </a>
-          )}
-          
-          {onHide && (
-            <button
-              onClick={() => onHide(job.id)}
-              className="inline-flex items-center justify-center w-6 h-6 text-slate-400 hover:text-red-400 hover:bg-red-900/40 rounded transition-all duration-200"
-              title="Hide this job (or swipe left)"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          )}
-        </div>
+        {onHide && (
+          <button type="button" onClick={() => onHide(job.id)} className="action-button danger" title="Hide this job">
+            <CloseIcon />
+          </button>
+        )}
       </div>
     </article>
   )
