@@ -59,6 +59,9 @@ export function JobsPage() {
 
     if (error) {
       console.error('Failed to fetch jobs:', error)
+      setJobs([])
+      setTotalCount(0)
+      setHasMore(false)
       setLoading(false)
       return
     }
@@ -107,6 +110,7 @@ export function JobsPage() {
 
     if (error) {
       console.error('Failed to fetch metrics:', error)
+      setSummaryStats({ total: 0, new: 0, matched: 0, applied: 0, pending: 0 })
       return
     }
 
@@ -170,14 +174,22 @@ export function JobsPage() {
 
   const handleHide = async (jobId) => {
     setJobs(prev => prev.filter(j => j.id !== jobId))
-    await supabase.from('jobs').update({ hidden: true }).eq('id', jobId)
+    const { error } = await supabase.from('jobs').update({ hidden: true }).eq('id', jobId)
+    if (error) {
+      console.error('Failed to hide job:', error)
+      return
+    }
     await fetchMetrics(filters)
   }
 
   const handleApplied = async (jobId, markAsApplied) => {
     const applied_at = markAsApplied ? new Date().toISOString() : null
     setJobs(prev => prev.map(j => j.id === jobId ? { ...j, applied_at } : j))
-    await supabase.from('jobs').update({ applied_at }).eq('id', jobId)
+    const { error } = await supabase.from('jobs').update({ applied_at }).eq('id', jobId)
+    if (error) {
+      console.error('Failed to update applied state:', error)
+      return
+    }
     await fetchMetrics(filters)
   }
 
@@ -224,6 +236,12 @@ export function JobsPage() {
     applied: summaryStats.applied,
     pending: summaryStats.pending,
   }), [summaryStats, totalCount, jobs.length])
+
+  const tabCounts = useMemo(() => ({
+    all: stats.total,
+    pending: stats.pending,
+    applied: stats.applied,
+  }), [stats])
 
   const dailyMetrics = useMemo(() => {
     const dayMap = new Map()
@@ -329,7 +347,7 @@ export function JobsPage() {
                 >
                   {tab}
                   <span className="count-badge">
-                    {tab === 'all' ? visibleJobs.length : tab === 'pending' ? visibleJobs.filter(j => !j.job.applied_at).length : visibleJobs.filter(j => j.job.applied_at).length}
+                    {tabCounts[tab] ?? 0}
                   </span>
                 </button>
               ))}
