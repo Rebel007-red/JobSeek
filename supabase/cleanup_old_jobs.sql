@@ -29,6 +29,10 @@ RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
 BEGIN
+  IF pg_trigger_depth() > 1 THEN
+    RETURN NEW;
+  END IF;
+
   UPDATE public.jobs
   SET
     hidden = COALESCE(NEW.hidden, hidden),
