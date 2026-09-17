@@ -218,9 +218,59 @@ export function JobsPage() {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [loading, hasMore])
 
+  const sameJobIdentity = (left, right) => {
+    if (!left || !right) return false
+    if (left.id === right.id) return true
+
+    const sameCompanyAndJob =
+      left.company_id != null &&
+      right.company_id != null &&
+      left.company_id === right.company_id &&
+      left.job_id &&
+      right.job_id &&
+      left.job_id === right.job_id
+
+    const sameUrl = !!(left.url && right.url && left.url === right.url)
+
+    return sameCompanyAndJob || sameUrl
+  }
+
+  const syncMatchingJobRows = useCallback(async (job, patch) => {
+    if (!job) return { error: new Error('Missing job') }
+
+    const identityTerms = []
+    if (job.company_id != null) identityTerms.push(`company_id.eq.${job.company_id}`)
+    if (job.job_id) identityTerms.push(`job_id.eq.${job.job_id}`)
+    if (job.url) identityTerms.push(`url.eq.${job.url}`)
+
+    if (!identityTerms.length) {
+      return supabase.from('jobs').update(patch).eq('id', job.id)
+    }
+
+    const { data, error: selectError } = await supabase
+      .from('jobs')
+      .select('id')
+      .or(identityTerms.join(','))
+
+    if (selectError) {
+      return { error: selectError }
+    }
+
+    const ids = (data || []).map(row => row.id)
+    if (!ids.length) {
+      return { error: null }
+    }
+
+    return supabase.from('jobs').update(patch).in('id', ids)
+  }, [])
+
   const handleHide = async (jobId) => {
-    setJobs(prev => prev.filter(j => j.id !== jobId))
-    const { error } = await supabase.from('jobs').update({ hidden: true }).eq('id', jobId)
+    const target = jobs.find(j => j.id === jobId)
+    if (!target) return
+
+    setJobs(prev => prev.filter(j => !sameJobIdentity(j, target)))
+
+    const { error } = await syncMatchingJobRows(target, { hidden: true })
     if (error) {
       console.error('Failed to hide job:', error)
       return
@@ -229,9 +279,13 @@ export function JobsPage() {
   }
 
   const handleApplied = async (jobId, markAsApplied) => {
+    const target = jobs.find(j => j.id === jobId)
+    if (!target) return
+
     const applied_at = markAsApplied ? new Date().toISOString() : null
-    setJobs(prev => prev.map(j => j.id === jobId ? { ...j, applied_at } : j))
-    const { error } = await supabase.from('jobs').update({ applied_at }).eq('id', jobId)
+    setJobs(prev => prev.map(j => sameJobIdentity(j, target) ? { ...j, applied_at } : j))
+
+    const { error } = await syncMatchingJobRows(target, { applied_at })
     if (error) {
       console.error('Failed to update applied state:', error)
       return
