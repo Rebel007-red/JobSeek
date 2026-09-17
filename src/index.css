@@ -878,8 +878,17 @@ p, h1, h2, h3, h4, h5, h6 {
 
 .daily-metrics-panel {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 0.2rem;
+  grid-template-columns: repeat(var(--trend-columns, 14), minmax(2.6rem, 1fr));
+  gap: 0.18rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding-bottom: 0.12rem;
+}
+
+.daily-metrics-panel::-webkit-scrollbar {
+  display: none;
 }
 
 .daily-metric-item {

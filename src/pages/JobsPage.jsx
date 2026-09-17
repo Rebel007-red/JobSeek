@@ -8,6 +8,15 @@ import { getMatchedSkills } from '../utils/job'
 
 const PAGE_SIZE = 48
 const DEFAULT_FILTERS = { keyword: '', companyId: '', location: '', department: '' }
+const TREND_WINDOW_DAYS = 14
+
+const toLocalDateKey = (value) => {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60 * 1000)
+  return localDate.toISOString().slice(0, 10)
+}
 
 export function JobsPage() {
   const { skills: userSkills } = useUserSkills()
@@ -19,6 +28,7 @@ export function JobsPage() {
   const [hasMore, setHasMore] = useState(false)
   const [totalCount, setTotalCount] = useState(0)
   const [summaryStats, setSummaryStats] = useState({ total: 0, new: 0, matched: 0, applied: 0, pending: 0 })
+  const [dailyMetrics, setDailyMetrics] = useState([])
   const [showMatchedOnly, setShowMatchedOnly] = useState(false)
   const [activeTab, setActiveTab] = useState('all')
   const metricsRequestRef = useRef(0)
@@ -84,8 +94,9 @@ export function JobsPage() {
     setLoading(false)
   }, [])
 
-  const fetchMetrics = useCallback(async (currentFilters) => {
+  const fetchMetrics = useCallback(async (currentFilters, currentTrendDays = TREND_WINDOW_DAYS) => {
     const requestId = ++metricsRequestRef.current
+    const daysWindow = Number(currentTrendDays) || TREND_WINDOW_DAYS
 
     let query = supabase
       .from('jobs')
@@ -111,6 +122,7 @@ export function JobsPage() {
     if (error) {
       console.error('Failed to fetch metrics:', error)
       setSummaryStats({ total: 0, new: 0, matched: 0, applied: 0, pending: 0 })
+      setDailyMetrics([])
       return
     }
 
@@ -139,6 +151,35 @@ export function JobsPage() {
       ? rows.filter(job => getMatchedSkills(job, userSkills).length > 0).length
       : 0
 
+    const dayMap = new Map()
+
+    for (let i = daysWindow - 1; i >= 0; i -= 1) {
+      const d = new Date()
+      d.setHours(0, 0, 0, 0)
+      d.setDate(d.getDate() - i)
+      const key = toLocalDateKey(d)
+      if (key) {
+        dayMap.set(key, { label: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), added: 0, applied: 0 })
+      }
+    }
+
+    rows.forEach(job => {
+      const dateSource = job.posted_at || job.first_seen_at
+      if (dateSource) {
+        const key = toLocalDateKey(dateSource)
+        if (key && dayMap.has(key)) {
+          dayMap.get(key).added += 1
+        }
+      }
+
+      if (job.applied_at) {
+        const key = toLocalDateKey(job.applied_at)
+        if (key && dayMap.has(key)) {
+          dayMap.get(key).applied += 1
+        }
+      }
+    })
+
     setSummaryStats({
       total: rows.length,
       new: newCount,
@@ -146,12 +187,17 @@ export function JobsPage() {
       applied: appliedCount,
       pending: Math.max(rows.length - appliedCount, 0),
     })
+    setDailyMetrics(
+      Array.from(dayMap.entries())
+        .map(([key, value]) => ({ key, ...value }))
+        .reverse()
+    )
   }, [userSkills])
 
   useEffect(() => {
     setPage(0)
     fetchJobs(filters, 0)
-    fetchMetrics(filters)
+    fetchMetrics(filters, TREND_WINDOW_DAYS)
   }, [filters, fetchJobs, fetchMetrics])
 
   useEffect(() => {
@@ -243,45 +289,6 @@ export function JobsPage() {
     applied: stats.applied,
   }), [stats])
 
-  const dailyMetrics = useMemo(() => {
-    const dayMap = new Map()
-
-    for (let i = 6; i >= 0; i -= 1) {
-      const d = new Date()
-      d.setHours(0, 0, 0, 0)
-      d.setDate(d.getDate() - i)
-      const key = d.toISOString().slice(0, 10)
-      dayMap.set(key, { label: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), added: 0, applied: 0 })
-    }
-
-    jobs.forEach(job => {
-      const dateSource = job.posted_at || job.first_seen_at
-      if (dateSource) {
-        const date = new Date(dateSource)
-        if (!Number.isNaN(date.getTime())) {
-          const key = date.toISOString().slice(0, 10)
-          if (dayMap.has(key)) {
-            dayMap.get(key).added += 1
-          }
-        }
-      }
-
-      if (job.applied_at) {
-        const date = new Date(job.applied_at)
-        if (!Number.isNaN(date.getTime())) {
-          const key = date.toISOString().slice(0, 10)
-          if (dayMap.has(key)) {
-            dayMap.get(key).applied += 1
-          }
-        }
-      }
-    })
-
-    return Array.from(dayMap.entries()).map(([key, value]) => ({
-      key,
-      ...value,
-    }))
-  }, [jobs])
 
   const metricCards = [
     { label: 'Total', value: stats.total, tone: 'primary', detail: 'Open roles' },
@@ -291,7 +298,10 @@ export function JobsPage() {
   ]
 
   return (
-    <div className="page-shell">
+    <div
+      className="page-shell"
+      style={{ '--trend-columns': TREND_WINDOW_DAYS }}
+    >
       <Header
         stats={stats}
         onSkillsToggle={() => setShowMatchedOnly(v => !v)}
