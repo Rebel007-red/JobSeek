@@ -52,6 +52,7 @@ export function JobCard({ job, matchedSkills = [], onHide, onApplied }) {
     applied_at,
     companies,
     description,
+    experience_text,
   } = job
 
   const [touchStart, setTouchStart] = useState(0)
@@ -128,6 +129,7 @@ export function JobCard({ job, matchedSkills = [], onHide, onApplied }) {
 
         <div className="job-meta-badges">
           {isNew && !applied_at && <span className="badge new-badge">New</span>}
+          {experience_text && <span className="badge experience-badge">{experience_text}</span>}
           {applied_at && (
             <span className="badge applied-badge">
               Applied {formatDate(applied_at) ? `on ${formatDate(applied_at)}` : ''}

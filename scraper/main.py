@@ -110,7 +110,9 @@ async def insert_jobs_to_db(jobs, ats_type):
             'location': job.get('location'),
             'url': job.get('job_url'),
             'posted_at': job.get('posted_at'),
-            'skills': job.get('matched_skills') or job.get('skills', [])
+            'skills': job.get('matched_skills') or job.get('skills', []),
+            'experience_text': job.get('experience_text'),
+            'experience_years': job.get('experience_years'),
         }
 
         # Deduplicate aggressively to avoid ON CONFLICT affecting the same row twice.

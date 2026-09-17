@@ -15,34 +15,84 @@ HEADERS = {
 
 class SkillFilter:
     """Centralized skill matching for job filtering"""
-    
+
     def __init__(self, skills):
         """Initialize filter with user's required skills
-        
+
         Args:
             skills: List of skill strings to match against jobs
         """
         self.skills = skills if skills else []
         self.last_filter_stats = {}  # Track stats from last filter() call
-    
+
+    def _extract_experience(self, text):
+        """Extract a normalized experience value for jobs with 2+ years experience.
+
+        We keep this intentionally narrow to match the current product preference:
+        only jobs that clearly advertise 2 or more years are tagged.
+        """
+        if not text:
+            return None
+
+        normalized = text.lower().replace('–', '-').replace('—', '-')
+        patterns = [
+            r'(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*\+?\s*years?\s*of\s*experience',
+            r'(\d+(?:\.\d+)?)\s*\+\s*years?\s*of\s*experience',
+            r'(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*years?\s*experience',
+            r'(\d+(?:\.\d+)?)\s*years?\s*of\s*experience',
+            r'(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*\+?\s*yrs?\s*exp',
+            r'(\d+(?:\.\d+)?)\s*\+\s*yrs?\s*exp',
+        ]
+
+        import re
+
+        for pattern in patterns:
+            match = re.search(pattern, normalized)
+            if not match:
+                continue
+
+            if len(match.groups()) == 2:
+                start = float(match.group(1))
+                end = float(match.group(2))
+                if start < 2:
+                    return None
+                if start <= end:
+                    text_value = f"{int(start) if start.is_integer() else start}-{int(end) if end.is_integer() else end} years"
+                    return {
+                        'experience_text': text_value,
+                        'experience_years': int(start) if start.is_integer() else start,
+                    }
+
+            value = float(match.group(1))
+            if value < 2:
+                return None
+
+            text_value = f"{int(value) if value.is_integer() else value}+ years"
+            return {
+                'experience_text': text_value,
+                'experience_years': int(value) if value.is_integer() else value,
+            }
+
+        return None
+
     def _match_skill_in_text(self, skill, text):
         """Check if skill matches in text (case-insensitive)
-        
+
         Args:
             skill: Skill string to search for
             text: Text to search in (should be lowercase)
-        
+
         Returns:
             bool: True if skill found in text
         """
         return skill.lower() in text
-    
+
     def _find_matched_skills(self, job):
         """Find all skills that match a job's title and description
-        
+
         Args:
             job: Job dict with 'title' and 'description' fields
-        
+
         Returns:
             list: Skills that matched this job
         """
@@ -61,7 +111,7 @@ class SkillFilter:
             if self._match_skill_in_text(skill, job_description) or self._match_skill_in_text(skill, job_title):
                 if skill not in matched_skills:  # Avoid duplicates
                     matched_skills.append(skill)
-        
+
         return matched_skills
     
     def filter(self, jobs):
@@ -82,14 +132,21 @@ class SkillFilter:
         
         for job in jobs:
             matched_skills = self._find_matched_skills(job)
-            
+
             if matched_skills:
+                experience = self._extract_experience(
+                    f"{job.get('title', '') or ''} {job.get('description', '') or ''}"
+                )
+                if experience:
+                    job['experience_text'] = experience['experience_text']
+                    job['experience_years'] = experience['experience_years']
+
                 # Add matched skills to job object
                 job['matched_skills'] = matched_skills
                 filtered_jobs.append(job)
                 matched_count += 1
                 skills_used.update(matched_skills)
-                
+
                 # DEBUG: Print which skills matched
                 print(f"        [SKILL MATCH] {matched_skills} matched in: {job.get('title', '')[:50]}")
         
