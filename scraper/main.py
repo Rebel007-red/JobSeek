@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 import os
 import json
 from workday.main import Scraper as WorkdayScraper
+from greenhouse.main import Scraper as GreenhouseScraper
 from linkedin.main import Scraper as LinkedInScraper
 
 # Load environment variables from .env
@@ -212,6 +213,36 @@ async def scrape_all():
                 
                 print()
                     
+            except Exception as e:
+                print(f"[ERROR] {company['name']}: {str(e)}\n")
+
+        elif ats_type == "greenhouse":
+            try:
+                print(f"[SCRAPER] Greenhouse: {company['name']}")
+                scraper = GreenhouseScraper(company)
+                jobs = await scraper.scrape()
+
+                all_results.append({
+                    "company": company['name'],
+                    "ats_type": ats_type,
+                    "jobs_found": len(jobs),
+                    "jobs": jobs
+                })
+
+                print(f"[RESULT] {company['name']}: {len(jobs)} jobs ready")
+
+                if jobs:
+                    sample = jobs[0]
+                    print(f"    Sample: {sample['title']}")
+                    print(f"    Location: {sample['location']}")
+                    print(f"    Posted: {sample['posted_date']}")
+                    print(f"    Description: {sample['description'][:80]}...")
+                    await insert_jobs_to_db(jobs, ats_type)
+                else:
+                    print(f"    No jobs found after filtering")
+
+                print()
+
             except Exception as e:
                 print(f"[ERROR] {company['name']}: {str(e)}\n")
         
