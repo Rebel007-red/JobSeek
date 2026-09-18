@@ -33,6 +33,8 @@ BEGIN
     RETURN NEW;
   END IF;
 
+  -- Only propagate status to rows that are the same canonical job identity.
+  -- This avoids marking unrelated jobs from the same company as applied.
   UPDATE public.jobs
   SET
     hidden = COALESCE(NEW.hidden, hidden),
@@ -50,7 +52,9 @@ BEGIN
         AND job_id IS NOT DISTINCT FROM NEW.job_id
       )
       OR (
-        NEW.url IS NOT NULL
+        NEW.company_id IS NULL
+        AND NEW.job_id IS NULL
+        AND NEW.url IS NOT NULL
         AND url IS NOT DISTINCT FROM NEW.url
       )
     );

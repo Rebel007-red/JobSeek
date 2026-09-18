@@ -97,101 +97,164 @@ export function JobsPage() {
   const fetchMetrics = useCallback(async (currentFilters, currentTrendDays = TREND_WINDOW_DAYS) => {
     const requestId = ++metricsRequestRef.current
     const daysWindow = Number(currentTrendDays) || TREND_WINDOW_DAYS
+    const hasActiveFilters = Boolean(
+      currentFilters.keyword ||
+      currentFilters.companyId ||
+      currentFilters.location ||
+      currentFilters.department
+    )
 
-    let query = supabase
-      .from('jobs')
-      .select('id, title, department, skills, posted_at, applied_at, first_seen_at', { count: 'exact' })
-      .eq('is_active', true)
-      .eq('hidden', false)
+    try {
+      if (!hasActiveFilters) {
+        const [summaryResult, trendResult] = await Promise.all([
+          supabase.from('job_dashboard_summary').select('*').maybeSingle(),
+          supabase
+            .from('job_daily_metrics')
+            .select('day_key, added_jobs, applied_jobs')
+            .order('day_key', { ascending: true })
+            .limit(daysWindow),
+        ])
 
-    if (currentFilters.keyword) {
-      query = query.ilike('title', `%${currentFilters.keyword}%`)
-    }
-    if (currentFilters.companyId) {
-      query = query.eq('company_id', currentFilters.companyId)
-    }
-    if (currentFilters.location) {
-      query = query.ilike('location', `%${currentFilters.location}%`)
-    }
-    if (currentFilters.department) {
-      query = query.ilike('department', `%${currentFilters.department}%`)
-    }
+        if (summaryResult.error) throw summaryResult.error
+        if (trendResult.error) throw trendResult.error
 
-    const { data, error } = await query
+        if (requestId !== metricsRequestRef.current) {
+          return
+        }
 
-    if (error) {
+        const summaryRow = summaryResult.data || {}
+        const matchRows = (await supabase
+          .from('jobs')
+          .select('id, title, department, skills, description, location, posted_at, applied_at, first_seen_at')
+          .eq('is_active', true)
+          .eq('hidden', false))?.data || []
+
+        const matchedCount = userSkills.length
+          ? matchRows.filter(job => getMatchedSkills(job, userSkills).length > 0).length
+          : 0
+
+        const dailyRows = trendResult.data || []
+        const mappedTrend = dailyRows
+          .map(item => {
+            const date = new Date(item.day_key)
+            if (Number.isNaN(date.getTime())) return null
+            return {
+              key: item.day_key,
+              label: date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+              added: Number(item.added_jobs ?? 0),
+              applied: Number(item.applied_jobs ?? 0),
+            }
+          })
+          .filter(Boolean)
+          .slice(-daysWindow)
+
+        setSummaryStats({
+          total: Number(summaryRow.total_jobs ?? matchRows.length ?? 0),
+          new: Number(summaryRow.new_last_48h ?? 0),
+          matched: matchedCount,
+          applied: Number(summaryRow.applied_jobs ?? 0),
+          pending: Number(summaryRow.pending_jobs ?? 0),
+        })
+        setDailyMetrics(mappedTrend)
+        return
+      }
+
+      let query = supabase
+        .from('jobs')
+        .select('id, title, department, skills, posted_at, applied_at, first_seen_at', { count: 'exact' })
+        .eq('is_active', true)
+        .eq('hidden', false)
+
+      if (currentFilters.keyword) {
+        query = query.ilike('title', `%${currentFilters.keyword}%`)
+      }
+      if (currentFilters.companyId) {
+        query = query.eq('company_id', currentFilters.companyId)
+      }
+      if (currentFilters.location) {
+        query = query.ilike('location', `%${currentFilters.location}%`)
+      }
+      if (currentFilters.department) {
+        query = query.ilike('department', `%${currentFilters.department}%`)
+      }
+
+      const { data, error } = await query
+
+      if (error) {
+        throw error
+      }
+
+      if (requestId !== metricsRequestRef.current) {
+        return
+      }
+
+      const rows = data || []
+      const newCount = rows.filter(job => {
+        const ref = job.posted_at || job.first_seen_at
+        if (!ref) return false
+
+        const time = new Date(ref).getTime()
+        if (Number.isNaN(time)) return false
+
+        return Date.now() - time < 2 * 24 * 60 * 60 * 1000
+      }).length
+
+      const appliedCount = rows.filter(job => {
+        if (!job.applied_at) return false
+        const time = new Date(job.applied_at).getTime()
+        return !Number.isNaN(time)
+      }).length
+
+      const matchedCount = userSkills.length
+        ? rows.filter(job => getMatchedSkills(job, userSkills).length > 0).length
+        : 0
+
+      const dayMap = new Map()
+
+      for (let i = daysWindow - 1; i >= 0; i -= 1) {
+        const d = new Date()
+        d.setHours(0, 0, 0, 0)
+        d.setDate(d.getDate() - i)
+        const key = toLocalDateKey(d)
+        if (key) {
+          dayMap.set(key, { label: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), added: 0, applied: 0 })
+        }
+      }
+
+      rows.forEach(job => {
+        const dateSource = job.posted_at || job.first_seen_at
+        if (dateSource) {
+          const key = toLocalDateKey(dateSource)
+          if (key && dayMap.has(key)) {
+            dayMap.get(key).added += 1
+          }
+        }
+
+        if (job.applied_at) {
+          const key = toLocalDateKey(job.applied_at)
+          if (key && dayMap.has(key)) {
+            dayMap.get(key).applied += 1
+          }
+        }
+      })
+
+      setSummaryStats({
+        total: rows.length,
+        new: newCount,
+        matched: matchedCount,
+        applied: appliedCount,
+        pending: Math.max(rows.length - appliedCount, 0),
+      })
+      setDailyMetrics(
+        Array.from(dayMap.entries())
+          .map(([key, value]) => ({ key, ...value }))
+          .reverse()
+      )
+    } catch (error) {
       console.error('Failed to fetch metrics:', error)
       setSummaryStats({ total: 0, new: 0, matched: 0, applied: 0, pending: 0 })
       setDailyMetrics([])
-      return
     }
-
-    if (requestId !== metricsRequestRef.current) {
-      return
-    }
-
-    const rows = data || []
-    const newCount = rows.filter(job => {
-      const ref = job.posted_at || job.first_seen_at
-      if (!ref) return false
-
-      const time = new Date(ref).getTime()
-      if (Number.isNaN(time)) return false
-
-      return Date.now() - time < 2 * 24 * 60 * 60 * 1000
-    }).length
-
-    const appliedCount = rows.filter(job => {
-      if (!job.applied_at) return false
-      const time = new Date(job.applied_at).getTime()
-      return !Number.isNaN(time)
-    }).length
-
-    const matchedCount = userSkills.length
-      ? rows.filter(job => getMatchedSkills(job, userSkills).length > 0).length
-      : 0
-
-    const dayMap = new Map()
-
-    for (let i = daysWindow - 1; i >= 0; i -= 1) {
-      const d = new Date()
-      d.setHours(0, 0, 0, 0)
-      d.setDate(d.getDate() - i)
-      const key = toLocalDateKey(d)
-      if (key) {
-        dayMap.set(key, { label: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), added: 0, applied: 0 })
-      }
-    }
-
-    rows.forEach(job => {
-      const dateSource = job.posted_at || job.first_seen_at
-      if (dateSource) {
-        const key = toLocalDateKey(dateSource)
-        if (key && dayMap.has(key)) {
-          dayMap.get(key).added += 1
-        }
-      }
-
-      if (job.applied_at) {
-        const key = toLocalDateKey(job.applied_at)
-        if (key && dayMap.has(key)) {
-          dayMap.get(key).applied += 1
-        }
-      }
-    })
-
-    setSummaryStats({
-      total: rows.length,
-      new: newCount,
-      matched: matchedCount,
-      applied: appliedCount,
-      pending: Math.max(rows.length - appliedCount, 0),
-    })
-    setDailyMetrics(
-      Array.from(dayMap.entries())
-        .map(([key, value]) => ({ key, ...value }))
-        .reverse()
-    )
   }, [userSkills])
 
   useEffect(() => {
@@ -238,25 +301,22 @@ export function JobsPage() {
   const syncMatchingJobRows = useCallback(async (job, patch) => {
     if (!job) return { error: new Error('Missing job') }
 
-    const identityTerms = []
-    if (job.company_id != null) identityTerms.push(`company_id.eq.${job.company_id}`)
-    if (job.job_id) identityTerms.push(`job_id.eq.${job.job_id}`)
-    if (job.url) identityTerms.push(`url.eq.${job.url}`)
+    let query = supabase.from('jobs').select('id')
 
-    if (!identityTerms.length) {
+    if (job.company_id != null && job.job_id) {
+      query = query.eq('company_id', job.company_id).eq('job_id', job.job_id)
+    } else if (job.url) {
+      query = query.eq('url', job.url)
+    } else {
       return supabase.from('jobs').update(patch).eq('id', job.id)
     }
 
-    const { data, error: selectError } = await supabase
-      .from('jobs')
-      .select('id')
-      .or(identityTerms.join(','))
-
+    const { data, error: selectError } = await query
     if (selectError) {
       return { error: selectError }
     }
 
-    const ids = (data || []).map(row => row.id)
+    const ids = (data || []).filter(row => row.id !== job.id).map(row => row.id)
     if (!ids.length) {
       return { error: null }
     }

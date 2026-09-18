@@ -11,6 +11,7 @@ from playwright.async_api import async_playwright
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from skill_Filter import SkillFilter
+from location_Filter import LocationFilter
 
 
 class Scraper:
@@ -20,6 +21,7 @@ class Scraper:
         self.board_url = company.get('api_url') or company.get('board_url') or ''
         self.location_filter = company.get('location_filter', '')
         self.date_filter = company.get('date_filter', ['today', 'yesterday', '1 day', '2 days', '3 days'])
+        self.location_filterer = LocationFilter(self.location_filter)
         self.skill_filter = SkillFilter(company.get('user_skills', []))
 
         if not self.board_url and self.company_slug:
@@ -230,38 +232,7 @@ class Scraper:
         return ''
 
     def _filter_by_location(self, jobs):
-        if not self.location_filter:
-            return jobs
-
-        location_target = self.location_filter.lower().strip()
-        india_markers = [
-            'india', 'indian', 'bengaluru', 'bangalore', 'hyderabad', 'gurugram', 'gurgaon',
-            'delhi', 'mumbai', 'pune', 'chennai', 'kochi', 'ahmedabad', 'noida', 'kolkata'
-        ]
-        non_india_markers = [
-            'united states', 'usa', 'california', 'new york', 'texas', 'canada', 'london',
-            'germany', 'france', 'spain', 'netherlands', 'sweden', 'norway', 'denmark',
-            'australia', 'singapore', 'dubai', 'uae', 'japan', 'china', 'brazil', 'mexico',
-            'remote', 'virtual', 'us', 'uk'
-        ]
-
-        filtered = []
-        for job in jobs:
-            location = (job.get('location') or '').lower().strip()
-
-            if not location or location == 'not specified':
-                filtered.append(job)
-                continue
-
-            if location_target in location or any(marker in location for marker in india_markers):
-                filtered.append(job)
-                continue
-
-            if any(marker in location for marker in non_india_markers):
-                continue
-
-            filtered.append(job)
-        return filtered
+        return self.location_filterer.filter(jobs)
 
     def _filter_by_posted_date(self, jobs):
         filtered = []
