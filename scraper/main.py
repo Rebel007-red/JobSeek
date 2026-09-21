@@ -94,11 +94,16 @@ async def insert_jobs_to_db(jobs, ats_type):
     
     # Normalize fields to match Supabase schema
     # Schema: company_id, job_id, title, location, url, posted_at, skills
-    def _canonical_key(company_id, job_id):
-        return (
-            str(company_id or "").strip().lower(),
-            str(job_id or "").strip().lower()
-        )
+    def _canonical_key(company_id, job_id, url):
+        company_part = str(company_id or "").strip().lower()
+        job_part = str(job_id or "").strip().lower()
+        url_part = str(url or "").strip().lower()
+
+        if company_part and job_part:
+            return ('company_job', company_part, job_part)
+        if url_part:
+            return ('url', url_part)
+        return ('fallback', company_part, job_part, str(job.get('title') or '').strip().lower())
 
     normalized_jobs = []
     seen_keys = set()
@@ -115,8 +120,8 @@ async def insert_jobs_to_db(jobs, ats_type):
             'experience_years': job.get('experience_years'),
         }
 
-        # Deduplicate aggressively to avoid ON CONFLICT affecting the same row twice.
-        dedupe_key = _canonical_key(normalized['company_id'], normalized['job_id'])
+        # Deduplicate aggressively to avoid reinserting the same job with different page variants.
+        dedupe_key = _canonical_key(normalized['company_id'], normalized['job_id'], normalized['url'])
         if dedupe_key in seen_keys:
             continue
 

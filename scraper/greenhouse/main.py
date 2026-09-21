@@ -254,18 +254,7 @@ class Scraper:
         return filtered
 
     def _filter_by_posted_date(self, jobs):
-        filtered = []
-        for job in jobs:
-            posted_date = (job.get('posted_date') or '').lower()
-            if not posted_date:
-                continue
-
-            if any(keyword in posted_date for keyword in self.date_filter):
-                filtered.append(job)
-
-            elif re.search(r'\b\d+\s+day[s]?\b', posted_date):
-                match = re.search(r'(\d+)\s+day[s]?', posted_date)
-                if match and int(match.group(1)) <= 7:
-                    filtered.append(job)
-
-        return filtered
+        """Greenhouse boards often do not expose reliable posted-age text.
+        Keep all jobs instead of dropping them on weak or missing date labels.
+        """
+        return list(jobs)

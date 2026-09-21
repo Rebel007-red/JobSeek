@@ -46,7 +46,18 @@ class ScraperLocationFilterTests(unittest.TestCase):
         ]
 
         self.assertEqual(len(workday._filter_by_posted_date(jobs)), 1)
-        self.assertEqual(len(greenhouse._filter_by_posted_date(jobs)), 2)
+        self.assertEqual(len(greenhouse._filter_by_posted_date(jobs)), 3)
+
+    def test_greenhouse_keeps_jobs_when_posted_date_is_missing_or_unreliable(self):
+        greenhouse = GreenhouseScraper({'id': 5, 'name': 'Demo', 'user_skills': [], 'location_filter': 'India', 'date_filter': ['today', 'yesterday', '1 day', '2 days', '3 days']})
+
+        jobs = [
+            {'location': 'Remote - India', 'posted_date': 'Not specified', 'title': 'Role A'},
+            {'location': 'Bengaluru, India', 'posted_date': 'Today', 'title': 'Role B'},
+        ]
+
+        filtered = greenhouse._filter_by_posted_date(jobs)
+        self.assertEqual(len(filtered), 2)
 
 
 if __name__ == '__main__':
