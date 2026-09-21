@@ -10,7 +10,6 @@ from urllib.parse import urljoin
 # Add parent directory to sys.path to import skill_Filter
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from skill_Filter import SkillFilter
-from location_Filter import LocationFilter
 
 class Scraper:
     def __init__(self, company):
@@ -24,7 +23,6 @@ class Scraper:
         # Workday-specific filters: extract from company config or use scraper defaults
         self.location_filter = company.get('location_filter', '')  # Empty = no filter
         self.date_filter = company.get('date_filter', ['today', 'yesterday', '0 days', '1 day'])
-        self.location_filterer = LocationFilter(self.location_filter)
         # Initialize SkillFilter with user skills from orchestrator
         self.skill_filter = SkillFilter(company.get('user_skills', []))
         print(f"[INIT] Workday scraper for: {company['name']} (Location filter: '{self.location_filter}' or None, Skills: {len(self.skill_filter.skills)} skills)")
@@ -266,14 +264,45 @@ class Scraper:
         return False
     
     def _filter_by_location(self, jobs):
-        return self.location_filterer.filter(jobs)
+        """Filter jobs using the previous Workday-specific location rules.
+
+        Reject known non-India locations while accepting India and remote roles.
+        """
+        if not self.location_filter:
+            return jobs
+
+        filtered = []
+        non_indian_keywords = [
+            'california', 'texas', 'new york', 'florida', 'washington', 'seattle', 'san francisco',
+            'mountain view', 'palo alto', 'united states', 'us ', ' usa', 'us,',
+            'chicago', 'austin', 'boston', 'denver', 'atlanta', 'houston', 'las vegas',
+            'los angeles', 'new jersey', 'pennsylvania', 'virginia', 'illinois',
+            'london', 'uk', 'united kingdom', 'england', 'ireland', 'dublin', 'manchester',
+            'canada', 'toronto', 'vancouver', 'montreal', 'calgary', 'ottawa',
+            'germany', 'france', 'netherlands', 'belgium', 'switzerland', 'austria',
+            'sweden', 'denmark', 'norway', 'finland', 'poland', 'czech', 'spain',
+            'italy', 'portugal', 'greece', 'eu ', 'europe', 'berlin', 'paris', 'amsterdam',
+            'zurich', 'brussels', 'australia', 'new zealand', 'singapore', 'malaysia',
+            'thailand', 'vietnam', 'japan', 'china', 'hong kong', 'south korea', 'uae',
+            'dubai', 'middle east', 'mexico', 'brazil', 'argentina', 'latin america'
+        ]
+
+        for job in jobs:
+            location = (job.get('location', '') or '').lower().strip()
+            if any(keyword in location for keyword in non_indian_keywords):
+                continue
+            filtered.append(job)
+
+        return filtered
     
     def _filter_by_posted_date(self, jobs):
-        """Filter jobs by posted date using scraper-specific filters"""
+        """Filter jobs by posted date using scraper-specific filters."""
         filtered = []
         for job in jobs:
-            posted_date = job.get('posted_date', '').lower()
-            # Check if posted date matches any filter keywords defined for this scraper
+            posted_date = (job.get('posted_date') or '').lower()
+            if not posted_date:
+                continue
+
             if any(keyword in posted_date for keyword in self.date_filter):
                 filtered.append(job)
         
