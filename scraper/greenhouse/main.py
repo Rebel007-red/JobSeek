@@ -18,7 +18,7 @@ class Scraper:
         self.company = company
         self.company_slug = company.get('slug') or company.get('greenhouse_slug') or ''
         self.board_url = company.get('api_url') or company.get('board_url') or ''
-        self.location_filter = company.get('location_filter', '')
+        self.location_filter = (company.get('location_filter') or 'India').strip()
         self.date_filter = company.get('date_filter', ['today', 'yesterday', '1 day', '2 days', '3 days'])
         self.skill_filter = SkillFilter(company.get('user_skills', []))
 
@@ -230,33 +230,26 @@ class Scraper:
         return ''
 
     def _filter_by_location(self, jobs):
-        """Filter jobs using Greenhouse-specific location rules.
-
-        Keep India/remote jobs and reject a known list of non-India locations.
-        """
-        if not self.location_filter:
-            return jobs
-
-        filtered = []
-        non_indian_keywords = [
-            'california', 'texas', 'new york', 'florida', 'washington', 'seattle', 'san francisco',
-            'mountain view', 'palo alto', 'united states', 'usa', 'us,', 'us ', 'chicago', 'austin',
-            'boston', 'denver', 'atlanta', 'houston', 'las vegas', 'los angeles', 'new jersey',
-            'pennsylvania', 'virginia', 'illinois', 'london', 'uk', 'united kingdom', 'england',
-            'ireland', 'dublin', 'manchester', 'canada', 'toronto', 'vancouver', 'montreal',
-            'calgary', 'ottawa', 'germany', 'france', 'netherlands', 'belgium', 'switzerland',
-            'austria', 'sweden', 'denmark', 'norway', 'finland', 'poland', 'czech', 'spain',
-            'italy', 'portugal', 'greece', 'europe', 'berlin', 'paris', 'amsterdam', 'zurich',
-            'brussels', 'australia', 'new zealand', 'singapore', 'malaysia', 'thailand', 'vietnam',
-            'japan', 'china', 'hong kong', 'south korea', 'uae', 'dubai', 'middle east', 'mexico',
-            'brazil', 'argentina', 'latin america'
+        """Only keep roles tied to India or Indian cities; India remote is allowed."""
+        india_markers = [
+            'india', 'indian', 'bengaluru', 'bangalore', 'hyderabad', 'gurugram', 'gurgaon',
+            'delhi', 'mumbai', 'pune', 'chennai', 'kochi', 'ahmedabad', 'noida', 'kolkata',
+            'jaipur', 'lucknow', 'bhubaneswar', 'visakhapatnam', 'coimbatore', 'trivandrum',
+            'india remote', 'remote - india', 'remote india'
         ]
 
+        filtered = []
         for job in jobs:
             location = (job.get('location') or '').lower().strip()
-            if any(keyword in location for keyword in non_indian_keywords):
+            if not location or location == 'not specified':
                 continue
-            filtered.append(job)
+
+            if 'remote' in location and 'india' in location:
+                filtered.append(job)
+                continue
+
+            if any(marker in location for marker in india_markers):
+                filtered.append(job)
 
         return filtered
 

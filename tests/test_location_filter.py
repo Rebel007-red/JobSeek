@@ -15,19 +15,20 @@ class ScraperLocationFilterTests(unittest.TestCase):
         scraper = WorkdayScraper({'id': 1, 'name': 'Demo', 'user_skills': [], 'location_filter': 'India'})
         jobs = [
             {'location': 'Bengaluru, KA'},
-            {'location': 'Remote'},
+            {'location': 'Remote - India'},
             {'location': 'New York, NY'},
             {'location': 'London, UK'},
+            {'location': 'Remote'},
         ]
 
         filtered = scraper._filter_by_location(jobs)
 
         self.assertEqual(len(filtered), 2)
-        self.assertEqual([job['location'] for job in filtered], ['Bengaluru, KA', 'Remote'])
+        self.assertEqual([job['location'] for job in filtered], ['Bengaluru, KA', 'Remote - India'])
 
     def test_greenhouse_keeps_remote_when_target_is_india(self):
         scraper = GreenhouseScraper({'id': 2, 'name': 'Demo', 'user_skills': [], 'location_filter': 'India'})
-        jobs = [{'location': 'Remote - India'}]
+        jobs = [{'location': 'Remote - India'}, {'location': 'Remote'}]
 
         filtered = scraper._filter_by_location(jobs)
 

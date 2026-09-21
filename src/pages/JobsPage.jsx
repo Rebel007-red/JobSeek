@@ -5,6 +5,7 @@ import { SearchFilter } from '../components/common/SearchFilter'
 import { supabase } from '../lib/supabase'
 import { useUserSkills } from '../hooks/useUserSkills'
 import { getMatchedSkills } from '../utils/job'
+import { collectJobUpdateIds } from '../utils/jobIdentity'
 
 const PAGE_SIZE = 48
 const DEFAULT_FILTERS = { keyword: '', companyId: '', location: '', department: '' }
@@ -301,7 +302,7 @@ export function JobsPage() {
   const syncMatchingJobRows = useCallback(async (job, patch) => {
     if (!job) return { error: new Error('Missing job') }
 
-    let query = supabase.from('jobs').select('id')
+    let query = supabase.from('jobs').select('id, company_id, job_id, url')
 
     if (job.company_id != null && job.job_id) {
       query = query.eq('company_id', job.company_id).eq('job_id', job.job_id)
@@ -316,12 +317,13 @@ export function JobsPage() {
       return { error: selectError }
     }
 
-    const ids = (data || []).filter(row => row.id !== job.id).map(row => row.id)
-    if (!ids.length) {
+    const uniqueIds = collectJobUpdateIds(job, data || [])
+
+    if (!uniqueIds.length) {
       return { error: null }
     }
 
-    return supabase.from('jobs').update(patch).in('id', ids)
+    return supabase.from('jobs').update(patch).in('id', uniqueIds)
   }, [])
 
   const handleHide = async (jobId) => {
@@ -389,13 +391,17 @@ export function JobsPage() {
     })
   }, [jobsWithMatches, showMatchedOnly, userSkills, activeTab])
 
-  const stats = useMemo(() => ({
-    total: summaryStats.total || totalCount || jobs.length,
-    new: summaryStats.new,
-    matched: summaryStats.matched,
-    applied: summaryStats.applied,
-    pending: summaryStats.pending,
-  }), [summaryStats, totalCount, jobs.length])
+  const stats = useMemo(() => {
+    const matchedFromJobs = jobsWithMatches.filter(({ matched }) => matched.length > 0).length
+
+    return {
+      total: summaryStats.total || totalCount || jobs.length,
+      new: summaryStats.new,
+      matched: matchedFromJobs || summaryStats.matched,
+      applied: summaryStats.applied,
+      pending: summaryStats.pending,
+    }
+  }, [summaryStats, totalCount, jobs.length, jobsWithMatches])
 
   const tabCounts = useMemo(() => ({
     all: stats.total,

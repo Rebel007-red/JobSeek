@@ -30,18 +30,50 @@ export function isNewJob(postedAt, firstSeenAt) {
   return ref ? Date.now() - new Date(ref).getTime() < NEW_JOB_MS : false
 }
 
+function normalizeSkillToken(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function skillMatchesText(skill, text) {
+  const normalizedSkill = normalizeSkillToken(skill)
+  const normalizedText = normalizeSkillToken(text)
+
+  if (!normalizedSkill || !normalizedText) return false
+
+  const escapedSkill = normalizedSkill.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const boundaryPattern = new RegExp(`(^|\\s)${escapedSkill}(?=\\s|$)`, 'i')
+
+  return boundaryPattern.test(normalizedText)
+}
+
 export function getMatchedSkills(job, userSkills) {
-  if (!userSkills.length) return []
-  const storedSkills = Array.isArray(job.skills) ? job.skills : []
-  
-  const fromTags = userSkills.filter(s =>
-    storedSkills.some(tag => tag.toLowerCase().includes(s) || s.includes(tag.toLowerCase()))
+  if (!Array.isArray(userSkills) || userSkills.length === 0) return []
+
+  const normalizedUserSkills = userSkills
+    .map(skill => normalizeSkillToken(skill))
+    .filter(Boolean)
+
+  if (!normalizedUserSkills.length) return []
+
+  const storedSkills = Array.isArray(job.skills)
+    ? job.skills.map(skill => normalizeSkillToken(skill)).filter(Boolean)
+    : []
+
+  const haystack = `${job.title || ''} ${job.department || ''}`
+
+  const fromTags = normalizedUserSkills.filter(skill =>
+    storedSkills.some(tag => tag === skill || skillMatchesText(skill, tag))
   )
-  
-  const haystack = `${job.title} ${job.department || ''}`.toLowerCase()
-  const fromText = userSkills.filter(s => !fromTags.includes(s) && haystack.includes(s))
-  
-  return [...new Set([...fromTags, ...fromText])]
+
+  const fromText = normalizedUserSkills.filter(skill => !fromTags.includes(skill) && skillMatchesText(skill, haystack))
+  const orderedMatches = normalizedUserSkills.filter(skill => fromTags.includes(skill) || fromText.includes(skill))
+
+  return orderedMatches
 }
 
 export function getMatchScore(job, matchedSkillsCount) {

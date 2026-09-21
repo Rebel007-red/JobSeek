@@ -20,8 +20,8 @@ class Scraper:
             'apikey': os.getenv("VITE_SUPABASE_ANON_KEY"),
             'Content-Type': 'application/json'
         }
-        # Workday-specific filters: extract from company config or use scraper defaults
-        self.location_filter = company.get('location_filter', '')  # Empty = no filter
+        # Workday-specific filters: default to India-only unless the company config explicitly overrides it.
+        self.location_filter = (company.get('location_filter') or 'India').strip()
         self.date_filter = company.get('date_filter', ['today', 'yesterday', '0 days', '1 day'])
         # Initialize SkillFilter with user skills from orchestrator
         self.skill_filter = SkillFilter(company.get('user_skills', []))
@@ -264,34 +264,26 @@ class Scraper:
         return False
     
     def _filter_by_location(self, jobs):
-        """Filter jobs using the previous Workday-specific location rules.
-
-        Reject known non-India locations while accepting India and remote roles.
-        """
-        if not self.location_filter:
-            return jobs
-
-        filtered = []
-        non_indian_keywords = [
-            'california', 'texas', 'new york', 'florida', 'washington', 'seattle', 'san francisco',
-            'mountain view', 'palo alto', 'united states', 'us ', ' usa', 'us,',
-            'chicago', 'austin', 'boston', 'denver', 'atlanta', 'houston', 'las vegas',
-            'los angeles', 'new jersey', 'pennsylvania', 'virginia', 'illinois',
-            'london', 'uk', 'united kingdom', 'england', 'ireland', 'dublin', 'manchester',
-            'canada', 'toronto', 'vancouver', 'montreal', 'calgary', 'ottawa',
-            'germany', 'france', 'netherlands', 'belgium', 'switzerland', 'austria',
-            'sweden', 'denmark', 'norway', 'finland', 'poland', 'czech', 'spain',
-            'italy', 'portugal', 'greece', 'eu ', 'europe', 'berlin', 'paris', 'amsterdam',
-            'zurich', 'brussels', 'australia', 'new zealand', 'singapore', 'malaysia',
-            'thailand', 'vietnam', 'japan', 'china', 'hong kong', 'south korea', 'uae',
-            'dubai', 'middle east', 'mexico', 'brazil', 'argentina', 'latin america'
+        """Only keep roles that are clearly India-focused, including India remote roles."""
+        india_markers = [
+            'india', 'indian', 'bengaluru', 'bangalore', 'hyderabad', 'gurugram', 'gurgaon',
+            'delhi', 'mumbai', 'pune', 'chennai', 'kochi', 'ahmedabad', 'noida', 'kolkata',
+            'jaipur', 'lucknow', 'bhubaneswar', 'visakhapatnam', 'coimbatore', 'trivandrum',
+            'india remote', 'remote - india', 'remote india'
         ]
 
+        filtered = []
         for job in jobs:
             location = (job.get('location', '') or '').lower().strip()
-            if any(keyword in location for keyword in non_indian_keywords):
+            if not location or location == 'not specified':
                 continue
-            filtered.append(job)
+
+            if 'remote' in location and 'india' in location:
+                filtered.append(job)
+                continue
+
+            if any(marker in location for marker in india_markers):
+                filtered.append(job)
 
         return filtered
     
