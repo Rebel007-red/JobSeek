@@ -59,6 +59,26 @@ class ScraperLocationFilterTests(unittest.TestCase):
         filtered = greenhouse._filter_by_posted_date(jobs)
         self.assertEqual(len(filtered), 2)
 
+    def test_greenhouse_parses_live_api_job_payload(self):
+        greenhouse = GreenhouseScraper({'id': 6, 'name': 'Demo', 'slug': 'stripe', 'user_skills': [], 'location_filter': 'India'})
+        payload = {
+            'jobs': [
+                {
+                    'id': 8172508,
+                    'title': 'Abuse Investigator',
+                    'location': {'name': 'Remote - India'},
+                    'absolute_url': 'https://stripe.com/jobs/search?gh_jid=8172508'
+                }
+            ]
+        }
+
+        jobs = greenhouse._parse_jobs_from_api(payload)
+
+        self.assertEqual(len(jobs), 1)
+        self.assertEqual(jobs[0]['job_id'], '8172508')
+        self.assertEqual(jobs[0]['location'], 'Remote - India')
+        self.assertEqual(jobs[0]['job_url'], 'https://stripe.com/jobs/search?gh_jid=8172508')
+
 
 if __name__ == '__main__':
     unittest.main()

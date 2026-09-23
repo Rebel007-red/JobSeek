@@ -49,71 +49,76 @@ class Scraper:
             return []
 
         try:
-            async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=True)
-                page = await browser.new_page()
-                await page.goto(self.board_url, wait_until='domcontentloaded', timeout=30000)
-                await page.wait_for_timeout(2000)
+            board_api_url = self._board_api_url(self.board_url)
+            async with aiohttp.ClientSession() as session:
+                async with session.get(board_api_url, timeout=30) as response:
+                    if response.status != 200:
+                        print(f"    [WARN] Greenhouse API returned {response.status} for {board_api_url}")
+                        return []
 
-                jobs = []
-                seen = set()
-                page_num = 1
+                    payload = await response.json()
+                    jobs = self._parse_jobs_from_api(payload)
 
-                while True:
-                    content = await page.content()
-                    page_jobs = self._parse_jobs(content)
-                    for job in page_jobs:
-                        key = (job.get('company_id'), job.get('job_id'))
-                        if key not in seen:
-                            seen.add(key)
-                            jobs.append(job)
+            print(f"    [TOTAL] {len(jobs)} jobs fetched from Greenhouse API")
 
-                    # Greenhouse jobs pages are usually rendered server-side with a next page link
-                    next_link = await self._find_next_page_link(page)
-                    if not next_link:
-                        break
+            filtered_jobs = self._filter_by_location(jobs)
+            print(f"    [FILTER] Location filter: {len(jobs)} -> {len(filtered_jobs)} jobs")
 
-                    try:
-                        await next_link.click()
-                        await page.wait_for_timeout(2000)
-                        page_num += 1
-                    except Exception:
-                        break
+            filtered_jobs = self._filter_by_posted_date(filtered_jobs)
+            print(f"    [FILTER] Date filter: {len(filtered_jobs)} jobs remaining")
 
-                await browser.close()
+            # Description pages are not needed for the public API payload; the job content is not included.
+            for job in filtered_jobs:
+                job['description'] = 'Description unavailable'
 
-                print(f"    [TOTAL] {len(jobs)} jobs fetched from Greenhouse")
+            if self.skill_filter.skills and filtered_jobs:
+                filtered_jobs = self.skill_filter.filter(filtered_jobs)
+                stats = self.skill_filter.get_stats()
+                print(f"    [FILTER] Skills filter: {stats.get('total_matched', 0)} jobs matched")
 
-                filtered_jobs = self._filter_by_location(jobs)
-                print(f"    [FILTER] Location filter: {len(jobs)} -> {len(filtered_jobs)} jobs")
-
-                filtered_jobs = self._filter_by_posted_date(filtered_jobs)
-                print(f"    [FILTER] Date filter: {len(filtered_jobs)} jobs remaining")
-
-                for i, job in enumerate(filtered_jobs):
-                    detail_url = job.get('job_url')
-                    if not detail_url:
-                        job['description'] = 'Description unavailable'
-                        continue
-
-                    try:
-                        await page.goto(detail_url, wait_until='domcontentloaded', timeout=30000)
-                        await page.wait_for_timeout(1500)
-
-                        description = await self._extract_job_description(page)
-                        filtered_jobs[i]['description'] = description or 'Description unavailable'
-                    except Exception:
-                        filtered_jobs[i]['description'] = 'Description unavailable'
-
-                if self.skill_filter.skills and filtered_jobs:
-                    filtered_jobs = self.skill_filter.filter(filtered_jobs)
-                    stats = self.skill_filter.get_stats()
-                    print(f"    [FILTER] Skills filter: {stats.get('total_matched', 0)} jobs matched")
-
-                return filtered_jobs
+            return filtered_jobs
         except Exception as e:
             print(f"    [ERROR] Greenhouse scrape failed: {str(e)}")
             return []
+
+    def _board_api_url(self, board_url):
+        parsed = urlparse(board_url)
+        board_name = parsed.path.strip('/').split('/')[-1]
+        if not board_name:
+            board_name = (self.company_slug or self.company.get('slug') or '').strip().strip('/')
+        if not board_name:
+            raise ValueError(f"Unable to derive Greenhouse board slug from {board_url}")
+        return f"https://boards-api.greenhouse.io/v1/boards/{board_name}/jobs"
+
+    def _parse_jobs_from_api(self, payload):
+        jobs = payload.get('jobs', []) if isinstance(payload, dict) else []
+        parsed_jobs = []
+        for item in jobs:
+            if not isinstance(item, dict):
+                continue
+
+            title = (item.get('title') or '').strip()
+            if not title:
+                continue
+
+            location = (item.get('location') or {})
+            location_name = location.get('name') if isinstance(location, dict) else location
+            raw_url = item.get('absolute_url') or item.get('url') or item.get('job_url') or self.board_url
+            job_id = str(item.get('id') or self._extract_job_id(raw_url) or f"{self.company['id']}_{len(parsed_jobs)}")
+
+            parsed_jobs.append({
+                'company_id': self.company['id'],
+                'job_id': job_id,
+                'title': title,
+                'location': location_name or 'Not specified',
+                'job_url': raw_url,
+                'posted_date': item.get('first_published') or 'Today',
+                'description': 'Description unavailable',
+                'posted_at': item.get('updated_at') or datetime.now().isoformat(),
+                'skills': []
+            })
+
+        return parsed_jobs
 
     def _parse_jobs(self, html_content):
         soup = BeautifulSoup(html_content, 'html.parser')
