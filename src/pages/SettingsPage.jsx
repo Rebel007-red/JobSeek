@@ -6,8 +6,8 @@ const ATS_TYPES = ['greenhouse', 'workday', 'phenom', 'icims', 'oracle', 'succes
 
 const ATS_HELP = {
   greenhouse: {
-    slug: { label: 'Board Slug', placeholder: 'e.g. stripe', help: 'The part after boards.greenhouse.io/' },
-    api_url: null,
+    slug: null,
+    api_url: { label: 'Greenhouse API URL', placeholder: 'https://boards-api.greenhouse.io/v1/boards/stripe/jobs', help: 'Use the public Greenhouse jobs API URL for this board.' },
   },
   workday: {
     slug: null,
