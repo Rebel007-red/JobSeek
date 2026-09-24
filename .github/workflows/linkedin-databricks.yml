@@ -1,0 +1,47 @@
+name: LinkedIn Databricks Scraper
+
+"on":
+  schedule:
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
+
+jobs:
+  linkedin:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+          cache-dependency-path: |
+            scraper/requirements.txt
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r scraper/requirements.txt pandas requests
+
+      - name: Install Playwright browser
+        run: |
+          python -m playwright install chromium
+
+      - name: Run LinkedIn scraper
+        env:
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        run: |
+          python databricks/linkedin.py
+
+      - name: Upload LinkedIn CSV to Databricks volume
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: |
+          python databricks/upload_to_volume.py \
+            --volume /Volumes/jobseeker/default/scrapes \
+            --pattern "databricks/output/linkedin*.csv"

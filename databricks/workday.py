@@ -1,7 +1,7 @@
 import asyncio
 import os
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urljoin
 
@@ -33,6 +33,20 @@ def build_headers(extra_headers=None):
 
 HEADERS = build_headers()
 
+OUTPUT_COLUMNS = [
+    "company_name",
+    "ats_type",
+    "company_url",
+    "job_id",
+    "title",
+    "location",
+    "posted_date",
+    "job_url",
+    "description",
+    "collected_on",
+    "posted_days",
+]
+
 
 def sanitize_text(value):
     if value is None:
@@ -40,6 +54,16 @@ def sanitize_text(value):
 
     text = str(value).replace("\r", " ").replace("\n", " ")
     return re.sub(r"\s+", " ", text).strip()
+
+
+def format_calendar_date(value):
+    return value.strftime("%d/%m/%Y")
+
+
+def format_date_from_days_ago(days_ago):
+    if days_ago is None:
+        return ""
+    return format_calendar_date(date.today() - timedelta(days=days_ago))
 
 
 def extract_workday_job_id(job_url):
@@ -109,33 +133,45 @@ async def fetch_descriptions_for_jobs(jobs):
     if not jobs:
         return jobs
 
+    total_jobs = len(jobs)
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
-            page = await browser.new_page()
+            semaphore = asyncio.Semaphore(3)
+            progress_lock = asyncio.Lock()
+            progress = {"count": 0}
 
-            for job in jobs:
+            async def fetch_single_description(job):
                 detail_url = job.get("job_url")
                 if not detail_url:
                     job["description"] = ""
-                    continue
+                    return
 
-                try:
+                async with semaphore:
+                    page = await browser.new_page()
                     try:
-                        await page.goto(detail_url, wait_until="networkidle", timeout=30000)
+                        async with progress_lock:
+                            progress["count"] += 1
+                            print(f"    [DESC] {progress['count']}/{total_jobs}")
+
+                        try:
+                            await page.goto(detail_url, wait_until="networkidle", timeout=30000)
+                        except Exception:
+                            await page.goto(detail_url, wait_until="domcontentloaded", timeout=20000)
+
+                        await page.wait_for_timeout(1500)
+                        locator = page.locator('[data-automation-id="jobPostingDescription"]').first
+                        if await locator.count() > 0:
+                            description = await locator.text_content()
+                            job["description"] = description.strip() if description else ""
+                        else:
+                            job["description"] = ""
                     except Exception:
-                        await page.goto(detail_url, wait_until="domcontentloaded", timeout=20000)
-
-                    await page.wait_for_timeout(1500)
-                    locator = page.locator('[data-automation-id="jobPostingDescription"]').first
-                    if await locator.count() > 0:
-                        description = await locator.text_content()
-                        job["description"] = description.strip() if description else ""
-                    else:
                         job["description"] = ""
-                except Exception:
-                    job["description"] = ""
+                    finally:
+                        await page.close()
 
+            await asyncio.gather(*(fetch_single_description(job) for job in jobs))
             await browser.close()
     except Exception as exc:
         print(f"    [WARN] Failed to fetch filtered job descriptions: {exc}")
@@ -156,7 +192,6 @@ async def scrape_workday_jobs(workday_url):
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             page = await browser.new_page()
-            print(f"    [SCRAPE] {workday_url}")
             await page.goto(workday_url, wait_until="domcontentloaded", timeout=30000)
 
             for page_index in range(1, 21):
@@ -173,8 +208,6 @@ async def scrape_workday_jobs(workday_url):
                         continue
                     seen.add(key)
                     jobs.append(job)
-
-                print(f"    [PAGE {page_index}] found {len(page_jobs)} jobs, total collected {len(jobs)}")
 
                 next_selectors = [
                     'button[aria-label*="Next"]',
@@ -226,11 +259,8 @@ async def fetch_companies():
         "&disabled=eq.false"
         # "&limit=1"
     )
-    print(f"[API] Fetching: {url}")
-
     async with aiohttp.ClientSession() as session:
         async with session.get(url, headers=HEADERS) as response:
-            print(f"    Status: {response.status}")
             if response.status not in (200, 201):
                 text = await response.text()
                 print(f"    [ERROR] {text[:500]}")
@@ -244,16 +274,7 @@ def print_companies(companies):
         print("[INFO] No companies returned.")
         return
 
-    print(f"\n[INFO] Found {len(companies)} companies\n")
-    for company in companies:
-        print(
-            f"- {company.get('name')} | "
-            f"ats={company.get('ats_type')} | "
-            f"slug={company.get('slug')} | "
-            f"api_url={company.get('api_url')} | "
-            f"disabled={company.get('disabled')}"
-        )
-    print()
+    print(f"[INFO] Workday companies: {len(companies)}")
 
 
 def write_to_databricks_volume(payload, volume_path=DATABRICKS_VOLUME_PATH):
@@ -287,9 +308,17 @@ def posted_date_to_days(posted_date):
     return None
 
 
+def format_posted_date(posted_date):
+    days_ago = posted_date_to_days(posted_date)
+    if days_ago is None:
+        return posted_date or ""
+    return format_calendar_date(date.today() - timedelta(days=days_ago))
+
+
 def jobs_to_dataframe(jobs):
     rows = []
     for job in jobs:
+        raw_posted_date = job.get("posted_date", "")
         rows.append({
             "company_name": job.get("company_name", ""),
             "ats_type": job.get("ats_type", ""),
@@ -297,32 +326,18 @@ def jobs_to_dataframe(jobs):
             "job_id": job.get("job_id", ""),
             "title": job.get("title", ""),
             "location": job.get("location", ""),
-            "posted_date": job.get("posted_date", ""),
+            "posted_date": format_posted_date(raw_posted_date),
             "job_url": job.get("job_url", ""),
             "description": sanitize_text(job.get("description", "")),
             "collected_on": job.get("collected_on", ""),
+            "posted_days": posted_date_to_days(raw_posted_date),
         })
 
     dataframe = pd.DataFrame(rows)
     if dataframe.empty:
-        return pd.DataFrame(
-            columns=[
-                "company_name",
-                "ats_type",
-                "company_url",
-                "job_id",
-                "title",
-                "location",
-                "posted_date",
-                "job_url",
-                "description",
-                "collected_on",
-                "posted_days",
-            ]
-        )
+        return pd.DataFrame(columns=OUTPUT_COLUMNS)
 
-    dataframe["posted_days"] = dataframe["posted_date"].apply(posted_date_to_days)
-    return dataframe
+    return dataframe.reindex(columns=OUTPUT_COLUMNS)
 
 
 def keep_recent_jobs(dataframe):
@@ -351,12 +366,13 @@ def write_flat_jobs_csv(dataframe, output_dir):
 async def collect_workday_jobs():
     companies = await fetch_companies()
     collected_jobs = []
-    collected_on = date.today().isoformat()
+    collected_on = format_calendar_date(date.today())
 
     for company in companies:
         company_name = company.get("name") or "Unknown"
         api_url = company.get("api_url")
         jobs = await scrape_workday_jobs(api_url)
+        print(f"[COMPANY] {company_name}: jobs found {len(jobs)}")
 
         for job in jobs:
             collected_jobs.append({
@@ -372,8 +388,6 @@ async def collect_workday_jobs():
                 "collected_on": collected_on,
             })
 
-        print(f"[COLLECTED] {company_name}: {len(jobs)} jobs")
-
     return collected_jobs
 
 
@@ -384,13 +398,10 @@ async def main():
     jobs = await collect_workday_jobs()
     jobs_dataframe = jobs_to_dataframe(jobs)
     filtered_jobs_dataframe = keep_recent_jobs(jobs_dataframe)
+    print(f"[FILTER] Workday jobs after filtering: {len(filtered_jobs_dataframe)}")
     filtered_jobs = filtered_jobs_dataframe.to_dict(orient="records")
     filtered_jobs = await fetch_descriptions_for_jobs(filtered_jobs)
     filtered_jobs_dataframe = jobs_to_dataframe(filtered_jobs)
-    print(
-        "[FILTER] Posted date mapped to posted_days and filtered to <= 1: "
-        f"{len(jobs_dataframe)} -> {len(filtered_jobs_dataframe)} rows"
-    )
     write_flat_jobs_csv(filtered_jobs_dataframe, Path(__file__).resolve().parent / "output")
 
 

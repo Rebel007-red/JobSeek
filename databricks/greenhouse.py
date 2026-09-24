@@ -31,6 +31,20 @@ def build_headers(extra_headers=None):
 
 HEADERS = build_headers()
 
+OUTPUT_COLUMNS = [
+	"company_name",
+	"ats_type",
+	"company_url",
+	"job_id",
+	"title",
+	"location",
+	"posted_date",
+	"job_url",
+	"description",
+	"collected_on",
+	"posted_days",
+]
+
 
 def sanitize_text(value):
 	if value is None:
@@ -38,6 +52,10 @@ def sanitize_text(value):
 
 	text = str(value).replace("\r", " ").replace("\n", " ")
 	return re.sub(r"\s+", " ", text).strip()
+
+
+def format_calendar_date(value):
+	return value.strftime("%d/%m/%Y")
 
 
 def normalize_board_url(raw_value):
@@ -176,41 +194,53 @@ async def fetch_descriptions_for_jobs(jobs):
 	try:
 		async with async_playwright() as p:
 			browser = await p.chromium.launch(headless=True)
-			page = await browser.new_page()
+			total_jobs = len(jobs)
+			semaphore = asyncio.Semaphore(3)
+			progress_lock = asyncio.Lock()
+			progress = {"count": 0}
 
-			for job in jobs:
+			async def fetch_single_description(job):
 				if job.get("description"):
-					continue
+					return
 
 				detail_url = job.get("job_url")
 				if not detail_url:
 					job["description"] = ""
-					continue
+					return
 
-				try:
+				async with semaphore:
+					page = await browser.new_page()
 					try:
-						await page.goto(detail_url, wait_until="networkidle", timeout=30000)
+						async with progress_lock:
+							progress["count"] += 1
+							print(f"    [DESC] {progress['count']}/{total_jobs}")
+
+						try:
+							await page.goto(detail_url, wait_until="networkidle", timeout=30000)
+						except Exception:
+							await page.goto(detail_url, wait_until="domcontentloaded", timeout=20000)
+
+						await page.wait_for_timeout(1000)
+						description = ""
+						for selector in selectors:
+							locator = page.locator(selector).first
+							if await locator.count() > 0:
+								text = await locator.text_content()
+								if text and len(text.strip()) > 80:
+									description = text.strip()
+									break
+
+						if not description:
+							body = await page.locator("body").text_content()
+							description = body.strip() if body else ""
+
+						job["description"] = description
 					except Exception:
-						await page.goto(detail_url, wait_until="domcontentloaded", timeout=20000)
+						job["description"] = ""
+					finally:
+						await page.close()
 
-					await page.wait_for_timeout(1000)
-					description = ""
-					for selector in selectors:
-						locator = page.locator(selector).first
-						if await locator.count() > 0:
-							text = await locator.text_content()
-							if text and len(text.strip()) > 80:
-								description = text.strip()
-								break
-
-					if not description:
-						body = await page.locator("body").text_content()
-						description = body.strip() if body else ""
-
-					job["description"] = description
-				except Exception:
-					job["description"] = ""
-
+			await asyncio.gather(*(fetch_single_description(job) for job in jobs))
 			await browser.close()
 	except Exception as exc:
 		print(f"    [WARN] Failed to fetch filtered Greenhouse job descriptions: {exc}")
@@ -236,11 +266,8 @@ async def fetch_companies():
 		"&disabled=eq.false"
 		# "&limit=2"
 	)
-	print(f"[API] Fetching: {url}")
-
 	async with aiohttp.ClientSession() as session:
 		async with session.get(url, headers=HEADERS) as response:
-			print(f"    Status: {response.status}")
 			if response.status not in (200, 201):
 				text = await response.text()
 				print(f"    [ERROR] {text[:500]}")
@@ -253,16 +280,7 @@ def print_companies(companies):
 		print("[INFO] No companies returned.")
 		return
 
-	print(f"\n[INFO] Found {len(companies)} companies\n")
-	for company in companies:
-		print(
-			f"- {company.get('name')} | "
-			f"ats={company.get('ats_type')} | "
-			f"slug={company.get('slug') or company.get('greenhouse_slug')} | "
-			f"api_url={normalize_board_url(company.get('slug') or company.get('greenhouse_slug') or company.get('api_url') or company.get('board_url'))} | "
-			f"disabled={company.get('disabled')}"
-		)
-	print()
+	print(f"[INFO] Greenhouse companies: {len(companies)}")
 
 
 def jobs_to_dataframe(jobs):
@@ -285,23 +303,9 @@ def jobs_to_dataframe(jobs):
 
 	dataframe = pd.DataFrame(rows)
 	if dataframe.empty:
-		return pd.DataFrame(
-			columns=[
-				"company_name",
-				"ats_type",
-				"company_url",
-				"job_id",
-				"title",
-				"location",
-				"posted_date",
-				"job_url",
-				"description",
-				"collected_on",
-				"posted_days",
-			]
-		)
+		return pd.DataFrame(columns=OUTPUT_COLUMNS)
 
-	return dataframe
+	return dataframe.reindex(columns=OUTPUT_COLUMNS)
 
 
 def write_flat_jobs_csv(dataframe, output_dir):
@@ -320,7 +324,7 @@ def write_flat_jobs_csv(dataframe, output_dir):
 async def collect_greenhouse_jobs():
 	companies = await fetch_companies()
 	collected_jobs = []
-	collected_on = date.today().isoformat()
+	collected_on = format_calendar_date(date.today())
 
 	async with aiohttp.ClientSession() as session:
 		for company in companies:
@@ -343,6 +347,7 @@ async def collect_greenhouse_jobs():
 				continue
 
 			jobs = parse_jobs_from_api(payload, board_url)
+			print(f"[COMPANY] {company_name}: jobs found {len(jobs)}")
 			for job in jobs:
 				collected_jobs.append({
 					"company_name": company_name,
@@ -357,8 +362,6 @@ async def collect_greenhouse_jobs():
 					"collected_on": collected_on,
 				})
 
-			print(f"[COLLECTED] {company_name}: {len(jobs)} jobs")
-
 	return collected_jobs
 
 
@@ -369,13 +372,10 @@ async def main():
 	jobs = await collect_greenhouse_jobs()
 	jobs_dataframe = jobs_to_dataframe(jobs)
 	filtered_jobs_dataframe = keep_recent_jobs(jobs_dataframe)
+	print(f"[FILTER] Greenhouse jobs after filtering: {len(filtered_jobs_dataframe)}")
 	filtered_jobs = filtered_jobs_dataframe.to_dict(orient="records")
 	filtered_jobs = await fetch_descriptions_for_jobs(filtered_jobs)
 	filtered_jobs_dataframe = jobs_to_dataframe(filtered_jobs)
-	print(
-		"[FILTER] Posted date mapped to posted_days and filtered to <= 1: "
-		f"{len(jobs_dataframe)} -> {len(filtered_jobs_dataframe)} rows"
-	)
 	write_flat_jobs_csv(filtered_jobs_dataframe, Path(__file__).resolve().parent / "output")
 
 
