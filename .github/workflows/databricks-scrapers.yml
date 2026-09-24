@@ -1,0 +1,85 @@
+name: Databricks Scrapers
+
+on:
+  workflow_dispatch:
+
+jobs:
+  workday:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+          cache-dependency-path: |
+            scraper/requirements.txt
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r scraper/requirements.txt pandas requests
+
+      - name: Install Playwright browser
+        run: |
+          python -m playwright install chromium
+
+      - name: Run Workday scraper
+        env:
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        run: |
+          python databricks/workday.py
+
+      - name: Upload Workday CSV to Databricks volume
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: |
+          python databricks/upload_to_volume.py \
+            --volume /Volumes/jobseeker/default/scrapes \
+            --pattern "databricks/output/workday*.csv"
+
+  greenhouse:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+          cache-dependency-path: |
+            scraper/requirements.txt
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r scraper/requirements.txt pandas requests
+
+      - name: Install Playwright browser
+        run: |
+          python -m playwright install chromium
+
+      - name: Run Greenhouse scraper
+        env:
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        run: |
+          python databricks/greenhouse.py
+
+      - name: Upload Greenhouse CSV to Databricks volume
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: |
+          python databricks/upload_to_volume.py \
+            --volume /Volumes/jobseeker/default/scrapes \
+            --pattern "databricks/output/greenhouse*.csv"
