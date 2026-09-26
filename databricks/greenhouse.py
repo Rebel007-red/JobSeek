@@ -2,6 +2,7 @@ import asyncio
 import html
 import os
 import re
+import sys
 from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import urlparse
@@ -17,6 +18,9 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").rstrip("/")
 BASE_URL = f"{SUPABASE_URL}/rest/v1" if SUPABASE_URL else ""
+
+# Keep jobs posted within this many days (0 = today only). Downstream MERGE dedupes overlaps.
+MAX_POSTED_DAYS = int(os.getenv("MAX_POSTED_DAYS", "1"))
 
 
 def build_headers(extra_headers=None):
@@ -110,7 +114,8 @@ def posted_iso_to_days(posted_date):
 		return None
 
 	try:
-		parsed = datetime.fromisoformat(value.replace("Z", "+00:00")).date()
+		# Convert to local time (IST via TZ) before taking the date so it matches date.today().
+		parsed = datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone().date()
 		return (date.today() - parsed).days
 	except ValueError:
 		lowered = value.lower()
@@ -132,7 +137,7 @@ def format_posted_date(posted_date):
 		return ""
 
 	try:
-		parsed = datetime.fromisoformat(value.replace("Z", "+00:00")).date()
+		parsed = datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone().date()
 		return parsed.strftime("%d/%m/%Y")
 	except ValueError:
 		return value
@@ -141,6 +146,7 @@ def format_posted_date(posted_date):
 def parse_jobs_from_api(payload, board_url):
 	jobs = payload.get("jobs", []) if isinstance(payload, dict) else []
 	parsed_jobs = []
+	missing_published = 0
 
 	for item in jobs:
 		if not isinstance(item, dict):
@@ -150,11 +156,16 @@ def parse_jobs_from_api(payload, board_url):
 		if not title:
 			continue
 
+		# Only first_published reflects when a job was posted; updated_at changes on every edit.
+		posted_date = item.get("first_published") or ""
+		if not posted_date:
+			missing_published += 1
+			continue
+
 		location = item.get("location") or {}
 		location_name = location.get("name") if isinstance(location, dict) else location
 		job_url = item.get("absolute_url") or item.get("url") or item.get("job_url") or board_url
 		job_id = str(item.get("id") or extract_greenhouse_job_id(job_url, len(parsed_jobs)))
-		posted_date = item.get("first_published") or item.get("updated_at") or ""
 
 		parsed_jobs.append({
 			"job_id": job_id,
@@ -165,6 +176,9 @@ def parse_jobs_from_api(payload, board_url):
 			"description": greenhouse_content_to_text(item.get("content", "")),
 		})
 
+	if missing_published:
+		print(f"    [WARN] Skipped {missing_published} Greenhouse jobs without first_published")
+
 	return parsed_jobs
 
 
@@ -173,7 +187,26 @@ def keep_recent_jobs(dataframe):
 		return dataframe
 
 	filtered = dataframe[dataframe["posted_days"].notna()].copy()
-	return filtered[filtered["posted_days"] == 0]
+	return filtered[filtered["posted_days"] <= MAX_POSTED_DAYS]
+
+
+async def fetch_board_jobs(session, api_url, attempts=3):
+	"""Return the board payload, or None after non-retryable errors or exhausted retries."""
+	for attempt in range(1, attempts + 1):
+		try:
+			async with session.get(api_url, timeout=aiohttp.ClientTimeout(total=30)) as response:
+				if response.status == 200:
+					return await response.json()
+				print(f"    [WARN] Greenhouse API returned {response.status} for {api_url} (attempt {attempt}/{attempts})")
+				if response.status < 500 and response.status != 429:
+					return None
+		except Exception as exc:
+			print(f"    [WARN] Greenhouse API request failed for {api_url} (attempt {attempt}/{attempts}): {exc}")
+
+		if attempt < attempts:
+			await asyncio.sleep(2 ** attempt)
+
+	return None
 
 
 async def fetch_descriptions_for_jobs(jobs):
@@ -308,6 +341,15 @@ def jobs_to_dataframe(jobs):
 	return dataframe.reindex(columns=OUTPUT_COLUMNS)
 
 
+def finalize_dataframe(jobs):
+	"""Build the output frame from already-normalized rows without re-parsing dates."""
+	for job in jobs:
+		job["description"] = sanitize_text(job.get("description", ""))
+	dataframe = pd.DataFrame(jobs, columns=OUTPUT_COLUMNS)
+	dataframe["posted_days"] = dataframe["posted_days"].astype("Int64")
+	return dataframe
+
+
 def write_flat_jobs_csv(dataframe, output_dir):
 	try:
 		os.makedirs(output_dir, exist_ok=True)
@@ -321,9 +363,9 @@ def write_flat_jobs_csv(dataframe, output_dir):
 		return None
 
 
-async def collect_greenhouse_jobs():
-	companies = await fetch_companies()
+async def collect_greenhouse_jobs(companies):
 	collected_jobs = []
+	failed_companies = []
 	collected_on = format_calendar_date(date.today())
 
 	async with aiohttp.ClientSession() as session:
@@ -333,17 +375,20 @@ async def collect_greenhouse_jobs():
 			board_url = normalize_board_url(board_url)
 			if not board_url:
 				print(f"    [WARN] Missing Greenhouse board URL for {company_name}")
+				failed_companies.append(company_name)
 				continue
 
 			try:
 				api_url = board_api_url(board_url)
-				async with session.get(api_url, timeout=30) as response:
-					if response.status != 200:
-						print(f"    [WARN] Greenhouse API returned {response.status} for {api_url}")
-						continue
-					payload = await response.json()
-			except Exception as exc:
-				print(f"    [WARN] Failed to fetch Greenhouse jobs for {company_name}: {exc}")
+			except ValueError as exc:
+				print(f"    [WARN] {exc}")
+				failed_companies.append(company_name)
+				continue
+
+			payload = await fetch_board_jobs(session, api_url)
+			if payload is None:
+				print(f"[COMPANY] {company_name}: failed")
+				failed_companies.append(company_name)
 				continue
 
 			jobs = parse_jobs_from_api(payload, board_url)
@@ -362,21 +407,38 @@ async def collect_greenhouse_jobs():
 					"collected_on": collected_on,
 				})
 
-	return collected_jobs
+	return collected_jobs, failed_companies
 
 
 async def main():
 	companies = await fetch_companies()
 	print_companies(companies)
+	if not companies:
+		print("[ERROR] No Greenhouse companies to scrape.")
+		sys.exit(1)
 
-	jobs = await collect_greenhouse_jobs()
+	jobs, failed_companies = await collect_greenhouse_jobs(companies)
 	jobs_dataframe = jobs_to_dataframe(jobs)
 	filtered_jobs_dataframe = keep_recent_jobs(jobs_dataframe)
-	print(f"[FILTER] Greenhouse jobs after filtering: {len(filtered_jobs_dataframe)}")
+	print(f"[FILTER] Greenhouse jobs after filtering (posted_days <= {MAX_POSTED_DAYS}): {len(filtered_jobs_dataframe)}")
 	filtered_jobs = filtered_jobs_dataframe.to_dict(orient="records")
 	filtered_jobs = await fetch_descriptions_for_jobs(filtered_jobs)
-	filtered_jobs_dataframe = jobs_to_dataframe(filtered_jobs)
-	write_flat_jobs_csv(filtered_jobs_dataframe, Path(__file__).resolve().parent / "output")
+	filtered_jobs_dataframe = finalize_dataframe(filtered_jobs)
+	output_file = write_flat_jobs_csv(filtered_jobs_dataframe, Path(__file__).resolve().parent / "output")
+
+	print(
+		f"[SUMMARY] companies={len(companies)} failed={len(failed_companies)} "
+		f"jobs_scraped={len(jobs)} jobs_written={len(filtered_jobs_dataframe)} "
+		f"missing_descriptions={int((filtered_jobs_dataframe['description'] == '').sum())}"
+	)
+	if failed_companies:
+		print(f"[SUMMARY] failed companies: {', '.join(failed_companies)}")
+
+	if not output_file:
+		sys.exit(1)
+	if len(failed_companies) == len(companies):
+		print("[ERROR] All Greenhouse companies failed.")
+		sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -5,9 +5,17 @@ on:
     - cron: '0 */12 * * *'
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+env:
+  TZ: Asia/Kolkata
+
 jobs:
   workday:
     runs-on: ubuntu-latest
+    timeout-minutes: 100
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -23,11 +31,11 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          pip install -r scraper/requirements.txt pandas requests
+          pip install -r scraper/requirements.txt
 
       - name: Install Playwright browser
         run: |
-          python -m playwright install chromium
+          python -m playwright install --with-deps chromium
 
       - name: Run Workday scraper
         env:
@@ -46,8 +54,18 @@ jobs:
             --volume /Volumes/jobseeker/default/scrapes \
             --pattern "databricks/output/workday*.csv"
 
+      - name: Save Workday CSV artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workday-csv
+          path: databricks/output/workday*.csv
+          if-no-files-found: ignore
+          retention-days: 7
+
   greenhouse:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -63,11 +81,11 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          pip install -r scraper/requirements.txt pandas requests
+          pip install -r scraper/requirements.txt
 
       - name: Install Playwright browser
         run: |
-          python -m playwright install chromium
+          python -m playwright install --with-deps chromium
 
       - name: Run Greenhouse scraper
         env:
@@ -85,3 +103,12 @@ jobs:
           python databricks/upload_to_volume.py \
             --volume /Volumes/jobseeker/default/scrapes \
             --pattern "databricks/output/greenhouse*.csv"
+
+      - name: Save Greenhouse CSV artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: greenhouse-csv
+          path: databricks/output/greenhouse*.csv
+          if-no-files-found: ignore
+          retention-days: 7

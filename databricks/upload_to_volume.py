@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+import time
 from datetime import date
 from pathlib import Path
 
@@ -54,7 +55,7 @@ def create_remote_directory(remote_directory: str) -> None:
         raise RuntimeError(f"Create directory failed with status {response.status_code}: {response.text[:500]}")
 
 
-def upload_file(local_file: Path, remote_path: str) -> None:
+def upload_file(local_file: Path, remote_path: str, attempts: int = 3) -> None:
     host = (os.getenv("DATABRICKS_HOST") or "").strip().strip('"')
     token = (os.getenv("DATABRICKS_TOKEN") or "").strip().strip('"')
 
@@ -67,12 +68,27 @@ def upload_file(local_file: Path, remote_path: str) -> None:
         "Content-Type": "application/octet-stream",
     }
 
-    print(f"[UPLOAD] PUT {url}")
-    with open(local_file, "rb") as file_handle:
-        response = requests.put(url, headers=headers, data=file_handle, timeout=300)
+    error = ""
+    for attempt in range(1, attempts + 1):
+        print(f"[UPLOAD] PUT {url} (attempt {attempt}/{attempts})")
+        try:
+            with open(local_file, "rb") as file_handle:
+                response = requests.put(url, headers=headers, data=file_handle, timeout=300)
+        except requests.RequestException as exc:
+            error = str(exc)
+        else:
+            if response.status_code == 204:
+                return
+            error = f"status {response.status_code}: {response.text[:500]}"
+            # Client errors (bad path, auth) will not succeed on retry.
+            if response.status_code < 500 and response.status_code != 429:
+                break
 
-    if response.status_code != 204:
-        raise RuntimeError(f"Upload failed with status {response.status_code}: {response.text[:500]}")
+        if attempt < attempts:
+            print(f"[RETRY] Upload failed ({error}); retrying")
+            time.sleep(2 ** attempt)
+
+    raise RuntimeError(f"Upload failed with {error}")
 
 
 if __name__ == "__main__":

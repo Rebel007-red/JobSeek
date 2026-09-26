@@ -1,6 +1,7 @@
 import asyncio
 import os
 import re
+import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urljoin
@@ -17,8 +18,8 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").rstrip("/")
 BASE_URL = f"{SUPABASE_URL}/rest/v1" if SUPABASE_URL else ""
 
-# Databricks Unity Catalog volume path for raw scraped data
-DATABRICKS_VOLUME_PATH = os.getenv("DATABRICKS_VOLUME_PATH", "/Volumes/main/default/jobseeker_raw")
+# Keep jobs posted within this many days (0 = today only). Downstream MERGE dedupes overlaps.
+MAX_POSTED_DAYS = int(os.getenv("MAX_POSTED_DAYS", "1"))
 
 
 def build_headers(extra_headers=None):
@@ -58,12 +59,6 @@ def sanitize_text(value):
 
 def format_calendar_date(value):
     return value.strftime("%d/%m/%Y")
-
-
-def format_date_from_days_ago(days_ago):
-    if days_ago is None:
-        return ""
-    return format_calendar_date(date.today() - timedelta(days=days_ago))
 
 
 def extract_workday_job_id(job_url):
@@ -182,11 +177,14 @@ async def fetch_descriptions_for_jobs(jobs):
 
 
 async def scrape_workday_jobs(workday_url):
+    """Return a list of jobs, or None when the company could not be scraped."""
     if not workday_url:
-        return []
+        print("    [WARN] Missing Workday URL")
+        return None
 
     jobs = []
     seen = set()
+    stale_retry_used = False
 
     try:
         async with async_playwright() as p:
@@ -202,12 +200,24 @@ async def scrape_workday_jobs(workday_url):
 
                 html = await page.content()
                 page_jobs = parse_workday_page_jobs(html, workday_url)
+                new_jobs_on_page = 0
                 for job in page_jobs:
                     key = (job.get("title") or "", job.get("job_url") or "")
                     if not key[0] or not key[1] or key in seen:
                         continue
                     seen.add(key)
                     jobs.append(job)
+                    new_jobs_on_page += 1
+
+                # A disabled-but-visible Next button leaves us on the same page; stop instead of re-reading it.
+                # Re-read once without clicking first, in case the previous click was just slow to render.
+                if new_jobs_on_page == 0:
+                    if stale_retry_used:
+                        break
+                    stale_retry_used = True
+                    await page.wait_for_timeout(3000)
+                    continue
+                stale_retry_used = False
 
                 next_selectors = [
                     'button[aria-label*="Next"]',
@@ -238,7 +248,7 @@ async def scrape_workday_jobs(workday_url):
             await browser.close()
     except Exception as exc:
         print(f"    [WARN] Failed to fetch Workday URL with Playwright: {exc}")
-        return []
+        return None
 
     return jobs
 
@@ -275,21 +285,6 @@ def print_companies(companies):
         return
 
     print(f"[INFO] Workday companies: {len(companies)}")
-
-
-def write_to_databricks_volume(payload, volume_path=DATABRICKS_VOLUME_PATH):
-    """Write raw payload to a Databricks schema volume path."""
-    try:
-        os.makedirs(volume_path, exist_ok=True)
-        output_file = os.path.join(volume_path, "workday_jobs_raw.json")
-        with open(output_file, "w", encoding="utf-8") as f:
-            import json
-            json.dump(payload, f, ensure_ascii=False, indent=2)
-        print(f"[WRITE] Raw payload saved to {output_file}")
-        return output_file
-    except Exception as exc:
-        print(f"[ERROR] Failed to write to volume path: {exc}")
-        return None
 
 
 def posted_date_to_days(posted_date):
@@ -340,12 +335,21 @@ def jobs_to_dataframe(jobs):
     return dataframe.reindex(columns=OUTPUT_COLUMNS)
 
 
+def finalize_dataframe(jobs):
+    """Build the output frame from already-normalized rows without re-parsing dates."""
+    for job in jobs:
+        job["description"] = sanitize_text(job.get("description", ""))
+    dataframe = pd.DataFrame(jobs, columns=OUTPUT_COLUMNS)
+    dataframe["posted_days"] = dataframe["posted_days"].astype("Int64")
+    return dataframe
+
+
 def keep_recent_jobs(dataframe):
     if dataframe.empty:
         return dataframe
 
     filtered = dataframe[dataframe["posted_days"].notna()].copy()
-    return filtered[filtered["posted_days"] == 0]
+    return filtered[filtered["posted_days"] <= MAX_POSTED_DAYS]
 
 
 def write_flat_jobs_csv(dataframe, output_dir):
@@ -363,15 +367,19 @@ def write_flat_jobs_csv(dataframe, output_dir):
         return None
 
 
-async def collect_workday_jobs():
-    companies = await fetch_companies()
+async def collect_workday_jobs(companies):
     collected_jobs = []
+    failed_companies = []
     collected_on = format_calendar_date(date.today())
 
     for company in companies:
         company_name = company.get("name") or "Unknown"
         api_url = company.get("api_url")
         jobs = await scrape_workday_jobs(api_url)
+        if jobs is None:
+            failed_companies.append(company_name)
+            print(f"[COMPANY] {company_name}: failed")
+            continue
         print(f"[COMPANY] {company_name}: jobs found {len(jobs)}")
 
         for job in jobs:
@@ -388,21 +396,38 @@ async def collect_workday_jobs():
                 "collected_on": collected_on,
             })
 
-    return collected_jobs
+    return collected_jobs, failed_companies
 
 
 async def main():
     companies = await fetch_companies()
     print_companies(companies)
+    if not companies:
+        print("[ERROR] No Workday companies to scrape.")
+        sys.exit(1)
 
-    jobs = await collect_workday_jobs()
+    jobs, failed_companies = await collect_workday_jobs(companies)
     jobs_dataframe = jobs_to_dataframe(jobs)
     filtered_jobs_dataframe = keep_recent_jobs(jobs_dataframe)
-    print(f"[FILTER] Workday jobs after filtering: {len(filtered_jobs_dataframe)}")
+    print(f"[FILTER] Workday jobs after filtering (posted_days <= {MAX_POSTED_DAYS}): {len(filtered_jobs_dataframe)}")
     filtered_jobs = filtered_jobs_dataframe.to_dict(orient="records")
     filtered_jobs = await fetch_descriptions_for_jobs(filtered_jobs)
-    filtered_jobs_dataframe = jobs_to_dataframe(filtered_jobs)
-    write_flat_jobs_csv(filtered_jobs_dataframe, Path(__file__).resolve().parent / "output")
+    filtered_jobs_dataframe = finalize_dataframe(filtered_jobs)
+    output_file = write_flat_jobs_csv(filtered_jobs_dataframe, Path(__file__).resolve().parent / "output")
+
+    print(
+        f"[SUMMARY] companies={len(companies)} failed={len(failed_companies)} "
+        f"jobs_scraped={len(jobs)} jobs_written={len(filtered_jobs_dataframe)} "
+        f"missing_descriptions={int((filtered_jobs_dataframe['description'] == '').sum())}"
+    )
+    if failed_companies:
+        print(f"[SUMMARY] failed companies: {', '.join(failed_companies)}")
+
+    if not output_file:
+        sys.exit(1)
+    if len(failed_companies) == len(companies):
+        print("[ERROR] All Workday companies failed.")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

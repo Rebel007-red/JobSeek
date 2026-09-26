@@ -1,6 +1,7 @@
 import asyncio
 import os
 import re
+import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote
@@ -16,6 +17,11 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").rstrip("/")
 BASE_URL = f"{SUPABASE_URL}/rest/v1" if SUPABASE_URL else ""
+
+# Keep jobs posted within this many days (0 = today only). Downstream MERGE dedupes overlaps.
+MAX_POSTED_DAYS = int(os.getenv("MAX_POSTED_DAYS", "1"))
+
+BLOCKED_URL_MARKERS = ("authwall", "/login", "checkpoint")
 
 
 def build_headers(extra_headers=None):
@@ -104,15 +110,18 @@ def parse_linkedin_jobs(html_content):
 	jobs = []
 	job_cards = soup.find_all("div", class_="base-card")
 
-	for idx, card in enumerate(job_cards):
+	for card in job_cards:
 		try:
 			job_link = card.find("a", class_="base-card__full-link")
 			if not job_link or not job_link.get("href"):
 				continue
 
-			job_url = job_link["href"]
-			match = re.search(r"/view/([^?]+)", job_url)
-			job_id = match.group(1) if match else f"linkedin_{idx}"
+			# Drop tracking query params so the same job always has the same URL.
+			job_url = job_link["href"].split("?", 1)[0]
+			match = re.search(r"/view/(?:[^/?]*-)?(\d+)", job_url) or re.search(r"/view/([^/?]+)", job_url)
+			if not match:
+				continue
+			job_id = match.group(1)
 
 			title_elem = card.find("h3", class_="base-search-card__title")
 			title = title_elem.get_text(strip=True) if title_elem else ""
@@ -303,11 +312,12 @@ async def fetch_descriptions_for_jobs(jobs):
 
 
 async def scrape_linkedin_jobs(company):
+	"""Return a list of jobs, or None when the search failed or LinkedIn blocked the request."""
 	keywords = company.get("api_url", "")
 	search_url = build_search_url(keywords)
 	if not search_url:
 		print(f"    [ERROR] No keywords provided in api_url field for {company.get('name')}")
-		return []
+		return None
 
 	target_jobs = int(company.get("linkedin_target_jobs", 250) or 250)
 	max_pages = int(company.get("linkedin_max_pages", 20) or 20)
@@ -316,16 +326,29 @@ async def scrape_linkedin_jobs(company):
 	try:
 		async with async_playwright() as p:
 			browser = await p.chromium.launch(headless=True)
-			page = await browser.new_page()
-			await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
-			await page.wait_for_selector('div[class*="base-card"]', timeout=10000)
+			try:
+				page = await browser.new_page()
+				response = await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
+				if response is not None and response.status >= 400:
+					print(f"    [WARN] LinkedIn returned HTTP {response.status}")
+					return None
+				if any(marker in page.url for marker in BLOCKED_URL_MARKERS):
+					print(f"    [WARN] LinkedIn redirected to a login/authwall page: {page.url}")
+					return None
 
-			loaded_count = await load_more_results(page, target_jobs, max_pages, pagination_delay_seconds)
-			html = await page.content()
-			await browser.close()
+				try:
+					await page.wait_for_selector('div[class*="base-card"]', timeout=10000)
+				except Exception:
+					print("    [WARN] No LinkedIn job cards found")
+					return []
+
+				loaded_count = await load_more_results(page, target_jobs, max_pages, pagination_delay_seconds)
+				html = await page.content()
+			finally:
+				await browser.close()
 	except Exception as exc:
 		print(f"    [WARN] Failed to fetch LinkedIn jobs: {exc}")
-		return []
+		return None
 
 	jobs = dedupe_jobs(parse_linkedin_jobs(html))
 	print(f"[SCRAPE] LinkedIn loaded {loaded_count} cards and parsed {len(jobs)} jobs")
@@ -393,7 +416,7 @@ def keep_recent_jobs(dataframe):
 		return dataframe
 
 	filtered = dataframe[dataframe["posted_days"].notna()].copy()
-	return filtered[filtered["posted_days"] <= 1]
+	return filtered[filtered["posted_days"] <= MAX_POSTED_DAYS]
 
 
 def write_flat_jobs_csv(dataframe, output_dir):
@@ -409,17 +432,29 @@ def write_flat_jobs_csv(dataframe, output_dir):
 		return None
 
 
-async def collect_linkedin_jobs():
-	companies = await fetch_companies()
+async def collect_linkedin_jobs(companies):
 	collected_jobs = []
+	failed_companies = []
+	seen_job_ids = set()
+	duplicate_count = 0
 	collected_on = format_calendar_date(date.today())
 
 	for company in companies:
 		company_name = company.get("name") or "Unknown"
 		jobs = await scrape_linkedin_jobs(company)
+		if jobs is None:
+			failed_companies.append(company_name)
+			print(f"[COMPANY] {company_name}: failed")
+			continue
 		print(f"[COMPANY] {company_name}: jobs found {len(jobs)}")
 
 		for job in jobs:
+			job_id = job.get("job_id", "")
+			if job_id in seen_job_ids:
+				duplicate_count += 1
+				continue
+			seen_job_ids.add(job_id)
+
 			posted_days = posted_time_to_days(job.get("posted_time", ""))
 			posted_datetime = (job.get("posted_datetime") or "").strip()
 			posted_date = format_posted_date(posted_datetime) if posted_datetime else format_date_from_days_ago(posted_days)
@@ -438,21 +473,42 @@ async def collect_linkedin_jobs():
 				"posted_days": posted_days,
 			})
 
-	return collected_jobs
+	if duplicate_count:
+		print(f"[DEDUPE] Skipped {duplicate_count} LinkedIn jobs already seen in another search")
+
+	return collected_jobs, failed_companies
 
 
 async def main():
 	companies = await fetch_companies()
 	print_companies(companies)
+	if not companies:
+		print("[ERROR] No LinkedIn searches to run.")
+		sys.exit(1)
 
-	jobs = await collect_linkedin_jobs()
+	jobs, failed_companies = await collect_linkedin_jobs(companies)
 	jobs_dataframe = jobs_to_dataframe(jobs)
 	filtered_jobs_dataframe = keep_recent_jobs(jobs_dataframe)
-	print(f"[FILTER] LinkedIn jobs after filtering: {len(filtered_jobs_dataframe)}")
+	print(f"[FILTER] LinkedIn jobs after filtering (posted_days <= {MAX_POSTED_DAYS}): {len(filtered_jobs_dataframe)}")
 	filtered_jobs = filtered_jobs_dataframe.to_dict(orient="records")
 	filtered_jobs = await fetch_descriptions_for_jobs(filtered_jobs)
 	filtered_jobs_dataframe = jobs_to_dataframe(filtered_jobs)
-	write_flat_jobs_csv(filtered_jobs_dataframe, Path(__file__).resolve().parent / "output")
+	filtered_jobs_dataframe["posted_days"] = filtered_jobs_dataframe["posted_days"].astype("Int64")
+	output_file = write_flat_jobs_csv(filtered_jobs_dataframe, Path(__file__).resolve().parent / "output")
+
+	print(
+		f"[SUMMARY] searches={len(companies)} failed={len(failed_companies)} "
+		f"jobs_scraped={len(jobs)} jobs_written={len(filtered_jobs_dataframe)} "
+		f"missing_descriptions={int((filtered_jobs_dataframe['description'] == '').sum())}"
+	)
+	if failed_companies:
+		print(f"[SUMMARY] failed searches: {', '.join(failed_companies)}")
+
+	if not output_file:
+		sys.exit(1)
+	if len(failed_companies) == len(companies):
+		print("[ERROR] All LinkedIn searches failed.")
+		sys.exit(1)
 
 
 if __name__ == "__main__":
