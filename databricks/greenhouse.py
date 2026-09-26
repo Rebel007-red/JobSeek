@@ -173,7 +173,7 @@ def keep_recent_jobs(dataframe):
 		return dataframe
 
 	filtered = dataframe[dataframe["posted_days"].notna()].copy()
-	return filtered[filtered["posted_days"] <= 1]
+	return filtered[filtered["posted_days"] == 0]
 
 
 async def fetch_descriptions_for_jobs(jobs):

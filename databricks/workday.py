@@ -345,7 +345,7 @@ def keep_recent_jobs(dataframe):
         return dataframe
 
     filtered = dataframe[dataframe["posted_days"].notna()].copy()
-    return filtered[filtered["posted_days"] <= 1]
+    return filtered[filtered["posted_days"] == 0]
 
 
 def write_flat_jobs_csv(dataframe, output_dir):
