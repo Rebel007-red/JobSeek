@@ -1,0 +1,79 @@
+{
+  "name": "JobSeeeker",
+  "description": "Scrapes volume -> setup -> bronze -> silver -> enrich -> gold -> cleanup. Triggered by new CSV files in the landing volume.",
+  "max_concurrent_runs": 1,
+  "queue": { "enabled": true },
+  "timeout_seconds": 7200,
+  "performance_target": "PERFORMANCE_OPTIMIZED",
+  "trigger": {
+    "pause_status": "UNPAUSED",
+    "file_arrival": {
+      "url": "{{LANDING_PATH}}/",
+      "min_time_between_triggers_seconds": 300,
+      "wait_after_last_change_seconds": 120
+    }
+  },
+  "parameters": [
+    { "name": "catalog", "default": "{{CATALOG}}" },
+    { "name": "job_run_id", "default": "{{job.run_id}}" },
+    { "name": "landing_path", "default": "{{LANDING_PATH}}" }
+  ],
+  "email_notifications": {
+    "on_failure": ["{{NOTIFY_EMAIL}}"],
+    "no_alert_for_skipped_runs": true
+  },
+  "tasks": [
+    {
+      "task_key": "Step_01_SetUp",
+      "description": "Idempotent schemas, tables and reference data",
+      "notebook_task": { "notebook_path": "{{NOTEBOOK_DIR}}/01_setup", "source": "WORKSPACE" },
+      "timeout_seconds": 900,
+      "max_retries": 1,
+      "min_retry_interval_millis": 60000
+    },
+    {
+      "task_key": "Step_02_Ingest",
+      "description": "Auto Loader: new CSVs -> bronze.jobs_raw",
+      "depends_on": [{ "task_key": "Step_01_SetUp" }],
+      "notebook_task": { "notebook_path": "{{NOTEBOOK_DIR}}/02_bronze_ingest", "source": "WORKSPACE" },
+      "timeout_seconds": 1800,
+      "max_retries": 1,
+      "min_retry_interval_millis": 60000
+    },
+    {
+      "task_key": "Step_03_Transform",
+      "description": "Clean, dedupe, MERGE -> silver.jobs_clean",
+      "depends_on": [{ "task_key": "Step_02_Ingest" }],
+      "notebook_task": { "notebook_path": "{{NOTEBOOK_DIR}}/03_silver_transform", "source": "WORKSPACE" },
+      "timeout_seconds": 1800,
+      "max_retries": 1,
+      "min_retry_interval_millis": 60000
+    },
+    {
+      "task_key": "Step_04_Enrich",
+      "description": "Language, experience, skills, category (rules + model2vec + cached ai_query)",
+      "depends_on": [{ "task_key": "Step_03_Transform" }],
+      "notebook_task": { "notebook_path": "{{NOTEBOOK_DIR}}/04_enrich", "source": "WORKSPACE" },
+      "timeout_seconds": 3600,
+      "max_retries": 1,
+      "min_retry_interval_millis": 120000
+    },
+    {
+      "task_key": "Step_05_Gold",
+      "description": "MERGE eligible jobs -> gold.jobs (tracking columns untouched), rebuild gold.job_skills",
+      "depends_on": [{ "task_key": "Step_04_Enrich" }],
+      "notebook_task": { "notebook_path": "{{NOTEBOOK_DIR}}/05_gold_merge", "source": "WORKSPACE" },
+      "timeout_seconds": 1800,
+      "max_retries": 1,
+      "min_retry_interval_millis": 60000
+    },
+    {
+      "task_key": "Step_06_Cleanup",
+      "description": "Landing file retention, table retention, gold expiry, LLM log pruning, OPTIMIZE/VACUUM",
+      "depends_on": [{ "task_key": "Step_05_Gold" }],
+      "notebook_task": { "notebook_path": "{{NOTEBOOK_DIR}}/06_cleanup", "source": "WORKSPACE" },
+      "timeout_seconds": 1800,
+      "max_retries": 0
+    }
+  ]
+}
