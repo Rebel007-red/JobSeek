@@ -1,8 +1,22 @@
 [build]
   command   = "npm run build"
   publish   = "dist"
+  # Free plan: every production deploy costs 15 of the 300 monthly credits. Only build when something the
+  # site depends on changed (scraper, Databricks and workflow commits are skipped). Exit 0 = skip.
+  ignore    = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- src/ public/ netlify/ index.html package.json package-lock.json vite.config.js netlify.toml"
+
+# netlify/functions/api -> /.netlify/functions/api (Databricks proxy; set DATABRICKS_* env vars in Netlify)
+[functions]
+  directory    = "netlify/functions"
+  node_bundler = "esbuild"
 
 [[redirects]]
   from   = "/*"
   to     = "/index.html"
   status = 200
+
+# Vite assets have content hashes: let browsers keep them, so repeat visits cost no requests/bandwidth
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

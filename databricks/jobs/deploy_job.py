@@ -6,36 +6,30 @@ Usage:
     py databricks/jobs/deploy_job.py --run-now      # deploy and start a run
 
 The job is matched by name; an existing job with that name is fully replaced by the JSON (jobs/reset).
+Notebooks are expected in --notebook-dir, else DATABRICKS_NOTEBOOK_DIR, else /Workspace/Users/<you>/JobSeeker.
 Uses DATABRICKS_HOST and DATABRICKS_TOKEN from the environment or .env (same as upload_to_volume.py).
 """
 import argparse
 import json
-import os
 import re
 import sys
 from pathlib import Path
 
-import requests
-from dotenv import load_dotenv
+from databricks_api import api, env, find_job_id
 
 HERE = Path(__file__).resolve().parent
-load_dotenv(HERE.parent / ".env")
-load_dotenv(HERE.parents[1] / ".env")
-
 TEMPLATE = HERE / "jobseeker_pipeline.json"
-DEFAULT_NOTEBOOK_DIR = "/Workspace/Users/udaykirans6101@gmail.com/JobSeeker"
 NOTEBOOKS = ["_common", "01_setup", "02_bronze_ingest", "03_silver_transform", "04_enrich", "05_gold_merge", "06_cleanup"]
 
 
-def api(method, path, **kwargs):
-    host = (os.getenv("DATABRICKS_HOST") or "").strip().strip('"').rstrip("/")
-    token = (os.getenv("DATABRICKS_TOKEN") or "").strip().strip('"')
-    if not host or not token:
-        raise EnvironmentError("DATABRICKS_HOST and DATABRICKS_TOKEN must be set")
-    response = requests.request(method, f"{host}{path}", headers={"Authorization": f"Bearer {token}"}, timeout=60, **kwargs)
-    if response.status_code >= 400:
-        raise RuntimeError(f"{method} {path} failed with {response.status_code}: {response.text[:500]}")
-    return response.json() if response.content else {}
+def default_notebook_dir():
+    configured = env("DATABRICKS_NOTEBOOK_DIR")
+    if configured:
+        return configured
+    user = api("GET", "/api/2.0/preview/scim/v2/Me").get("userName")
+    if not user:
+        raise RuntimeError("Could not resolve the workspace user; pass --notebook-dir")
+    return f"/Workspace/Users/{user}/JobSeeker"
 
 
 def build_settings(notebook_dir, catalog, landing_path, notify_email):
@@ -69,7 +63,7 @@ def check_notebooks(notebook_dir):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--notebook-dir", default=DEFAULT_NOTEBOOK_DIR, help=f"Workspace folder with the imported notebooks (default {DEFAULT_NOTEBOOK_DIR})")
+    parser.add_argument("--notebook-dir", default=None, help="Workspace folder with the imported notebooks (default: DATABRICKS_NOTEBOOK_DIR or /Workspace/Users/<you>/JobSeeker)")
     parser.add_argument("--catalog", default="jobseeker")
     parser.add_argument("--landing-path", default="/Volumes/jobseeker/default/scrapes")
     parser.add_argument("--notify-email", default="", help="Email for failure notifications (optional)")
@@ -77,7 +71,7 @@ def main():
     parser.add_argument("--run-now", action="store_true")
     args = parser.parse_args()
 
-    notebook_dir = args.notebook_dir.rstrip("/")
+    notebook_dir = (args.notebook_dir or default_notebook_dir()).rstrip("/")
     if not notebook_dir.startswith(("/Workspace/", "/Users/", "/Shared/")):
         raise ValueError("--notebook-dir must be an absolute workspace path (/Workspace/..., /Users/... or /Shared/...)")
     if not re.fullmatch(r"[A-Za-z0-9_]+", args.catalog):
@@ -92,11 +86,8 @@ def main():
 
     check_notebooks(notebook_dir)
 
-    existing = api("GET", "/api/2.2/jobs/list", params={"name": settings["name"]}).get("jobs", [])
-    if len(existing) > 1:
-        raise RuntimeError(f"{len(existing)} jobs named {settings['name']!r}; delete the duplicates first")
-    if existing:
-        job_id = existing[0]["job_id"]
+    job_id = find_job_id(settings["name"])
+    if job_id:
         api("POST", "/api/2.2/jobs/reset", json={"job_id": job_id, "new_settings": settings})
         print(f"[UPDATED] job {settings['name']} id={job_id}")
     else:

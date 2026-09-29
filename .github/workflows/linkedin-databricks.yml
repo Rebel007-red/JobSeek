@@ -26,12 +26,12 @@ jobs:
           python-version: '3.13'
           cache: 'pip'
           cache-dependency-path: |
-            scraper/requirements.txt
+            databricks/requirements.txt
 
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          pip install -r scraper/requirements.txt
+          pip install -r databricks/requirements.txt
 
       - name: Install Playwright browser
         run: |
@@ -68,4 +68,5 @@ jobs:
           name: linkedin-csv
           path: databricks/output/linkedin*.csv
           if-no-files-found: ignore
+          retention-days: 7
           retention-days: 7

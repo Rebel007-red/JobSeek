@@ -1,66 +1,25 @@
 import asyncio
-import os
 import re
 import sys
 from datetime import date, datetime, timedelta
-from pathlib import Path
 from urllib.parse import quote
 
-import aiohttp
 import pandas as pd
 from bs4 import BeautifulSoup
-from dotenv import load_dotenv
 from playwright.async_api import async_playwright
 
-load_dotenv(Path(__file__).resolve().parent / ".env")
-load_dotenv(Path(__file__).resolve().parents[1] / ".env")
-
-SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").rstrip("/")
-BASE_URL = f"{SUPABASE_URL}/rest/v1" if SUPABASE_URL else ""
-
-# Keep jobs posted within this many days (0 = today only). Downstream MERGE dedupes overlaps.
-MAX_POSTED_DAYS = int(os.getenv("MAX_POSTED_DAYS", "1"))
+from scraper_common import (
+	MAX_POSTED_DAYS,
+	OUTPUT_COLUMNS,
+	fetch_companies,
+	format_calendar_date,
+	keep_recent_jobs,
+	print_companies,
+	sanitize_text,
+	write_flat_jobs_csv,
+)
 
 BLOCKED_URL_MARKERS = ("authwall", "/login", "checkpoint")
-
-
-def build_headers(extra_headers=None):
-	headers = {"Content-Type": "application/json"}
-	api_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("VITE_SUPABASE_ANON_KEY")
-	if api_key:
-		headers["apikey"] = api_key
-	if extra_headers:
-		headers.update(extra_headers)
-	return headers
-
-
-HEADERS = build_headers()
-
-OUTPUT_COLUMNS = [
-	"company_name",
-	"ats_type",
-	"company_url",
-	"job_id",
-	"title",
-	"location",
-	"posted_date",
-	"job_url",
-	"description",
-	"collected_on",
-	"posted_days",
-]
-
-
-def sanitize_text(value):
-	if value is None:
-		return ""
-
-	text = str(value).replace("\r", " ").replace("\n", " ")
-	return re.sub(r"\s+", " ", text).strip()
-
-
-def format_calendar_date(value):
-	return value.strftime("%d/%m/%Y")
 
 
 def format_date_from_days_ago(days_ago):
@@ -355,38 +314,6 @@ async def scrape_linkedin_jobs(company):
 	return jobs
 
 
-async def fetch_companies():
-	if not BASE_URL:
-		print("    [WARN] SUPABASE_URL not configured. Skipping company fetch.")
-		return []
-
-	if not HEADERS.get("apikey"):
-		print("    [WARN] No Supabase API key configured. Skipping company fetch.")
-		return []
-
-	url = (
-		f"{BASE_URL}/companies?"
-		"select=name,api_url,ats_type,disabled"
-		"&ats_type=eq.linkedin"
-		"&disabled=eq.false"
-	)
-	async with aiohttp.ClientSession() as session:
-		async with session.get(url, headers=HEADERS) as response:
-			if response.status not in (200, 201):
-				text = await response.text()
-				print(f"    [ERROR] {text[:500]}")
-				return []
-			return await response.json()
-
-
-def print_companies(companies):
-	if not companies:
-		print("[INFO] No companies returned.")
-		return
-
-	print(f"[INFO] LinkedIn companies: {len(companies)}")
-
-
 def jobs_to_dataframe(jobs):
 	rows = []
 	for job in jobs:
@@ -409,27 +336,6 @@ def jobs_to_dataframe(jobs):
 		return pd.DataFrame(columns=OUTPUT_COLUMNS)
 
 	return dataframe.reindex(columns=OUTPUT_COLUMNS)
-
-
-def keep_recent_jobs(dataframe):
-	if dataframe.empty:
-		return dataframe
-
-	filtered = dataframe[dataframe["posted_days"].notna()].copy()
-	return filtered[filtered["posted_days"] <= MAX_POSTED_DAYS]
-
-
-def write_flat_jobs_csv(dataframe, output_dir):
-	try:
-		os.makedirs(output_dir, exist_ok=True)
-		timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-		output_file = os.path.join(output_dir, f"linkedin_{timestamp}.csv")
-		dataframe.to_csv(output_file, index=False)
-		print(f"[WRITE] LinkedIn CSV saved to {output_file}")
-		return output_file
-	except Exception as exc:
-		print(f"[ERROR] Failed to write LinkedIn CSV: {exc}")
-		return None
 
 
 async def collect_linkedin_jobs(companies):
@@ -480,8 +386,8 @@ async def collect_linkedin_jobs(companies):
 
 
 async def main():
-	companies = await fetch_companies()
-	print_companies(companies)
+	companies = await fetch_companies("linkedin", "name,api_url,ats_type,disabled")
+	print_companies(companies, "LinkedIn")
 	if not companies:
 		print("[ERROR] No LinkedIn searches to run.")
 		sys.exit(1)
@@ -494,7 +400,7 @@ async def main():
 	filtered_jobs = await fetch_descriptions_for_jobs(filtered_jobs)
 	filtered_jobs_dataframe = jobs_to_dataframe(filtered_jobs)
 	filtered_jobs_dataframe["posted_days"] = filtered_jobs_dataframe["posted_days"].astype("Int64")
-	output_file = write_flat_jobs_csv(filtered_jobs_dataframe, Path(__file__).resolve().parent / "output")
+	output_file = write_flat_jobs_csv(filtered_jobs_dataframe, "linkedin")
 
 	print(
 		f"[SUMMARY] searches={len(companies)} failed={len(failed_companies)} "

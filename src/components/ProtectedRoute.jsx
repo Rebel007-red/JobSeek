@@ -1,23 +1,28 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { clearApiCache } from '../lib/api'
 
+// Renders the page only with a Supabase session (no API calls while signed out); sends you to /login otherwise.
 export function ProtectedRoute({ children }) {
   const navigate = useNavigate()
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    // Check session on mount
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) navigate('/login', { replace: true })
+      if (session) setReady(true)
+      else navigate('/login', { replace: true })
     })
 
-    // Listen for auth state changes (logout, token expiry)
+    // Sign-out (this tab or another) and token expiry
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) navigate('/login', { replace: true })
+      if (session) return
+      clearApiCache()
+      navigate('/login', { replace: true })
     })
 
     return () => subscription.unsubscribe()
   }, [navigate])
 
-  return children
+  return ready ? children : null
 }

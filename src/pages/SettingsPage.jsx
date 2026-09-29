@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { api } from '../lib/api'
+import { useProfile } from '../hooks/useProfile'
+import { ProfileEditor } from '../components/settings/ProfileEditor'
+import { ChevronLeftIcon, GridIcon, ListIcon } from '../components/common/icons'
+import { readView, saveView } from '../utils/viewPref'
+import { formatDate } from '../utils/job'
+
+const SETTINGS_TABS = ['companies', 'profile', 'hidden']
 
 const ATS_TYPES = ['greenhouse', 'workday', 'phenom', 'icims', 'oracle', 'successfactors', 'jsearch', 'linkedin', 'naukri']
 
@@ -33,9 +41,31 @@ const ATS_HELP = {
 
 const EMPTY_FORM = { name: '', ats_type: 'workday', slug: '', api_url: '' }
 
+const HEALTH_DAYS = 7
+const UNKNOWN_HEALTH = { label: 'No data', tone: 'pending' }
+
+// Live = the scraper found a job for this company in the last HEALTH_DAYS days (Supabase jobs table).
+async function companyHealth(company) {
+  if (company.disabled) return { label: 'Paused', tone: 'muted' }
+  const { data, error } = await supabase
+    .from('jobs')
+    .select('first_seen_at')
+    .eq('company_id', company.id)
+    .order('first_seen_at', { ascending: false, nullsFirst: false })
+    .limit(1)
+  if (error) throw error
+  const latest = data?.[0]?.first_seen_at
+  if (!latest) return UNKNOWN_HEALTH
+  const days = (Date.now() - new Date(latest).getTime()) / (24 * 3600 * 1000)
+  return days <= HEALTH_DAYS ? { label: 'Live', tone: 'success' } : { label: 'Stale', tone: 'warning' }
+}
+
 export function SettingsPage() {
   const navigate = useNavigate()
-  const [tab, setTab] = useState('companies')
+  const [searchParams] = useSearchParams()
+  const [tab, setTab] = useState(() => (SETTINGS_TABS.includes(searchParams.get('tab')) ? searchParams.get('tab') : 'companies'))
+  const [view, setView] = useState(readView)
+  const { profile, loading: profileLoading, error: profileError, reload: reloadProfile, save: saveProfile } = useProfile()
   const [companies, setCompanies] = useState([])
   const [companyStatusMap, setCompanyStatusMap] = useState({})
   const [loading, setLoading] = useState(true)
@@ -44,109 +74,50 @@ export function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
 
-  // Hidden jobs state
-  const [hiddenCount, setHiddenCount] = useState(0)
+  // Hidden jobs (Databricks gold.jobs)
+  const [hiddenJobs, setHiddenJobs] = useState([])
+  const [hiddenLoading, setHiddenLoading] = useState(true)
+  const [hiddenError, setHiddenError] = useState('')
   const [restoring, setRestoring] = useState(false)
-  const [cleaningStale, setCleaningStale] = useState(false)
-
-  // Skills state (localStorage)
-  const [skillInput, setSkillInput] = useState('')
-  const [skills, setSkills] = useState(() => {
-    const saved = localStorage.getItem('jobseeker_skills') || ''
-    return saved ? saved.split(',').map(s => s.trim()).filter(Boolean) : []
-  })
+  const hiddenCount = hiddenJobs.length
 
   useEffect(() => {
     loadCompanies()
-    loadHiddenCount()
-    loadUserSkills()
+    loadHiddenJobs()
   }, [])
 
-  async function loadHiddenCount() {
-    const { count } = await supabase
-      .from('jobs')
-      .select('id', { count: 'exact', head: true })
-      .eq('hidden', true)
-    setHiddenCount(count || 0)
-  }
-
-  async function loadUserSkills() {
-    // Try to load from Supabase first
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      const { data } = await supabase
-        .from('user_skills')
-        .select('skills')
-        .eq('user_id', user.id)
-        .single()
-      
-      if (data?.skills && data.skills.length > 0) {
-        setSkills(data.skills)
-        localStorage.setItem('jobseeker_skills', data.skills.join(','))
-        return
-      }
-    }
-    
-    // Fallback to localStorage if no Supabase data
-    const saved = localStorage.getItem('jobseeker_skills') || ''
-    if (saved) {
-      setSkills(saved.split(',').map(s => s.trim()).filter(Boolean))
+  async function loadHiddenJobs() {
+    setHiddenLoading(true)
+    setHiddenError('')
+    try {
+      setHiddenJobs(await api.hiddenJobs())
+    } catch (err) {
+      setHiddenError(err.message)
+    } finally {
+      setHiddenLoading(false)
     }
   }
 
-  async function saveSkillsToSupabase(updatedSkills) {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      // Upsert: Insert or update the user_skills row
-      const { error } = await supabase
-        .from('user_skills')
-        .upsert({ user_id: user.id, skills: updatedSkills }, { onConflict: 'user_id' })
-      
-      if (error) {
-        console.error('Failed to save skills:', error)
-      } else {
-        console.log('✓ Skills saved to Supabase:', updatedSkills)
-      }
+  async function restoreJob(job) {
+    setHiddenJobs(prev => prev.filter(item => item.job_key !== job.job_key))
+    try {
+      await api.setHidden(job.job_key, false)
+    } catch (err) {
+      setHiddenError(err.message)
+      await loadHiddenJobs()
     }
   }
 
   async function restoreAllHidden() {
     setRestoring(true)
-    await supabase.from('jobs').update({ hidden: false }).eq('hidden', true)
-    setHiddenCount(0)
-    setRestoring(false)
-  }
-
-  async function cleanupStaleJobs() {
-    setCleaningStale(true)
-    const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-
-    const { data, error } = await supabase
-      .from('jobs')
-      .select('id, posted_at, first_seen_at')
-      .or(`posted_at.lt.${cutoff},first_seen_at.lt.${cutoff}`)
-
-    if (error) {
-      console.error('Failed to find stale jobs:', error)
-      setCleaningStale(false)
-      return
+    try {
+      await api.restoreHidden()
+      setHiddenJobs([])
+    } catch (err) {
+      setHiddenError(err.message)
+    } finally {
+      setRestoring(false)
     }
-
-    const staleIds = (data || []).map(job => job.id)
-    if (staleIds.length > 0) {
-      const { error: updateError } = await supabase
-        .from('jobs')
-        .update({ hidden: true })
-        .in('id', staleIds)
-
-      if (updateError) {
-        console.error('Failed to hide stale jobs:', updateError)
-      }
-    }
-
-    await loadHiddenCount()
-    await loadCompanies()
-    setCleaningStale(false)
   }
 
   async function loadCompanies() {
@@ -155,47 +126,9 @@ export function SettingsPage() {
     const list = data || []
     setCompanies(list)
 
-    if (list.length > 0) {
-      const companyIds = list.map(company => company.id)
-      const { data: jobsData } = await supabase
-        .from('jobs')
-        .select('company_id, posted_at, first_seen_at')
-        .in('company_id', companyIds)
-        .order('posted_at', { ascending: false, nullsFirst: false })
-
-      const statusMap = {}
-      const rows = jobsData || []
-
-      list.forEach(company => {
-        const latestJob = rows
-          .filter(row => row.company_id === company.id)
-          .map(row => row.posted_at || row.first_seen_at)
-          .filter(Boolean)
-          .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0]
-
-        if (!latestJob) {
-          statusMap[company.id] = { label: 'No data', tone: 'pending' }
-          return
-        }
-
-        const latestDate = new Date(latestJob).getTime()
-        const now = Date.now()
-        const daysSince = (now - latestDate) / (1000 * 60 * 60 * 24)
-
-        if (company.disabled) {
-          statusMap[company.id] = { label: 'Paused', tone: 'muted' }
-        } else if (daysSince <= 7) {
-          statusMap[company.id] = { label: 'Live', tone: 'success' }
-        } else {
-          statusMap[company.id] = { label: 'Stale', tone: 'warning' }
-        }
-      })
-
-      setCompanyStatusMap(statusMap)
-    } else {
-      setCompanyStatusMap({})
-    }
-
+    // One tiny query per company (latest scraped job) instead of downloading every job row
+    const statuses = await Promise.all(list.map(company => companyHealth(company).catch(() => UNKNOWN_HEALTH)))
+    setCompanyStatusMap(Object.fromEntries(list.map((company, index) => [company.id, statuses[index]])))
     setLoading(false)
   }
 
@@ -260,65 +193,49 @@ export function SettingsPage() {
     await loadCompanies()
   }
 
-  // Skills handlers
-  function addSkill() {
-    const val = skillInput.trim().toLowerCase()
-    if (!val || skills.includes(val)) { setSkillInput(''); return }
-    const updated = [...skills, val]
-    setSkills(updated)
-    setSkillInput('')
-    localStorage.setItem('jobseeker_skills', updated.join(','))
-    saveSkillsToSupabase(updated)
-  }
-
-  function removeSkill(skill) {
-    const updated = skills.filter(s => s !== skill)
-    setSkills(updated)
-    localStorage.setItem('jobseeker_skills', updated.join(','))
-    saveSkillsToSupabase(updated)
-  }
-
-  function clearAllSkills() {
-    setSkills([])
-    localStorage.setItem('jobseeker_skills', '')
-    saveSkillsToSupabase([])
-  }
-
-  function handleSkillKeyDown(e) {
-    if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addSkill() }
-  }
-
   const help = ATS_HELP[form.ats_type]
-  const enabledCompanies = companies.filter(company => !company.disabled).length
-  const disabledCompanies = companies.length - enabledCompanies
 
   return (
     <div className="settings-page min-h-screen">
-      <header className="topbar settings-topbar">
+      <header className="topbar">
         <div className="topbar-inner">
-          <div className="brand-wrap">
-            <button onClick={() => navigate('/')} className="icon-button" aria-label="Back home" title="Back to jobs">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
+          <div className="brand">
+            <button type="button" onClick={() => navigate('/')} className="icon-btn" aria-label="Back to jobs" title="Back to jobs">
+              <ChevronLeftIcon />
             </button>
-            <div>
-              <div className="brand-kicker">Workspace</div>
-              <h1>Settings</h1>
+            <span className="brand-name">Settings</span>
+          </div>
+          {/* On phones the list/grid switch lives here instead of the jobs top bar */}
+          <div className="topbar-actions hide-desktop">
+            <span className="muted-text">Job layout</span>
+            <div className="segmented" role="group" aria-label="Job layout">
+              {[['list', ListIcon, 'List'], ['grid', GridIcon, 'Cards']].map(([value, Icon, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={view === value ? 'active' : ''}
+                  onClick={() => { setView(value); saveView(value) }}
+                  aria-pressed={view === value}
+                  aria-label={label}
+                  title={label}
+                >
+                  <Icon />
+                </button>
+              ))}
             </div>
           </div>
         </div>
       </header>
 
       <main className="page-content settings-content">
-        <div className="settings-shell panel">
+        <div className="settings-shell">
           <div className="settings-header">
             <div>
               <p className="eyebrow">Preferences</p>
               <h2>Manage sources & fit</h2>
             </div>
             <div className="settings-tabs" role="tablist" aria-label="Settings sections">
-              {['companies', 'skills', 'hidden'].map(t => (
+              {SETTINGS_TABS.map(t => (
                 <button
                   key={t}
                   type="button"
@@ -458,43 +375,20 @@ export function SettingsPage() {
             </div>
           )}
 
-          {tab === 'skills' && (
+          {tab === 'profile' && (
             <div className="settings-panel settings-panel-animate">
-              <div className="settings-card">
-                <div className="settings-card-header">
-                  <h3>Skills that match your target roles</h3>
-                </div>
-                <p className="settings-copy">
-                  Enter your skills to highlight matching jobs. Jobs are scored and sorted by how many of your skills appear in the title and department.
-                </p>
-
-                <div className="settings-input-row">
-                  <input type="text" value={skillInput}
-                    onChange={e => setSkillInput(e.target.value)}
-                    onKeyDown={handleSkillKeyDown}
-                    placeholder="Type a skill and press Enter or comma…"
-                    className="settings-input" />
-                  <button onClick={addSkill} className="primary-button compact-button">Add</button>
-                </div>
-
-                {skills.length > 0 ? (
-                  <div className="settings-skill-list">
-                    {skills.map(skill => (
-                      <span key={skill} className="skill-chip">
-                        {skill}
-                        <button type="button" onClick={() => removeSkill(skill)} aria-label={`Remove ${skill}`}>
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </span>
-                    ))}
-                    <button type="button" onClick={clearAllSkills} className="text-button">Clear all</button>
+              {profileLoading ? (
+                <div className="settings-empty-state">Loading profile from Databricks…</div>
+              ) : profileError ? (
+                <div className="settings-card">
+                  <p className="settings-form-error">Could not load your profile: {profileError}</p>
+                  <div className="settings-actions-row">
+                    <button type="button" onClick={reloadProfile} className="secondary-button compact-button">Retry</button>
                   </div>
-                ) : (
-                  <p className="settings-empty-state inline-empty">No skills added yet.</p>
-                )}
-              </div>
+                </div>
+              ) : (
+                <ProfileEditor key={profile?.profile_id || 'default'} profile={profile} onSave={saveProfile} />
+              )}
             </div>
           )}
 
@@ -502,7 +396,9 @@ export function SettingsPage() {
             <div className="settings-panel settings-panel-animate">
               <div className="settings-card hidden-card">
                 <div className="settings-card-header">
-                  <h3>{hiddenCount > 0 ? `${hiddenCount} hidden ${hiddenCount === 1 ? 'job' : 'jobs'}` : 'No hidden jobs'}</h3>
+                  <h3>
+                    {hiddenLoading ? 'Loading hidden jobs…' : hiddenCount > 0 ? `${hiddenCount}${hiddenCount >= 200 ? '+' : ''} hidden ${hiddenCount === 1 ? 'job' : 'jobs'}` : 'No hidden jobs'}
+                  </h3>
                   {hiddenCount > 0 && (
                     <button type="button" onClick={restoreAllHidden} disabled={restoring} className="primary-button compact-button">
                       {restoring ? 'Restoring…' : 'Restore all'}
@@ -511,17 +407,33 @@ export function SettingsPage() {
                 </div>
 
                 <p className="settings-copy">
-                  Jobs you dismiss with the × button are hidden across all sessions. They reappear if a new scrape finds them again unless you restore them here.
+                  Jobs you hide stay hidden across sessions and pipeline runs until you restore them here. The pipeline removes jobs posted more than 2 days ago that you haven't applied to, hidden ones included.
                 </p>
 
-                <div className="settings-actions-row compact-actions">
-                  <button type="button" onClick={cleanupStaleJobs} disabled={cleaningStale} className="secondary-button compact-button">
-                    {cleaningStale ? 'Cleaning…' : 'Hide stale jobs'}
-                  </button>
-                </div>
+                {hiddenError && <p className="settings-form-error">{hiddenError}</p>}
 
-                {hiddenCount === 0 && (
-                  <div className="settings-empty-state inline-empty">Hover over any job card and click × to hide it.</div>
+                {hiddenCount > 0 && (
+                  <div className="settings-list">
+                    {hiddenJobs.map(job => (
+                      <div key={job.job_key} className="settings-row">
+                        <div className="settings-row-main">
+                          <div className="settings-company-name">{job.title}</div>
+                          <div className="settings-company-meta">
+                            <span>{job.company_name}</span>
+                            {job.location && <span>{job.location}</span>}
+                            {job.hidden_at && <span>hidden {formatDate(job.hidden_at)}</span>}
+                          </div>
+                        </div>
+                        <div className="settings-row-actions">
+                          <button type="button" onClick={() => restoreJob(job)} className="secondary-button compact-button">Restore</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {!hiddenLoading && hiddenCount === 0 && (
+                  <div className="settings-empty-state inline-empty">Click × on any job (or press x) to hide it.</div>
                 )}
               </div>
             </div>

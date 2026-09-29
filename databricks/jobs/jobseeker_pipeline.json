@@ -4,7 +4,7 @@
   "max_concurrent_runs": 1,
   "queue": { "enabled": true },
   "timeout_seconds": 7200,
-  "performance_target": "PERFORMANCE_OPTIMIZED",
+  "performance_target": "STANDARD",
   "parameters": [
     { "name": "catalog", "default": "{{CATALOG}}" },
     { "name": "job_run_id", "default": "{{job.run_id}}" },

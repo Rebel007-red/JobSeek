@@ -1,26 +1,28 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { getMatchedSkills } from './job.js'
+import { formatDate, formatRelativeAge, isNewJob } from './job.js'
 
-test('getMatchedSkills matches whole-skill phrases without broad substring false positives', () => {
-  const job = {
-    title: 'Senior Java Developer',
-    department: 'Platform',
-    skills: ['Java', 'Spring Boot', 'AWS'],
-  }
+const hoursAgo = (hours) => new Date(Date.now() - hours * 3600 * 1000).toISOString()
 
-  const userSkills = ['java', 'javascript', 'spring boot']
-
-  assert.deepEqual(getMatchedSkills(job, userSkills), ['java', 'spring boot'])
+test('formatRelativeAge buckets by hours and days', () => {
+  assert.equal(formatRelativeAge(hoursAgo(0.2)), 'Now')
+  assert.equal(formatRelativeAge(hoursAgo(5)), '5h ago')
+  assert.equal(formatRelativeAge(hoursAgo(30)), '1d ago')
+  assert.equal(formatRelativeAge(hoursAgo(24 * 3)), '3d ago')
+  assert.equal(formatRelativeAge(hoursAgo(24 * 9)), 'Older')
+  assert.equal(formatRelativeAge('not a date'), null)
+  assert.equal(formatRelativeAge(null), null)
 })
 
-test('getMatchedSkills matches title keywords as whole words', () => {
-  const job = {
-    title: 'Full Stack Engineer',
-    department: 'Product',
-    skills: ['TypeScript'],
-  }
+test('isNewJob is true for jobs first seen in the last 2 days', () => {
+  assert.equal(isNewJob(hoursAgo(10)), true)
+  assert.equal(isNewJob(hoursAgo(49)), false)
+  assert.equal(isNewJob(null), false)
+})
 
-  assert.deepEqual(getMatchedSkills(job, ['full stack', 'typescript']), ['full stack', 'typescript'])
+test('formatDate returns null for missing or invalid dates', () => {
+  assert.equal(formatDate(null), null)
+  assert.equal(formatDate('nope'), null)
+  assert.ok(formatDate('2026-09-29'))
 })

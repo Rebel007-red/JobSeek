@@ -1,65 +1,25 @@
 import asyncio
 import html
-import os
 import re
 import sys
 from datetime import date, datetime
-from pathlib import Path
 from urllib.parse import urlparse
 
 import aiohttp
 from bs4 import BeautifulSoup
 import pandas as pd
-from dotenv import load_dotenv
 from playwright.async_api import async_playwright
 
-load_dotenv(Path(__file__).resolve().parent / ".env")
-load_dotenv(Path(__file__).resolve().parents[1] / ".env")
-
-SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").rstrip("/")
-BASE_URL = f"{SUPABASE_URL}/rest/v1" if SUPABASE_URL else ""
-
-# Keep jobs posted within this many days (0 = today only). Downstream MERGE dedupes overlaps.
-MAX_POSTED_DAYS = int(os.getenv("MAX_POSTED_DAYS", "1"))
-
-
-def build_headers(extra_headers=None):
-	headers = {"Content-Type": "application/json"}
-	api_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("VITE_SUPABASE_ANON_KEY")
-	if api_key:
-		headers["apikey"] = api_key
-	if extra_headers:
-		headers.update(extra_headers)
-	return headers
-
-
-HEADERS = build_headers()
-
-OUTPUT_COLUMNS = [
-	"company_name",
-	"ats_type",
-	"company_url",
-	"job_id",
-	"title",
-	"location",
-	"posted_date",
-	"job_url",
-	"description",
-	"collected_on",
-	"posted_days",
-]
-
-
-def sanitize_text(value):
-	if value is None:
-		return ""
-
-	text = str(value).replace("\r", " ").replace("\n", " ")
-	return re.sub(r"\s+", " ", text).strip()
-
-
-def format_calendar_date(value):
-	return value.strftime("%d/%m/%Y")
+from scraper_common import (
+	MAX_POSTED_DAYS,
+	OUTPUT_COLUMNS,
+	fetch_companies,
+	format_calendar_date,
+	keep_recent_jobs,
+	print_companies,
+	sanitize_text,
+	write_flat_jobs_csv,
+)
 
 
 def normalize_board_url(raw_value):
@@ -182,14 +142,6 @@ def parse_jobs_from_api(payload, board_url):
 	return parsed_jobs
 
 
-def keep_recent_jobs(dataframe):
-	if dataframe.empty:
-		return dataframe
-
-	filtered = dataframe[dataframe["posted_days"].notna()].copy()
-	return filtered[filtered["posted_days"] <= MAX_POSTED_DAYS]
-
-
 async def fetch_board_jobs(session, api_url, attempts=3):
 	"""Return the board payload, or None after non-retryable errors or exhausted retries."""
 	for attempt in range(1, attempts + 1):
@@ -283,39 +235,6 @@ async def fetch_descriptions_for_jobs(jobs):
 	return jobs
 
 
-async def fetch_companies():
-	if not BASE_URL:
-		print("    [WARN] SUPABASE_URL not configured. Skipping company fetch.")
-		return []
-
-	if not HEADERS.get("apikey"):
-		print("    [WARN] No Supabase API key configured. Skipping company fetch.")
-		return []
-
-	url = (
-		f"{BASE_URL}/companies?"
-		"select=name,ats_type,disabled,slug"
-		"&ats_type=eq.greenhouse"
-		"&disabled=eq.false"
-		# "&limit=2"
-	)
-	async with aiohttp.ClientSession() as session:
-		async with session.get(url, headers=HEADERS) as response:
-			if response.status not in (200, 201):
-				text = await response.text()
-				print(f"    [ERROR] {text[:500]}")
-				return []
-			return await response.json()
-
-
-def print_companies(companies):
-	if not companies:
-		print("[INFO] No companies returned.")
-		return
-
-	print(f"[INFO] Greenhouse companies: {len(companies)}")
-
-
 def jobs_to_dataframe(jobs):
 	rows = []
 	for job in jobs:
@@ -348,19 +267,6 @@ def finalize_dataframe(jobs):
 	dataframe = pd.DataFrame(jobs, columns=OUTPUT_COLUMNS)
 	dataframe["posted_days"] = dataframe["posted_days"].astype("Int64")
 	return dataframe
-
-
-def write_flat_jobs_csv(dataframe, output_dir):
-	try:
-		os.makedirs(output_dir, exist_ok=True)
-		timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-		output_file = os.path.join(output_dir, f"greenhouse_{timestamp}.csv")
-		dataframe.to_csv(output_file, index=False)
-		print(f"[WRITE] Greenhouse CSV saved to {output_file}")
-		return output_file
-	except Exception as exc:
-		print(f"[ERROR] Failed to write Greenhouse CSV: {exc}")
-		return None
 
 
 async def collect_greenhouse_jobs(companies):
@@ -411,8 +317,8 @@ async def collect_greenhouse_jobs(companies):
 
 
 async def main():
-	companies = await fetch_companies()
-	print_companies(companies)
+	companies = await fetch_companies("greenhouse", "name,ats_type,disabled,slug")
+	print_companies(companies, "Greenhouse")
 	if not companies:
 		print("[ERROR] No Greenhouse companies to scrape.")
 		sys.exit(1)
@@ -424,7 +330,7 @@ async def main():
 	filtered_jobs = filtered_jobs_dataframe.to_dict(orient="records")
 	filtered_jobs = await fetch_descriptions_for_jobs(filtered_jobs)
 	filtered_jobs_dataframe = finalize_dataframe(filtered_jobs)
-	output_file = write_flat_jobs_csv(filtered_jobs_dataframe, Path(__file__).resolve().parent / "output")
+	output_file = write_flat_jobs_csv(filtered_jobs_dataframe, "greenhouse")
 
 	print(
 		f"[SUMMARY] companies={len(companies)} failed={len(failed_companies)} "
