@@ -54,6 +54,13 @@ jobs:
             --volume /Volumes/jobseeker/default/scrapes \
             --pattern "databricks/output/linkedin*.csv"
 
+      - name: Trigger Databricks pipeline job
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: |
+          python databricks/jobs/trigger_job.py
+
       - name: Save LinkedIn CSV artifact
         if: always()
         uses: actions/upload-artifact@v4

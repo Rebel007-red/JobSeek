@@ -1,18 +1,10 @@
 {
   "name": "JobSeeeker",
-  "description": "Scrapes volume -> setup -> bronze -> silver -> enrich -> gold -> cleanup. Triggered by new CSV files in the landing volume.",
+  "description": "Scrapes volume -> setup -> bronze -> silver -> enrich -> gold -> cleanup. Started by the GitHub Actions scraper workflows (databricks/jobs/trigger_job.py) after uploading CSVs.",
   "max_concurrent_runs": 1,
   "queue": { "enabled": true },
   "timeout_seconds": 7200,
   "performance_target": "PERFORMANCE_OPTIMIZED",
-  "trigger": {
-    "pause_status": "UNPAUSED",
-    "file_arrival": {
-      "url": "{{LANDING_PATH}}/",
-      "min_time_between_triggers_seconds": 300,
-      "wait_after_last_change_seconds": 120
-    }
-  },
   "parameters": [
     { "name": "catalog", "default": "{{CATALOG}}" },
     { "name": "job_run_id", "default": "{{job.run_id}}" },
@@ -51,7 +43,7 @@
     },
     {
       "task_key": "Step_04_Enrich",
-      "description": "Language, experience, skills, category (rules + model2vec + cached ai_query)",
+      "description": "Language, experience, skills (rules + cached LLM), standard role + category (cached embeddings + LLM tie-break)",
       "depends_on": [{ "task_key": "Step_03_Transform" }],
       "notebook_task": { "notebook_path": "{{NOTEBOOK_DIR}}/04_enrich", "source": "WORKSPACE" },
       "timeout_seconds": 3600,
