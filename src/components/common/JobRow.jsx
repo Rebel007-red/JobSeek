@@ -16,8 +16,7 @@ export const JobRow = memo(function JobRow({ job, profileSkills = [], active = f
   const applied = Boolean(job.is_applied)
   const date = jobDate(job)
   const isNew = isNewJob(job.first_seen_at)
-  const { have, missing } = skillBuckets(job, profileSkills)
-  const skillTotal = have.length + missing.length
+  const { matchedLabels } = skillBuckets(job, profileSkills)
   const experience = experienceLabel(job)
   const meta = [job.company_name || 'Unknown company', job.location].filter(Boolean)
 
@@ -51,12 +50,12 @@ export const JobRow = memo(function JobRow({ job, profileSkills = [], active = f
         <div className="job-row-side">
           {job.role_title && <span className="tag role-tag" title={job.category || undefined}>{job.role_title}</span>}
           <span className={`exp-tag ${experience ? '' : 'unknown'}`} title="Experience required">{experience || 'Exp n/a'}</span>
-          {skillTotal > 0 && (
+          {profileSkills.length > 0 && (
             <span
-              className={`skill-count ${have.length ? 'has' : ''}`}
-              title={have.length ? `You have: ${have.join(', ')}` : 'None of your listed skills'}
+              className={`skill-count ${matchedLabels.length ? 'has' : ''}`}
+              title={matchedLabels.length ? `Your skills in this job: ${matchedLabels.join(', ')}` : 'None of your skills'}
             >
-              {have.length}/{skillTotal} skills
+              {matchedLabels.length}/{profileSkills.length} skills
             </span>
           )}
           {applied ? (

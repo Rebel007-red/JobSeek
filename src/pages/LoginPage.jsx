@@ -31,8 +31,11 @@ export function LoginPage() {
     setLoading(true)
     const { error: authError } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
     setLoading(false)
-    if (authError) setError(authError.message)
-    else navigate('/', { replace: true })
+    if (!authError) return navigate('/', { replace: true })
+    // Invited users whose password was never saved land here too; the reset flow sets it.
+    setError(authError.code === 'invalid_credentials'
+      ? 'Wrong email or password. New here, or never finished setting a password? Use "Forgot password?" below.'
+      : authError.message)
   }
 
   async function handleSendCode(e) {

@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { api } from '../lib/api'
+import { api, clearApiCache } from '../lib/api'
 import { sessionUser } from '../lib/session'
 import { useProfile } from '../hooks/useProfile'
 import { ProfileEditor } from '../components/settings/ProfileEditor'
-import { ChevronLeftIcon, GridIcon, ListIcon } from '../components/common/icons'
+import { ChevronLeftIcon, GridIcon, ListIcon, SignOutIcon } from '../components/common/icons'
 import { readView, saveView } from '../utils/viewPref'
 import { formatDate } from '../utils/job'
 
@@ -86,6 +86,12 @@ export function SettingsPage() {
   const [hiddenError, setHiddenError] = useState('')
   const [restoring, setRestoring] = useState(false)
   const hiddenCount = hiddenJobs.length
+
+  // ProtectedRoute sends you to /login once the session is gone
+  const signOut = () => {
+    clearApiCache()
+    supabase.auth.signOut()
+  }
 
   useEffect(() => {
     if (isAdmin) loadCompanies()
@@ -212,23 +218,29 @@ export function SettingsPage() {
             <span className="brand-name">Settings</span>
           </div>
           {/* On phones the list/grid switch lives here instead of the jobs top bar */}
-          <div className="topbar-actions hide-desktop">
-            <span className="muted-text">Job layout</span>
-            <div className="segmented" role="group" aria-label="Job layout">
-              {[['list', ListIcon, 'List'], ['grid', GridIcon, 'Cards']].map(([value, Icon, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  className={view === value ? 'active' : ''}
-                  onClick={() => { setView(value); saveView(value) }}
-                  aria-pressed={view === value}
-                  aria-label={label}
-                  title={label}
-                >
-                  <Icon />
-                </button>
-              ))}
+          <div className="topbar-actions">
+            <div className="topbar-actions hide-desktop">
+              <span className="muted-text">Job layout</span>
+              <div className="segmented" role="group" aria-label="Job layout">
+                {[['list', ListIcon, 'List'], ['grid', GridIcon, 'Cards']].map(([value, Icon, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={view === value ? 'active' : ''}
+                    onClick={() => { setView(value); saveView(value) }}
+                    aria-pressed={view === value}
+                    aria-label={label}
+                    title={label}
+                  >
+                    <Icon />
+                  </button>
+                ))}
+              </div>
             </div>
+            {/* Also reachable during onboarding, where "Back to jobs" leads here again */}
+            <button type="button" onClick={signOut} className="icon-btn" title="Sign out" aria-label="Sign out">
+              <SignOutIcon />
+            </button>
           </div>
         </div>
       </header>

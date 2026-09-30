@@ -32,7 +32,13 @@ export function SetPasswordPage() {
     setSaving(true)
     const { error: updateError } = await supabase.auth.updateUser({ password })
     setSaving(false)
-    if (updateError) return setError(updateError.message)
+    if (updateError) {
+      // "Failed to fetch" = the browser could not reach Supabase (network, VPN, ad blocker)
+      const offline = updateError.name === 'AuthRetryableFetchError' || /fetch/i.test(updateError.message)
+      return setError(offline
+        ? 'Could not reach the login server. Check your connection (try mobile data, or turn off VPN / ad blockers) and press Save again.'
+        : updateError.message)
+    }
     clearAuthLinkType()
     navigate('/', { replace: true })
   }
