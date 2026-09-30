@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../lib/api'
 
-// Fit profile stored in Databricks ops.user_profile (drives fit_score in gold.jobs).
+// Your profile (roles, skills, years) in Databricks ops.user_profile; the API scores jobs against it per request.
+// profile is null until you save one (new users are sent to onboarding).
 export function useProfile() {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)

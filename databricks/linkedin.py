@@ -1,4 +1,5 @@
 import asyncio
+import os
 import re
 import sys
 from datetime import date, datetime, timedelta
@@ -12,6 +13,7 @@ from scraper_common import (
 	MAX_POSTED_DAYS,
 	OUTPUT_COLUMNS,
 	fetch_companies,
+	fetch_user_roles,
 	format_calendar_date,
 	keep_recent_jobs,
 	print_companies,
@@ -20,6 +22,27 @@ from scraper_common import (
 )
 
 BLOCKED_URL_MARKERS = ("authwall", "/login", "checkpoint")
+
+# Searches per run (Companies rows first, then user roles), pause between searches, and results per role search
+MAX_LINKEDIN_SEARCHES = int(os.getenv("MAX_LINKEDIN_SEARCHES", "60"))
+SEARCH_DELAY_SECONDS = int(os.getenv("LINKEDIN_SEARCH_DELAY_SECONDS", "5"))
+ROLE_SEARCH_TARGET_JOBS = int(os.getenv("LINKEDIN_ROLE_TARGET_JOBS", "100"))
+
+
+def build_searches(companies, roles):
+	"""Companies rows (admin-managed keywords) plus one search per user role not already covered, capped."""
+	covered = {(company.get("api_url") or "").strip().lower() for company in companies}
+	role_searches = [
+		{"name": f"Role | {role}", "api_url": role, "linkedin_target_jobs": ROLE_SEARCH_TARGET_JOBS}
+		for role in roles
+		if role.strip().lower() not in covered
+	]
+	searches = companies + role_searches
+	if len(searches) > MAX_LINKEDIN_SEARCHES:
+		dropped = [search.get("name") for search in searches[MAX_LINKEDIN_SEARCHES:]]
+		print(f"[WARN] {len(searches)} searches exceed MAX_LINKEDIN_SEARCHES={MAX_LINKEDIN_SEARCHES}; skipping: {', '.join(dropped)}")
+		searches = searches[:MAX_LINKEDIN_SEARCHES]
+	return searches
 
 
 def format_date_from_days_ago(days_ago):
@@ -345,7 +368,9 @@ async def collect_linkedin_jobs(companies):
 	duplicate_count = 0
 	collected_on = format_calendar_date(date.today())
 
-	for company in companies:
+	for index, company in enumerate(companies):
+		if index and SEARCH_DELAY_SECONDS > 0:
+			await asyncio.sleep(SEARCH_DELAY_SECONDS)  # spread searches out to avoid LinkedIn's authwall
 		company_name = company.get("name") or "Unknown"
 		jobs = await scrape_linkedin_jobs(company)
 		if jobs is None:
@@ -388,11 +413,13 @@ async def collect_linkedin_jobs(companies):
 async def main():
 	companies = await fetch_companies("linkedin", "name,api_url,ats_type,disabled")
 	print_companies(companies, "LinkedIn")
-	if not companies:
+	searches = build_searches(companies, await fetch_user_roles())
+	print(f"[INFO] LinkedIn searches this run: {len(searches)} -> {', '.join(search.get('name') or '?' for search in searches)}")
+	if not searches:
 		print("[ERROR] No LinkedIn searches to run.")
 		sys.exit(1)
 
-	jobs, failed_companies = await collect_linkedin_jobs(companies)
+	jobs, failed_companies = await collect_linkedin_jobs(searches)
 	jobs_dataframe = jobs_to_dataframe(jobs)
 	filtered_jobs_dataframe = keep_recent_jobs(jobs_dataframe)
 	print(f"[FILTER] LinkedIn jobs after filtering (posted_days <= {MAX_POSTED_DAYS}): {len(filtered_jobs_dataframe)}")
@@ -403,7 +430,7 @@ async def main():
 	output_file = write_flat_jobs_csv(filtered_jobs_dataframe, "linkedin")
 
 	print(
-		f"[SUMMARY] searches={len(companies)} failed={len(failed_companies)} "
+		f"[SUMMARY] searches={len(searches)} failed={len(failed_companies)} "
 		f"jobs_scraped={len(jobs)} jobs_written={len(filtered_jobs_dataframe)} "
 		f"missing_descriptions={int((filtered_jobs_dataframe['description'] == '').sum())}"
 	)
@@ -412,7 +439,7 @@ async def main():
 
 	if not output_file:
 		sys.exit(1)
-	if len(failed_companies) == len(companies):
+	if len(failed_companies) == len(searches):
 		print("[ERROR] All LinkedIn searches failed.")
 		sys.exit(1)
 

@@ -9,10 +9,11 @@ import { ShortcutHelp } from '../components/common/ShortcutHelp'
 import { CheckIcon, CloseIcon, SearchIcon } from '../components/common/icons'
 import { DEFAULT_FILTERS, EMPTY_FILTERS, FRESH_HOURS, PANEL_KEYS, POSTED_OPTIONS, SearchFilter } from '../components/common/SearchFilter'
 import { SYNC_MS, api } from '../lib/api'
+import { sessionUser } from '../lib/session'
 import { useProfile } from '../hooks/useProfile'
 import { useHotkeys } from '../hooks/useHotkeys'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
-import { buildTrend, facetOptions, jobUrl } from '../utils/gold'
+import { MATCH_MIN_FIT, buildTrend, facetOptions, jobUrl } from '../utils/gold'
 import { readView, saveView } from '../utils/viewPref'
 
 const PAGE_SIZE = 48
@@ -36,6 +37,29 @@ const TABS = [
   { value: 'pending', label: 'To apply', key: '2' },
   { value: 'applied', label: 'Applied', key: '3' },
 ]
+
+// "For you" (your roles, fit 60+) or "Show all" (every job by fit); remembered per user on this device
+const SCOPES = [
+  { value: 'match', label: 'For you', title: `Jobs in your roles (or the same category) with fit ${MATCH_MIN_FIT}+` },
+  { value: 'all', label: 'Show all', title: 'Every job, best fit first' },
+]
+const scopeStoreKey = () => `jobseeker:scope:${sessionUser()?.id || 'anon'}`
+
+function readScope() {
+  try {
+    return localStorage.getItem(scopeStoreKey()) === 'all' ? 'all' : 'match'
+  } catch {
+    return 'match'
+  }
+}
+
+function saveScope(value) {
+  try {
+    localStorage.setItem(scopeStoreKey(), value)
+  } catch {
+    // storage unavailable
+  }
+}
 
 const FILTER_LABELS = {
   q: 'Search',
@@ -78,8 +102,9 @@ function bumpAppliedToday(rows, delta) {
 
 export function JobsPage() {
   const navigate = useNavigate()
-  const { profile, loading: profileLoading } = useProfile()
+  const { profile, loading: profileLoading, error: profileError } = useProfile()
   const [filters, setFilters] = useState(DEFAULT_FILTERS)
+  const [scope, setScope] = useState(readScope)
   const [searchInput, setSearchInput] = useState('')
   const [sort, setSort] = useState('fit')
   const [tab, setTab] = useState('all')
@@ -108,13 +133,23 @@ export function JobsPage() {
   const filtersRef = useRef(filters)
   const refreshRef = useRef(null)
 
+  // New users pick their roles and skills first (the list is built from them)
+  useEffect(() => {
+    if (!profileLoading && !profileError && !profile) navigate('/settings?tab=profile&welcome=1', { replace: true })
+  }, [profileLoading, profileError, profile, navigate])
+
+  const changeScope = (next) => {
+    setScope(next)
+    saveScope(next)
+  }
+
   useEffect(() => {
     jobsRef.current = jobs
   }, [jobs])
 
   useEffect(() => {
-    filtersRef.current = filters
-  }, [filters])
+    filtersRef.current = { ...filters, scope }
+  }, [filters, scope])
 
   const profileSkills = useMemo(() => profile?.skills || [], [profile])
 
@@ -156,7 +191,7 @@ export function JobsPage() {
     setError('')
     try {
       const rows = await api.jobs(
-        { ...filters, sort, tab, limit: PAGE_SIZE, offset },
+        { ...filters, scope, sort, tab, limit: PAGE_SIZE, offset },
         {
           // Show the last known first page immediately; the fresh result replaces it when it arrives
           onCached: pageToLoad === 0
@@ -187,30 +222,30 @@ export function JobsPage() {
         setWaiting(false)
       }
     }
-  }, [filters, sort, tab])
+  }, [filters, scope, sort, tab])
 
   const fetchSummary = useCallback(async () => {
     const requestId = ++summaryRequestRef.current
     const isCurrent = () => requestId === summaryRequestRef.current
     try {
-      const row = await api.summary(filters, { onCached: cached => { if (isCurrent()) setSummary(cached || {}) } })
+      const row = await api.summary({ ...filters, scope }, { onCached: cached => { if (isCurrent()) setSummary(cached || {}) } })
       if (isCurrent()) setSummary(row)
     } catch (err) {
       console.error('Failed to load summary:', err)
     }
-  }, [filters])
+  }, [filters, scope])
 
   const fetchTrend = useCallback(async () => {
     try {
-      setTrendRows(await api.trend({ onCached: setTrendRows }))
+      setTrendRows(await api.trend({ scope }, { onCached: setTrendRows }))
     } catch (err) {
       console.error('Failed to load trend:', err)
     }
-  }, [])
+  }, [scope])
 
   const fetchFacets = useCallback(() => {
-    api.facets({ onCached: setFacetRows }).then(setFacetRows).catch(err => console.error('Failed to load facets:', err))
-  }, [])
+    api.facets({ scope }, { onCached: setFacetRows }).then(setFacetRows).catch(err => console.error('Failed to load facets:', err))
+  }, [scope])
 
   useEffect(() => {
     setPage(0)
@@ -498,10 +533,10 @@ export function JobsPage() {
           </div>
         )}
 
-        {!profileLoading && !profile && (
+        {profileError && (
           <div className="hint-banner">
-            <span>Set up your fit profile (target roles, skills, experience) to rank jobs for you.</span>
-            <button type="button" className="btn primary sm" onClick={() => navigate('/settings?tab=profile')}>Set up profile</button>
+            <span>Could not load your profile, so fit scores may be missing: {profileError}</span>
+            <button type="button" className="btn primary sm" onClick={() => navigate('/settings?tab=profile')}>Open profile</button>
           </div>
         )}
 
@@ -541,6 +576,20 @@ export function JobsPage() {
         </section>
 
         <section className="chip-row" aria-label="Quick filters">
+          <div className="segmented scope-toggle" role="group" aria-label="Which jobs">
+            {SCOPES.map(option => (
+              <button
+                key={option.value}
+                type="button"
+                className={scope === option.value ? 'active' : ''}
+                onClick={() => changeScope(option.value)}
+                aria-pressed={scope === option.value}
+                title={option.title}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
           {quickChips.map(chip => {
             const active = chip.value !== '' && filters[chip.key] === chip.value
             return (
@@ -617,16 +666,20 @@ export function JobsPage() {
             <h3>
               {hasCustomFilters || tab !== 'all'
                 ? 'No matching jobs'
-                : onlyFreshFilter ? 'Nothing new in the last 24 hours' : 'No jobs yet'}
+                : scope === 'match' ? 'No jobs for your roles yet'
+                  : onlyFreshFilter ? 'Nothing new in the last 24 hours' : 'No jobs yet'}
             </h3>
             <p>
               {hasCustomFilters || tab !== 'all'
                 ? 'Try removing a filter or switching tabs.'
-                : onlyFreshFilter
-                  ? 'Older jobs are hidden. New ones appear after the next pipeline run.'
-                  : 'Jobs appear here after the Databricks pipeline runs.'}
+                : scope === 'match'
+                  ? `Nothing in your roles with fit ${MATCH_MIN_FIT}+ right now. New jobs arrive after each pipeline run, or see every job.`
+                  : onlyFreshFilter
+                    ? 'Older jobs are hidden. New ones appear after the next pipeline run.'
+                    : 'Jobs appear here after the Databricks pipeline runs.'}
             </p>
             <div className="actions-row">
+              {scope === 'match' && <button type="button" onClick={() => changeScope('all')} className="btn">Show all jobs</button>}
               {hasCustomFilters && <button type="button" onClick={clearAll} className="btn">Clear filters</button>}
               {filters.postedWithin && <button type="button" onClick={showOlderJobs} className="btn">Show older jobs</button>}
             </div>

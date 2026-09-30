@@ -124,10 +124,10 @@ export function JobDrawer({ job, profile, position, onMove, onClose, onApplied, 
               <FitRing score={job.fit_score} size="lg" />
               <div>
                 <h3>{fitLabel(job.fit_score)}</h3>
-                <p>Match against your target roles, skills, experience and cities.</p>
+                <p>Match against your roles, skills and experience.</p>
               </div>
             </div>
-            <FitBreakdown job={job} profile={profile} />
+            <FitBreakdown job={job} />
           </section>
 
           <section className="drawer-section">

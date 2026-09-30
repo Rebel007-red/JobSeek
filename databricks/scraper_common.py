@@ -3,6 +3,7 @@
 The scrapers read their company list from Supabase and write one CSV per run to databricks/output,
 which upload_to_volume.py then copies to the Databricks landing volume.
 """
+import json
 import os
 import re
 from datetime import datetime
@@ -43,6 +44,8 @@ def build_headers(extra_headers=None):
     api_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("VITE_SUPABASE_ANON_KEY")
     if api_key:
         headers["apikey"] = api_key
+        if api_key.startswith("eyJ"):  # legacy JWT keys also go in Authorization (sb_secret_/sb_publishable_ keys must not)
+            headers["Authorization"] = f"Bearer {api_key}"
     if extra_headers:
         headers.update(extra_headers)
     return headers
@@ -89,6 +92,69 @@ def print_companies(companies, label):
         return
 
     print(f"[INFO] {label} companies: {len(companies)}")
+
+
+# Written by 05_gold_merge: {"profiles": [{"user_id": ..., "roles": [...]}]}
+LINKEDIN_ROLES_FILE = os.getenv("LINKEDIN_ROLES_FILE", "/Volumes/jobseeker/ops/pipeline/config/linkedin_roles.json")
+
+
+async def _download_roles_file(session):
+    host = (os.getenv("DATABRICKS_HOST") or "").strip().strip('"').rstrip("/")
+    token = (os.getenv("DATABRICKS_TOKEN") or "").strip().strip('"')
+    if not host or not token:
+        print("    [WARN] DATABRICKS_HOST / DATABRICKS_TOKEN not set. Skipping user role searches.")
+        return None
+    url = f"{host}/api/2.0/fs/files{LINKEDIN_ROLES_FILE}"
+    async with session.get(url, headers={"Authorization": f"Bearer {token}"}) as response:
+        if response.status == 404:
+            print(f"    [INFO] {LINKEDIN_ROLES_FILE} not found yet (written by the pipeline). No user role searches.")
+            return None
+        if response.status != 200:
+            print(f"    [WARN] Could not read {LINKEDIN_ROLES_FILE}: HTTP {response.status} {(await response.text())[:300]}")
+            return None
+        return json.loads(await response.text())
+
+
+async def _existing_user_ids(session):
+    """Ids of current Supabase users (needs the service role key); None when they can't be listed."""
+    if not SUPABASE_URL or not os.getenv("SUPABASE_SERVICE_ROLE_KEY"):
+        print("    [WARN] No Supabase service role key. Using roles of every profile.")
+        return None
+    ids, page = set(), 1
+    while True:
+        url = f"{SUPABASE_URL}/auth/v1/admin/users?page={page}&per_page=100"
+        async with session.get(url, headers=HEADERS) as response:
+            if response.status != 200:
+                print(f"    [WARN] Could not list Supabase users: HTTP {response.status}. Using roles of every profile.")
+                return None
+            users = (await response.json()).get("users", [])
+        ids.update(str(user["id"]).lower() for user in users if user.get("id"))
+        if len(users) < 100:
+            return ids
+        page += 1
+
+
+async def fetch_user_roles():
+    """Distinct role titles picked by current app users (first spelling wins), for LinkedIn keyword searches."""
+    async with aiohttp.ClientSession() as session:
+        data = await _download_roles_file(session)
+        if not data:
+            return []
+        user_ids = await _existing_user_ids(session)
+
+    roles, seen, skipped_users = [], set(), 0
+    for profile in data.get("profiles", []):
+        if user_ids is not None and str(profile.get("user_id", "")).lower() not in user_ids:
+            skipped_users += 1
+            continue
+        for role in profile.get("roles") or []:
+            role = str(role).strip()
+            if role and role.lower() not in seen:
+                seen.add(role.lower())
+                roles.append(role)
+    print(f"[INFO] User roles: {len(roles)} distinct from {len(data.get('profiles', []))} profiles "
+          f"(skipped {skipped_users} of removed users), file generated {data.get('generated_at')}")
+    return roles
 
 
 def keep_recent_jobs(dataframe):

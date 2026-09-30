@@ -28,8 +28,8 @@ export function FitScore({ score }) {
   )
 }
 
-// Four component bars (role / skills / experience / location), each 0-1 from gold.jobs.
-export function FitBreakdown({ job, profile, compact = false }) {
+// Component bars (role / skills / experience), each 0-1, with their fixed share of the score.
+export function FitBreakdown({ job, compact = false }) {
   const hasAny = FIT_PARTS.some(part => job[part.key] !== null && job[part.key] !== undefined)
   if (!hasAny) return null
 
@@ -37,13 +37,12 @@ export function FitBreakdown({ job, profile, compact = false }) {
     <div className={`fit-breakdown ${compact ? 'compact' : ''}`}>
       {FIT_PARTS.map(part => {
         const value = Math.round(Math.max(0, Math.min(1, Number(job[part.key]) || 0)) * 100)
-        const weight = profile?.[part.weight]
         return (
           <div key={part.key} className="fit-part" title={`${part.label}: ${value}%`}>
             {!compact && (
               <div className="fit-part-label">
                 <span>{part.label}</span>
-                <em>{value}%{weight !== null && weight !== undefined ? ` · weight ${Math.round(weight * 100)}%` : ''}</em>
+                <em>{value}% · weight {Math.round(part.weight * 100)}%</em>
               </div>
             )}
             <div className="fit-bar" aria-hidden={compact ? 'true' : undefined}>

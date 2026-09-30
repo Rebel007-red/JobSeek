@@ -2,13 +2,16 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { api } from '../lib/api'
+import { sessionUser } from '../lib/session'
 import { useProfile } from '../hooks/useProfile'
 import { ProfileEditor } from '../components/settings/ProfileEditor'
 import { ChevronLeftIcon, GridIcon, ListIcon } from '../components/common/icons'
 import { readView, saveView } from '../utils/viewPref'
 import { formatDate } from '../utils/job'
 
-const SETTINGS_TABS = ['companies', 'profile', 'hidden']
+// Companies (scraper sources) are admin-only; Supabase RLS enforces the same rule.
+const ADMIN_TABS = ['companies', 'profile', 'hidden']
+const USER_TABS = ['profile', 'hidden']
 
 const ATS_TYPES = ['greenhouse', 'workday', 'phenom', 'icims', 'oracle', 'successfactors', 'jsearch', 'linkedin', 'naukri']
 
@@ -63,7 +66,10 @@ async function companyHealth(company) {
 export function SettingsPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const [tab, setTab] = useState(() => (SETTINGS_TABS.includes(searchParams.get('tab')) ? searchParams.get('tab') : 'companies'))
+  const isAdmin = Boolean(sessionUser()?.isAdmin)
+  const settingsTabs = isAdmin ? ADMIN_TABS : USER_TABS
+  const onboarding = searchParams.get('welcome') === '1'
+  const [tab, setTab] = useState(() => (settingsTabs.includes(searchParams.get('tab')) ? searchParams.get('tab') : settingsTabs[0]))
   const [view, setView] = useState(readView)
   const { profile, loading: profileLoading, error: profileError, reload: reloadProfile, save: saveProfile } = useProfile()
   const [companies, setCompanies] = useState([])
@@ -82,7 +88,7 @@ export function SettingsPage() {
   const hiddenCount = hiddenJobs.length
 
   useEffect(() => {
-    loadCompanies()
+    if (isAdmin) loadCompanies()
     loadHiddenJobs()
   }, [])
 
@@ -232,10 +238,10 @@ export function SettingsPage() {
           <div className="settings-header">
             <div>
               <p className="eyebrow">Preferences</p>
-              <h2>Manage sources & fit</h2>
+              <h2>{isAdmin ? 'Manage sources & profile' : 'Your profile'}</h2>
             </div>
             <div className="settings-tabs" role="tablist" aria-label="Settings sections">
-              {SETTINGS_TABS.map(t => (
+              {settingsTabs.map(t => (
                 <button
                   key={t}
                   type="button"
@@ -250,7 +256,7 @@ export function SettingsPage() {
             </div>
           </div>
 
-          {tab === 'companies' && (
+          {isAdmin && tab === 'companies' && (
             <div className="settings-panel settings-panel-animate">
               <div className="settings-summary-row">
                 <p>
@@ -387,7 +393,15 @@ export function SettingsPage() {
                   </div>
                 </div>
               ) : (
-                <ProfileEditor key={profile?.profile_id || 'default'} profile={profile} onSave={saveProfile} />
+                <ProfileEditor
+                  key={profile?.profile_id || 'new'}
+                  profile={profile}
+                  onboarding={onboarding || !profile}
+                  onSave={async (next) => {
+                    await saveProfile(next)
+                    if (onboarding || !profile) navigate('/', { replace: true })
+                  }}
+                />
               )}
             </div>
           )}

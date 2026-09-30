@@ -1,11 +1,14 @@
 // Helpers for rows from Databricks gold.jobs.
 
+// Fit components computed per user by the API (weights fixed there too: role 40%, skills 45%, experience 15%).
 export const FIT_PARTS = [
-  { key: 'fit_role', label: 'Role', weight: 'weight_role' },
-  { key: 'fit_skills', label: 'Skills', weight: 'weight_skills' },
-  { key: 'fit_experience', label: 'Experience', weight: 'weight_experience' },
-  { key: 'fit_location', label: 'Location', weight: 'weight_location' },
+  { key: 'fit_role', label: 'Role', weight: 0.4 },
+  { key: 'fit_skills', label: 'Skills', weight: 0.45 },
+  { key: 'fit_experience', label: 'Experience', weight: 0.15 },
 ]
+
+// "For you" shows jobs matching your roles with at least this fit (same number as the API)
+export const MATCH_MIN_FIT = 60
 
 export function fitTone(score) {
   if (score === null || score === undefined || Number.isNaN(Number(score))) return 'none'

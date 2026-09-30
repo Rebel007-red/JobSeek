@@ -1,17 +1,25 @@
 import { useId, useState } from 'react'
 
 // Tag input: Enter or comma adds, × removes, suggestions via <datalist>.
-export function ChipInput({ label, values, onChange, suggestions = [], placeholder, help, maxItems = 50, numbered = false }) {
+// strict: only values from `suggestions` are accepted (matched case-insensitively, stored in the list's spelling).
+export function ChipInput({ label, values, onChange, suggestions = [], placeholder, help, maxItems = 50, numbered = false, strict = false }) {
   const [input, setInput] = useState('')
+  const [rejected, setRejected] = useState('')
   const listId = useId()
+  const full = values.length >= maxItems
 
   const add = (raw) => {
     const value = raw.trim()
     setInput('')
-    if (!value || values.length >= maxItems) return
+    setRejected('')
+    if (!value || full) return
     if (values.some(item => item.toLowerCase() === value.toLowerCase())) return
-    const canonical = suggestions.find(item => item.toLowerCase() === value.toLowerCase()) || value
-    onChange([...values, canonical])
+    const canonical = suggestions.find(item => item.toLowerCase() === value.toLowerCase())
+    if (strict && !canonical) {
+      setRejected(`"${value}" is not in the list. Start typing and pick a suggestion.`)
+      return
+    }
+    onChange([...values, canonical || value])
   }
 
   return (
@@ -31,16 +39,18 @@ export function ChipInput({ label, values, onChange, suggestions = [], placehold
               onChange(values.slice(0, -1))
             }
           }}
-          placeholder={placeholder}
+          placeholder={full ? `Limit of ${maxItems} reached` : placeholder}
+          disabled={full}
           className="settings-input"
         />
-        <button type="button" onClick={() => add(input)} className="secondary-button compact-button" disabled={!input.trim()}>Add</button>
+        <button type="button" onClick={() => add(input)} className="secondary-button compact-button" disabled={full || !input.trim()}>Add</button>
       </div>
       {suggestions.length > 0 && (
         <datalist id={listId}>
           {suggestions.map(item => <option key={item} value={item} />)}
         </datalist>
       )}
+      {rejected && <p className="settings-inline-error">{rejected}</p>}
       {help && <small>{help}</small>}
       {values.length > 0 && (
         <div className="settings-skill-list">

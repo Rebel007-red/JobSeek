@@ -1,18 +1,18 @@
-// Netlify Function: authenticated proxy from the UI to Databricks (gold.jobs / ops.user_profile).
-// The Databricks token never reaches the browser. Callers must send a valid Supabase session token.
+// Netlify Function: authenticated proxy from the UI to Databricks (gold.jobs, gold.user_job_state, ops.user_profile).
+// The Databricks token never reaches the browser. Callers must send a valid Supabase session token; every per-user
+// statement is scoped to that session's user id.
 //
 // Environment (Netlify site settings, scope: Functions):
 //   DATABRICKS_HOST, DATABRICKS_TOKEN   required
-//   DATABRICKS_WAREHOUSE_ID (default: first SQL warehouse), DATABRICKS_CATALOG (default jobseeker), DATABRICKS_JOB_NAME (default JobSeeeker)
+//   DATABRICKS_WAREHOUSE_ID (default: first SQL warehouse), DATABRICKS_CATALOG (default jobseeker)
 //   SUPABASE_URL / VITE_SUPABASE_URL, SUPABASE_ANON_KEY / VITE_SUPABASE_ANON_KEY   to verify the login
-//   ALLOWED_EMAILS   optional comma-separated allow-list (recommended)
+//   ALLOWED_EMAILS   optional comma-separated allow-list (sign-ups are invite-only in Supabase)
 import { createHash } from 'node:crypto'
-import { ValidationError, buildStatement, isStatementId, toObjects } from './sql.mjs'
+import { SHARED_ACTIONS, ValidationError, buildStatement, isStatementId, toObjects } from './sql.mjs'
 
 const WAIT_TIMEOUT = '8s' // keep below the function time limit; slower statements are polled by the client
 const POLL_BUDGET_MS = 6000 // a poll request waits server-side this long before telling the client to ask again
 const POLL_INTERVAL_MS = 400
-const WAITING_RUN_STATES = new Set(['QUEUED', 'PENDING', 'BLOCKED'])
 const MAX_ROWS = 5000
 
 // Per-instance caches (a warm function instance serves many requests).
@@ -23,17 +23,24 @@ const READ_TTL_MS = {
   trend: 5 * 60_000, facets: 5 * 60_000, refs: 30 * 60_000,
 }
 const WRITE_ACTIONS = new Set(['setApplied', 'setHidden', 'restoreHidden', 'saveProfile'])
-const authCache = new Map() // sha256(token) -> { expires }
-const resultCache = new Map() // action|params -> { expires, body }
-const pendingCacheKeys = new Map() // statement id -> { key, ttl }
+const authCache = new Map() // sha256(token) -> { expires, user: { id, email } }
+const resultCache = new Map() // <user id | 'shared'>|action|params -> { expires, body }
+const pendingCacheKeys = new Map() // statement id -> { key, ttl, userId }
 
 function remember(map, key, value) {
   if (map.size >= CACHE_MAX_ENTRIES) map.delete(map.keys().next().value)
   map.set(key, value)
 }
 
-function cacheKey(action, params) {
-  return `${action}|${JSON.stringify(params ?? {})}`
+// Per-user results are keyed by the user id so one user's jobs / flags / profile are never served to another.
+function cacheKey(action, params, user) {
+  const scope = SHARED_ACTIONS.has(action) ? 'shared' : user.id
+  return `${scope}|${action}|${JSON.stringify(params ?? {})}`
+}
+
+function forgetUserResults(userId) {
+  const prefix = `${userId}|`
+  for (const key of resultCache.keys()) if (key.startsWith(prefix)) resultCache.delete(key)
 }
 
 function cachedResult(key) {
@@ -67,6 +74,7 @@ function json(status, body) {
   })
 }
 
+// Returns the signed-in Supabase user as { id, email }.
 async function verifyUser(req) {
   const header = req.headers.get('authorization') || ''
   const token = header.startsWith('Bearer ') ? header.slice(7).trim() : ''
@@ -74,7 +82,7 @@ async function verifyUser(req) {
 
   const tokenHash = createHash('sha256').update(token).digest('hex')
   const cached = authCache.get(tokenHash)
-  if (cached && cached.expires > Date.now()) return
+  if (cached && cached.expires > Date.now()) return cached.user
 
   const supabaseUrl = env('SUPABASE_URL') || env('VITE_SUPABASE_URL')
   const anonKey = env('SUPABASE_ANON_KEY') || env('VITE_SUPABASE_ANON_KEY')
@@ -84,13 +92,16 @@ async function verifyUser(req) {
     headers: { apikey: anonKey, Authorization: `Bearer ${token}` },
   })
   if (!response.ok) throw new HttpError(401, 'Session expired, sign in again')
-  const user = await response.json()
+  const data = await response.json()
+  if (!data?.id) throw new HttpError(401, 'Session expired, sign in again')
+  const user = { id: String(data.id), email: String(data.email || '') }
 
   const allowed = env('ALLOWED_EMAILS').split(',').map(email => email.trim().toLowerCase()).filter(Boolean)
-  if (allowed.length && !allowed.includes(String(user.email || '').toLowerCase())) {
+  if (allowed.length && !allowed.includes(user.email.toLowerCase())) {
     throw new HttpError(403, 'This account is not allowed to use the job data')
   }
-  remember(authCache, tokenHash, { expires: Date.now() + AUTH_TTL_MS })
+  remember(authCache, tokenHash, { expires: Date.now() + AUTH_TTL_MS, user })
+  return user
 }
 
 function databricksConfig() {
@@ -142,8 +153,11 @@ async function statementResult(config, data, cache) {
     return { status: 202, body: { pending: true, statementId: data.statement_id } }
   }
   if (state !== 'SUCCEEDED') {
-    const message = data.status?.error?.message || `Statement ${state || 'failed'}`
-    return { status: 502, body: { error: String(message).slice(0, 500) } }
+    const message = String(data.status?.error?.message || `Statement ${state || 'failed'}`)
+    // assert_true(...) in a statement = input the SQL rejected (e.g. a role not in the taxonomy)
+    const raised = message.match(/\[USER_RAISED_EXCEPTION\]\s*(.*?)(?:\s*SQLSTATE.*)?$/s)
+    if (raised) return { status: 400, body: { error: raised[1].trim().slice(0, 300) } }
+    return { status: 502, body: { error: message.slice(0, 500) } }
   }
 
   const columns = data.manifest?.schema?.columns || []
@@ -160,15 +174,15 @@ async function statementResult(config, data, cache) {
   return { status: 200, body }
 }
 
-async function runStatement(config, action, params) {
+async function runStatement(config, action, params, user) {
   const ttl = READ_TTL_MS[action]
-  const key = ttl ? cacheKey(action, params) : null
+  const key = ttl ? cacheKey(action, params, user) : null
   if (key) {
     const hit = cachedResult(key)
     if (hit) return json(200, hit)
   }
 
-  const { statement, parameters } = buildStatement(action, params)
+  const { statement, parameters } = buildStatement(action, params, user)
   const data = await databricks(config, 'POST', '/api/2.0/sql/statements/', {
     warehouse_id: await warehouseId(config),
     catalog: config.catalog,
@@ -179,15 +193,17 @@ async function runStatement(config, action, params) {
     disposition: 'INLINE',
     format: 'JSON_ARRAY',
   })
-  if (WRITE_ACTIONS.has(action)) resultCache.clear()
-  const result = await statementResult(config, data, key ? { key, ttl } : null)
+  if (WRITE_ACTIONS.has(action)) forgetUserResults(user.id)
+  const result = await statementResult(config, data, key ? { key, ttl, userId: user.id } : null)
   return json(result.status, result.body)
 }
 
 // Waits server-side (short intervals) so the client needs few round trips while the warehouse starts.
-async function pollStatement(config, statementId) {
+// A statement can only be polled by the user who started it.
+async function pollStatement(config, statementId, user) {
   const started = Date.now()
   const cache = pendingCacheKeys.get(statementId) || null
+  if (cache && cache.userId !== user.id && !cache.key.startsWith('shared|')) throw new HttpError(403, 'Not your request')
   for (;;) {
     const data = await databricks(config, 'GET', `/api/2.0/sql/statements/${statementId}`)
     const result = await statementResult(config, data, cache)
@@ -199,26 +215,11 @@ async function pollStatement(config, statementId) {
   }
 }
 
-// Starts the pipeline job so fit scores are recomputed after a profile change (same rules as trigger_job.py).
-async function rescore(config) {
-  const name = env('DATABRICKS_JOB_NAME', 'JobSeeeker')
-  const jobs = (await databricks(config, 'GET', `/api/2.2/jobs/list?name=${encodeURIComponent(name)}`)).jobs || []
-  if (jobs.length !== 1) throw new HttpError(502, `Expected exactly one Databricks job named "${name}", found ${jobs.length}`)
-  const jobId = jobs[0].job_id
-
-  const runs = (await databricks(config, 'GET', `/api/2.2/jobs/runs/list?job_id=${jobId}&active_only=true`)).runs || []
-  if (runs.some(run => WAITING_RUN_STATES.has(run.state?.life_cycle_state))) {
-    return json(200, { status: 'already_queued' })
-  }
-  const { run_id: runId } = await databricks(config, 'POST', '/api/2.2/jobs/run-now', { job_id: jobId })
-  return json(200, { status: runs.length ? 'queued' : 'started', runId })
-}
-
 export default async (req) => {
   if (req.method !== 'POST') return json(405, { error: 'Method not allowed' })
 
   try {
-    await verifyUser(req)
+    const user = await verifyUser(req)
 
     let body
     try {
@@ -231,11 +232,10 @@ export default async (req) => {
 
     if (action === 'poll') {
       if (!isStatementId(body.statementId)) throw new ValidationError('Invalid statement id')
-      return pollStatement(config, body.statementId)
+      return pollStatement(config, body.statementId, user)
     }
-    if (action === 'rescore') return rescore(config)
 
-    return runStatement(config, action, body.params)
+    return runStatement(config, action, body.params, user)
   } catch (error) {
     const status = error.status || 500
     if (status >= 500) console.error(error)

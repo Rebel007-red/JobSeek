@@ -1,21 +1,31 @@
 import { supabase } from './supabase'
+import { sessionUser } from './session'
 
 // Databricks is reached only through the Netlify Function, which holds the token and checks the Supabase session.
 const ENDPOINT = import.meta.env.VITE_API_URL || '/.netlify/functions/api'
 const MAX_WAIT_MS = 120_000
-const STORE_PREFIX = 'jobseeker:api:v1:'
+const STORE_PREFIX = 'jobseeker:api:v2:'
 const STORE_INDEX = `${STORE_PREFIX}index`
 const STORE_MAX_ENTRIES = 25
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms))
 
-// ---- persistent cache (localStorage): last result per action + params, shown instantly on the next visit ----
+// v1 cached one shared result per action (single-user era); drop it so nobody sees another account's data.
+try {
+  Object.keys(localStorage).filter(key => key.startsWith('jobseeker:api:v1:')).forEach(key => localStorage.removeItem(key))
+} catch {
+  // storage unavailable
+}
+
+// ---- persistent cache (localStorage): last result per user + action + params, shown instantly on the next visit ----
 
 const memory = new Map() // key -> { at, rows }
 const inflight = new Map() // key -> Promise<rows>
 
+const userPrefix = () => `${sessionUser()?.id || 'anon'}|`
+
 function keyFor(action, params) {
-  return `${action}|${JSON.stringify(params ?? {})}`
+  return `${userPrefix()}${action}|${JSON.stringify(params ?? {})}`
 }
 
 function readIndex() {
@@ -54,9 +64,9 @@ function writeCache(key, rows, persist) {
   }
 }
 
-// Drops cached results for the given actions (after a write they may be stale).
+// Drops the signed-in user's cached results for the given actions (after a write they may be stale).
 function invalidate(actions) {
-  const prefixes = actions.map(action => `${action}|`)
+  const prefixes = actions.map(action => `${userPrefix()}${action}|`)
   const matches = (key) => prefixes.some(prefix => key.startsWith(prefix))
   for (const key of memory.keys()) if (matches(key)) memory.delete(key)
   try {
@@ -165,11 +175,12 @@ function first(action, params, { onCached, ...options } = {}) {
   return query(action, params, { ...options, onCached: onCached && (rows => onCached(unwrap(rows))) }).then(unwrap)
 }
 
+// scope: 'match' ("For you": your roles, fit 60+) or 'all'
 export const api = {
   jobs: (params, options) => query('jobs', params, { maxAge: FRESH_MS, ...options }),
   summary: (filters, options) => first('summary', filters, { maxAge: FRESH_MS, ...options }).then(row => row || {}),
-  trend: (options) => query('trend', {}, { maxAge: SLOW_MS, ...options }),
-  facets: (options) => query('facets', {}, { maxAge: SLOW_MS, ...options }),
+  trend: (params, options) => query('trend', params, { maxAge: SLOW_MS, ...options }),
+  facets: (params, options) => query('facets', params, { maxAge: SLOW_MS, ...options }),
   job: (jobKey) => first('job', { jobKey }, { maxAge: 60 * MINUTE, persist: false }),
   prefetchJob: (jobKey) => { api.job(jobKey).catch(() => {}) },
   hiddenJobs: (options) => query('hiddenJobs', {}, { maxAge: FRESH_MS, ...options }),
@@ -182,6 +193,6 @@ export const api = {
   setApplied: (jobKey, applied) => write('setApplied', { jobKey, applied }, JOB_VIEWS),
   setHidden: (jobKey, hidden) => write('setHidden', { jobKey, hidden }, JOB_VIEWS),
   restoreHidden: () => write('restoreHidden', {}, JOB_VIEWS),
-  saveProfile: (profile) => write('saveProfile', profile, ['profile']),
-  rescore: () => callApi('rescore'),
+  // Fit and "For you" are computed from the profile at query time, so every job view changes with it
+  saveProfile: (profile) => write('saveProfile', profile, ['profile', ...JOB_VIEWS, 'facets']),
 }

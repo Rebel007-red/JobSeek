@@ -1,9 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { ValidationError, buildFilterWhere, buildStatement, convertValue, isStatementId, toObjects, validateProfile } from './sql.mjs'
+import { SHARED_ACTIONS, ValidationError, buildFilterWhere, buildStatement, convertValue, isStatementId, toObjects, validateProfile } from './sql.mjs'
 
 const KEY = 'a'.repeat(64)
+const USER = { id: '0b6f3c1e-9a2d-4f7b-8c55-1d2e3f4a5b6c', email: 'me@example.com' }
+const userParam = { name: 'user_id', value: USER.id, type: 'STRING' }
 
 test('filters become named parameters, never SQL text', () => {
   const injection = "x' OR 1=1 --"
@@ -23,32 +25,66 @@ test('freshness filter is in hours and never hides applied jobs', () => {
   assert.equal(buildFilterWhere({ postedWithin: '' }).parameters.length, 0)
 })
 
-test('empty filters only keep the visibility rule', () => {
+test('empty filters keep the visibility rule and the "For you" scope', () => {
   const { where, parameters } = buildFilterWhere({ q: '  ', minFit: '', maxYears: null })
   assert.equal(parameters.length, 0)
   assert.ok(where.startsWith('(NOT coalesce(is_hidden, false)'))
+  assert.ok(where.includes('(is_applied OR (role_match AND fit_score >= 60))'))
+})
+
+test('scope=all drops the role / fit threshold', () => {
+  const { where } = buildFilterWhere({ scope: 'all' })
+  assert.ok(!where.includes('role_match'))
+})
+
+test('per-user reads are scoped to the caller and read the per-user view', () => {
+  for (const action of ['jobs', 'summary', 'trend', 'facets', 'hiddenJobs', 'profile']) {
+    const { statement, parameters } = buildStatement(action, {}, USER)
+    assert.deepEqual(parameters[0], userParam, action)
+    assert.ok(statement.includes(':user_id'), action)
+  }
+  const { statement } = buildStatement('jobs', {}, USER)
+  assert.ok(statement.includes('FROM user_jobs'))
+  assert.ok(statement.includes('WHERE profile_id = :user_id'))
+  assert.ok(statement.includes('WHERE user_id = :user_id'))
+})
+
+test('per-user actions need a verified user id', () => {
+  assert.throws(() => buildStatement('jobs', {}, null), ValidationError)
+  assert.throws(() => buildStatement('profile', {}, { id: "x' OR '1'='1" }), ValidationError)
+  assert.throws(() => buildStatement('setHidden', { jobKey: KEY, hidden: true }, {}), ValidationError)
+})
+
+test('shared reads do not depend on the user', () => {
+  assert.ok(SHARED_ACTIONS.has('refs') && SHARED_ACTIONS.has('job') && !SHARED_ACTIONS.has('jobs'))
+  assert.deepEqual(buildStatement('refs').parameters, [])
 })
 
 test('jobs statement clamps paging and falls back to fit sort', () => {
-  const { statement } = buildStatement('jobs', { limit: 5000, offset: -3, sort: 'DROP TABLE' })
+  const { statement } = buildStatement('jobs', { limit: 5000, offset: -3, sort: 'DROP TABLE' }, USER)
   assert.match(statement, /LIMIT 100 OFFSET 0$/)
   assert.match(statement, /ORDER BY fit_score DESC NULLS LAST/)
 })
 
 test('summary ignores the tab so tab counts stay stable', () => {
-  const { statement } = buildStatement('summary', { tab: 'applied', role: 'Data Engineer' })
+  const { statement } = buildStatement('summary', { tab: 'applied', role: 'Data Engineer' }, USER)
   assert.ok(statement.includes('role_title = :role'))
   assert.ok(!statement.includes('AND coalesce(is_applied, false)) AS total'))
 })
 
-test('mutations validate job keys and booleans', () => {
-  assert.throws(() => buildStatement('setApplied', { jobKey: "1' OR '1'='1", applied: true }), ValidationError)
-  assert.throws(() => buildStatement('setHidden', { jobKey: KEY, hidden: 'yes' }), ValidationError)
-  const { parameters } = buildStatement('setHidden', { jobKey: KEY, hidden: true })
+test('mutations validate job keys and booleans and only touch the caller rows', () => {
+  assert.throws(() => buildStatement('setApplied', { jobKey: "1' OR '1'='1", applied: true }, USER), ValidationError)
+  assert.throws(() => buildStatement('setHidden', { jobKey: KEY, hidden: 'yes' }, USER), ValidationError)
+  const { statement, parameters } = buildStatement('setHidden', { jobKey: KEY, hidden: true }, USER)
+  assert.ok(statement.startsWith('MERGE INTO gold.user_job_state t'))
+  assert.ok(statement.includes('ON t.user_id = s.user_id AND t.job_key = s.job_key'))
   assert.deepEqual(parameters, [
+    userParam,
     { name: 'job_key', value: KEY, type: 'STRING' },
     { name: 'hidden', value: 'true', type: 'BOOLEAN' },
   ])
+  const restore = buildStatement('restoreHidden', {}, USER)
+  assert.ok(restore.statement.includes('WHERE user_id = :user_id'))
 })
 
 test('unknown and prototype actions are rejected', () => {
@@ -57,28 +93,30 @@ test('unknown and prototype actions are rejected', () => {
   assert.throws(() => buildStatement('__proto__'), ValidationError)
 })
 
-test('profile validation trims, de-duplicates and checks ranges', () => {
+test('profile validation trims, de-duplicates, enforces 1-2 roles and 1-5 skills', () => {
   const profile = validateProfile({
     target_roles: [' Data Engineer ', 'data engineer', ''],
     skills: ['SQL', 'Python'],
-    preferred_cities: [],
     min_years: '2',
     max_years: 4,
-    weight_role: 0.4, weight_skills: 0.35, weight_experience: 0.15, weight_location: 0.1,
   })
   assert.deepEqual(profile.target_roles, ['Data Engineer'])
   assert.equal(profile.min_years, 2)
   assert.throws(() => validateProfile({ ...profile, min_years: 5, max_years: 2 }), /Minimum years/)
-  assert.throws(() => validateProfile({ ...profile, weight_role: 2 }), /between 0 and 1/)
-  assert.throws(() => validateProfile({ ...profile, weight_role: 0, weight_skills: 0, weight_experience: 0, weight_location: 0 }), /At least one/)
+  assert.throws(() => validateProfile({ ...profile, target_roles: ['A', 'B', 'C'] }), /at most 2/)
+  assert.throws(() => validateProfile({ ...profile, skills: ['a', 'b', 'c', 'd', 'e', 'f'] }), /at most 5/)
+  assert.throws(() => validateProfile({ ...profile, target_roles: [] }), /at least one role/)
+  assert.throws(() => validateProfile({ ...profile, skills: [] }), /at least one skill/)
 })
 
-test('saveProfile sends arrays as JSON parameters and nulls without a value', () => {
-  const { parameters } = buildStatement('saveProfile', {
-    target_roles: ['Data Engineer'], skills: [], preferred_cities: ['Hyderabad'],
-    min_years: null, max_years: 4,
-    weight_role: 0.4, weight_skills: 0.35, weight_experience: 0.15, weight_location: 0.1,
-  })
+test('saveProfile writes only the caller row and checks the taxonomy in SQL', () => {
+  const { statement, parameters } = buildStatement('saveProfile', {
+    target_roles: ['Data Engineer'], skills: ['SQL'], min_years: null, max_years: 4,
+  }, USER)
+  assert.ok(statement.includes('SELECT :user_id AS profile_id'))
+  assert.ok(statement.includes("'Pick roles from the list'") && statement.includes("'Pick skills from the list'"))
+  assert.deepEqual(parameters[0], userParam)
+  assert.deepEqual(parameters.find(p => p.name === 'email'), { name: 'email', value: USER.email, type: 'STRING' })
   assert.deepEqual(parameters.find(p => p.name === 'target_roles'), { name: 'target_roles', value: '["Data Engineer"]', type: 'STRING' })
   assert.deepEqual(parameters.find(p => p.name === 'min_years'), { name: 'min_years', type: 'INT' })
 })

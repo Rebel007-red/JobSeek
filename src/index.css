@@ -302,7 +302,8 @@ kbd {
   font-size: 13px;
 }
 
-.settings-form-success {
+.settings-form-success,
+.form-info {
   padding: 8px 10px;
   border-radius: var(--radius-sm);
   background: var(--success-soft);
@@ -346,6 +347,19 @@ kbd {
   background: var(--surface);
   color: var(--text);
   box-shadow: var(--shadow-sm);
+}
+
+/* "For you" / "Show all": text buttons in the quick-filter row */
+.segmented.scope-toggle {
+  flex-shrink: 0;
+}
+
+.segmented.scope-toggle button {
+  width: auto;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 /* =========================================================
