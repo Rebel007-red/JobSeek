@@ -58,6 +58,7 @@ test('per-user actions need a verified user id', () => {
 test('shared reads do not depend on the user', () => {
   assert.ok(SHARED_ACTIONS.has('refs') && SHARED_ACTIONS.has('job') && !SHARED_ACTIONS.has('jobs'))
   assert.deepEqual(buildStatement('refs').parameters, [])
+  assert.ok(buildStatement('refs').statement.includes('FROM ops.ref_roles WHERE in_scope'))
 })
 
 test('jobs statement clamps paging and falls back to fit sort', () => {
@@ -109,12 +110,22 @@ test('profile validation trims, de-duplicates, enforces 1-2 roles and 1-5 skills
   assert.throws(() => validateProfile({ ...profile, skills: [] }), /at least one skill/)
 })
 
-test('saveProfile writes only the caller row and checks the taxonomy in SQL', () => {
+test('typed roles and skills are allowed when they look like real names', () => {
+  const profile = validateProfile({ target_roles: ['OCI Cloud Admin'], skills: ['C++', '.NET', 'CI/CD', 'Node.js'] })
+  assert.deepEqual(profile.skills, ['C++', '.NET', 'CI/CD', 'Node.js'])
+  assert.throws(() => validateProfile({ target_roles: ["Data Engineer'; DROP"], skills: ['SQL'] }), /letters, numbers/)
+  assert.throws(() => validateProfile({ target_roles: ['Data Engineer'], skills: ['communication'] }), /too general/)
+  assert.throws(() => validateProfile({ target_roles: ['Data Engineer'], skills: ['x'.repeat(61)] }), /longer than 60/)
+})
+
+test('saveProfile writes only the caller row and rejects roles known to be out of scope', () => {
   const { statement, parameters } = buildStatement('saveProfile', {
     target_roles: ['Data Engineer'], skills: ['SQL'], min_years: null, max_years: 4,
   }, USER)
   assert.ok(statement.includes('SELECT :user_id AS profile_id'))
-  assert.ok(statement.includes("'Pick roles from the list'") && statement.includes("'Pick skills from the list'"))
+  assert.ok(statement.includes('FROM ops.ref_roles WHERE NOT in_scope'))
+  assert.ok(statement.includes("FROM ops.custom_roles WHERE status = 'rejected'"))
+  assert.ok(statement.includes("'We only support data, full stack, backend, DevOps and cloud roles'"))
   assert.deepEqual(parameters[0], userParam)
   assert.deepEqual(parameters.find(p => p.name === 'email'), { name: 'email', value: USER.email, type: 'STRING' })
   assert.deepEqual(parameters.find(p => p.name === 'target_roles'), { name: 'target_roles', value: '["Data Engineer"]', type: 'STRING' })

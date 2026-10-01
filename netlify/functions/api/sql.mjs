@@ -1,6 +1,7 @@
 // Fixed, parameterised SQL for the Databricks SQL Statement API.
 // Only values travel as named parameters; clause text is chosen from this file, never from the request.
 // Every per-user statement is scoped by :user_id, which comes from the verified Supabase session, never from the request body.
+import { ENTRY_MAX_LENGTH, entryProblem } from '../../../src/utils/entries.js'
 
 export class ValidationError extends Error {
   constructor(message) {
@@ -24,15 +25,26 @@ const JOB_DATE_SQL = 'coalesce(posted_date, to_date(first_seen_at))'
 
 // gold.jobs as seen by one user: their applied/hidden flags (gold.user_job_state) and a fit score from their
 // profile (ops.user_profile). A missing profile scores every job 0 on role and skills.
-const USER_JOBS_CTE = `WITH profile AS (
-  SELECT target_roles AS roles, skills AS profile_skills, max_years
+// Roles users typed themselves (ops.custom_roles, checked by 04_enrich): 'mapped' ones count as the existing role they
+// duplicate; 'active' ones are matched like reference roles. Until then a job whose title contains the role text counts.
+const USER_JOBS_CTE = `WITH role_map AS (
+  SELECT map_from_entries(collect_list(struct(lower(role_title), duplicate_of))) AS m
+  FROM ops.custom_roles
+  WHERE status = 'mapped' AND duplicate_of IS NOT NULL
+),
+profile AS (
+  SELECT transform(target_roles, r -> coalesce(try_element_at(rm.m, lower(r)), r)) AS roles, skills AS profile_skills, max_years
   FROM ops.user_profile
+  CROSS JOIN role_map rm
   WHERE profile_id = :user_id
   LIMIT 1
 ),
 role_categories AS (
   SELECT collect_set(r.category) AS categories
-  FROM ops.ref_roles r
+  FROM (
+    SELECT role_title, category FROM ops.ref_roles
+    UNION ALL SELECT role_title, category FROM ops.custom_roles WHERE status = 'active'
+  ) r
   JOIN profile p ON array_contains(p.roles, r.role_title)
 ),
 state AS (
@@ -51,6 +63,7 @@ scored AS (
     CASE
       WHEN array_position(p.roles, j.role_title) = 1 THEN 1.0
       WHEN array_position(p.roles, j.role_title) > 1 THEN 0.95
+      WHEN exists(p.roles, r -> contains(lower(j.title), lower(r))) THEN 0.9
       WHEN array_contains(p.roles, j.role_alternative) THEN 0.5
       WHEN array_contains(c.categories, j.category) THEN 0.3
       ELSE 0.0
@@ -67,7 +80,8 @@ scored AS (
     END AS fit_experience,
     coalesce(array_contains(p.roles, j.role_title), false)
       OR coalesce(array_contains(p.roles, j.role_alternative), false)
-      OR coalesce(array_contains(c.categories, j.category), false) AS role_match
+      OR coalesce(array_contains(c.categories, j.category), false)
+      OR coalesce(exists(p.roles, r -> contains(lower(j.title), lower(r))), false) AS role_match
   FROM gold.jobs j
   LEFT JOIN state st ON st.job_key = j.job_key
   LEFT JOIN profile p ON true
@@ -266,9 +280,15 @@ FROM ops.user_profile
 WHERE profile_id = :user_id
 LIMIT 1`
 
-const REFS_STATEMENT = `SELECT 'role' AS kind, role_title AS value, category AS detail FROM ops.ref_roles
-UNION SELECT 'skill', skill, skill_group FROM ops.ref_skills
-UNION SELECT 'skill', skill_group, 'group' FROM ops.ref_skills WHERE skill_group IS NOT NULL
+// Pickers: roles in the supported scope (ops.ref_roles.in_scope; the other roles only help classify jobs), skills with
+// their aliases (so typed spellings resolve to the list's name), and what users added themselves with its status.
+const REFS_STATEMENT = `SELECT 'role' AS kind, role_title AS value, category AS detail, CAST(NULL AS ARRAY<STRING>) AS aliases
+FROM ops.ref_roles WHERE in_scope
+UNION ALL SELECT 'role_out', role_title, category, CAST(NULL AS ARRAY<STRING>) FROM ops.ref_roles WHERE NOT in_scope
+UNION ALL SELECT 'skill', skill, skill_group, aliases FROM ops.ref_skills
+UNION ALL SELECT DISTINCT 'skill', skill_group, 'group', CAST(NULL AS ARRAY<STRING>) FROM ops.ref_skills WHERE skill_group IS NOT NULL
+UNION ALL SELECT 'custom_role', role_title, status, CASE WHEN duplicate_of IS NOT NULL THEN array(duplicate_of) END FROM ops.custom_roles
+UNION ALL SELECT 'custom_skill', skill, 'custom', CAST(NULL AS ARRAY<STRING>) FROM ops.custom_skills
 ORDER BY kind, value`
 
 function stringList(value, { maxItems, maxLength, label }) {
@@ -288,24 +308,31 @@ function stringList(value, { maxItems, maxLength, label }) {
   return items
 }
 
-// Roles and skills must come from the taxonomy (checked again in SQL on save); 1-2 roles and 1-5 skills.
+// 1-2 roles and 1-5 skills. Entries not in the lists are allowed (the pipeline checks new roles); SQL still rejects
+// roles known to be outside the supported scope.
 export function validateProfile(input = {}) {
   const profile = {
-    target_roles: stringList(input.target_roles ?? [], { maxItems: PROFILE_LIMITS.roles, maxLength: 80, label: 'Roles' }),
-    skills: stringList(input.skills ?? [], { maxItems: PROFILE_LIMITS.skills, maxLength: 80, label: 'Skills' }),
+    target_roles: stringList(input.target_roles ?? [], { maxItems: PROFILE_LIMITS.roles, maxLength: ENTRY_MAX_LENGTH, label: 'Roles' }),
+    skills: stringList(input.skills ?? [], { maxItems: PROFILE_LIMITS.skills, maxLength: ENTRY_MAX_LENGTH, label: 'Skills' }),
     min_years: int(input.min_years, 0, 40),
     max_years: int(input.max_years, 0, 40),
   }
   if (!profile.target_roles.length) throw new ValidationError('Pick at least one role')
   if (!profile.skills.length) throw new ValidationError('Pick at least one skill')
+  for (const [label, items] of [['Roles', profile.target_roles], ['Skills', profile.skills]]) {
+    for (const item of items) {
+      const problem = entryProblem(item)
+      if (problem) throw new ValidationError(`${label}: "${item.slice(0, 30)}" - ${problem}`)
+    }
+  }
   if (profile.min_years !== null && profile.max_years !== null && profile.min_years > profile.max_years) {
     throw new ValidationError('Minimum years cannot be more than maximum years')
   }
   return profile
 }
 
-// Upserts the caller's own profile row. assert_true stops the MERGE with a readable message when a role or skill is
-// not in the taxonomy (the API turns USER_RAISED_EXCEPTION into a 400).
+// Upserts the caller's own profile row. assert_true stops the MERGE with a readable message when a role is known to be
+// outside the scope: an out-of-scope reference role or a custom role the pipeline rejected (the API returns a 400).
 function saveProfileStatement(params, user) {
   const profile = validateProfile(params)
   const roles = "from_json(:target_roles, 'ARRAY<STRING>')"
@@ -315,11 +342,13 @@ function saveProfileStatement(params, user) {
 USING (
   SELECT :user_id AS profile_id
   WHERE assert_true(
-      size(array_except(${roles}, (SELECT collect_set(role_title) FROM ops.ref_roles))) = 0,
-      'Pick roles from the list') IS NULL
-    AND assert_true(
-      size(array_except(${skills}, (SELECT array_union(collect_set(skill), collect_set(skill_group)) FROM ops.ref_skills))) = 0,
-      'Pick skills from the list') IS NULL
+      size(array_intersect(transform(${roles}, r -> lower(r)), (
+        SELECT collect_set(lower(role_title)) FROM (
+          SELECT role_title FROM ops.ref_roles WHERE NOT in_scope
+          UNION ALL SELECT role_title FROM ops.custom_roles WHERE status = 'rejected'
+        )
+      ))) = 0,
+      'We only support data, full stack, backend, DevOps and cloud roles') IS NULL
 ) s
 ON t.profile_id = s.profile_id
 WHEN MATCHED THEN UPDATE SET

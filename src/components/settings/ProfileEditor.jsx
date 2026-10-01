@@ -2,10 +2,35 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../lib/api'
 import { ChipInput } from '../common/ChipInput'
 import { FIT_PARTS, MATCH_MIN_FIT } from '../../utils/gold'
+import { entryProblem } from '../../utils/entries'
 
 // Same limits as the API
 const MAX_ROLES = 2
 const MAX_SKILLS = 5
+const NOT_SUPPORTED = 'is outside the supported roles (data, full stack / backend, DevOps and cloud)'
+const CHECK_PENDING = 'custom · checked on the next pipeline run'
+
+// Lookups from api.refs(): lower-case text -> the list's spelling, plus what users added themselves (with its status).
+function buildLookups(refs) {
+  const roles = new Map()
+  const outOfScope = new Set()
+  const skills = new Map()
+  const refSkills = new Set()
+  const customRoles = new Map()
+  const byKind = (kind) => refs.filter(row => row.kind === kind)
+  for (const row of byKind('role')) roles.set(row.value.toLowerCase(), row.value)
+  for (const row of byKind('role_out')) outOfScope.add(row.value.toLowerCase())
+  for (const row of byKind('skill')) skills.set(row.value.toLowerCase(), row.value)
+  for (const row of byKind('skill')) {
+    for (const alias of row.aliases || []) if (!skills.has(alias.toLowerCase())) skills.set(alias.toLowerCase(), row.value)
+  }
+  for (const key of skills.keys()) refSkills.add(key)
+  for (const row of byKind('custom_skill')) if (!skills.has(row.value.toLowerCase())) skills.set(row.value.toLowerCase(), row.value)
+  for (const row of byKind('custom_role')) {
+    customRoles.set(row.value.toLowerCase(), { value: row.value, status: row.detail, duplicateOf: row.aliases?.[0] || null })
+  }
+  return { roles, outOfScope, skills, refSkills, customRoles }
+}
 
 function toForm(profile) {
   return {
@@ -28,9 +53,37 @@ export function ProfileEditor({ profile, onSave, onboarding = false }) {
     api.refs().then(setRefs).catch(err => console.error('Failed to load role/skill lists:', err))
   }, [])
 
-  const roleOptions = useMemo(() => refs.filter(row => row.kind === 'role').map(row => row.value), [refs])
-  const skillOptions = useMemo(() => [...new Set(refs.filter(row => row.kind === 'skill').map(row => row.value))], [refs])
+  const lookups = useMemo(() => buildLookups(refs), [refs])
+  const roleOptions = useMemo(
+    () => [...lookups.roles.values(), ...[...lookups.customRoles.values()].filter(role => role.status === 'active').map(role => role.value)],
+    [lookups],
+  )
+  const skillOptions = useMemo(() => [...new Set(lookups.skills.values())], [lookups])
   const complete = form.target_roles.length > 0 && form.skills.length > 0
+
+  // Known roles resolve to the list's spelling; a custom role the pipeline mapped resolves to the role it duplicates
+  const resolveRole = (text) => {
+    const key = text.toLowerCase()
+    if (lookups.roles.has(key)) return { value: lookups.roles.get(key) }
+    if (lookups.outOfScope.has(key)) return { blocked: `"${text}" ${NOT_SUPPORTED}.` }
+    const custom = lookups.customRoles.get(key)
+    if (!custom) return null
+    if (custom.status === 'rejected') return { blocked: `"${text}" ${NOT_SUPPORTED}.` }
+    if (custom.status === 'mapped' && custom.duplicateOf) return { value: custom.duplicateOf }
+    return { value: custom.value }
+  }
+  const roleNote = (value) => {
+    const key = value.toLowerCase()
+    if (lookups.roles.has(key)) return ''
+    const custom = lookups.customRoles.get(key)
+    if (!custom || custom.status === 'pending') return CHECK_PENDING
+    return { active: 'custom', mapped: `matched as ${custom.duplicateOf}`, rejected: 'not supported' }[custom.status] || ''
+  }
+  const resolveSkill = (text) => {
+    const value = lookups.skills.get(text.toLowerCase())
+    return value ? { value } : null
+  }
+  const skillNote = (value) => (lookups.refSkills.has(value.toLowerCase()) ? '' : 'custom')
 
   const update = (key, value) => {
     setForm(prev => ({ ...prev, [key]: value }))
@@ -78,11 +131,13 @@ export function ProfileEditor({ profile, onSave, onboarding = false }) {
           values={form.target_roles}
           onChange={value => update('target_roles', value)}
           suggestions={roleOptions}
+          resolve={resolveRole}
+          validate={entryProblem}
+          noteFor={roleNote}
           placeholder="e.g. Data Engineer"
-          help="Pick from the standard role list. LinkedIn is also searched for these roles."
+          help="Data, full stack / backend, DevOps and cloud roles. Not in the list? Type it and add it as your own: it is checked on the next pipeline run (a few hours) and until then jobs with it in the title count as matches. LinkedIn is also searched for these roles."
           maxItems={MAX_ROLES}
           numbered
-          strict
         />
 
         <ChipInput
@@ -90,10 +145,12 @@ export function ProfileEditor({ profile, onSave, onboarding = false }) {
           values={form.skills}
           onChange={value => update('skills', value)}
           suggestions={skillOptions}
+          resolve={resolveSkill}
+          validate={entryProblem}
+          noteFor={skillNote}
           placeholder="e.g. PySpark, Azure, SQL"
-          help="Skill groups (e.g. Cloud) match any skill in the group."
+          help="Skill groups (e.g. Cloud) match any skill in the group. Skills you add yourself are looked for in job descriptions from the next pipeline run."
           maxItems={MAX_SKILLS}
-          strict
         />
 
         <div className="settings-field">
