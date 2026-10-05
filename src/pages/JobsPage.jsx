@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Header } from '../components/layout/Header'
 import { JobCard } from '../components/common/JobCard'
@@ -100,7 +100,7 @@ export function JobsPage() {
   const [tab, setTab] = useState('all')
   const [view, setView] = useState(readView)
   const {
-    jobs, page, totalCount, hasMore, loading, refreshing, waiting, error,
+    jobs, page, listKey, totalCount, hasMore, loading, refreshing, waiting, error,
     reload: reloadJobs, loadMore, retry, updateJob, removeJob,
   } = useJobList({ filters, scope, sort, tab })
   const [summary, setSummary] = useState({})
@@ -116,6 +116,8 @@ export function JobsPage() {
   const jobsRef = useRef(jobs)
   const filtersRef = useRef(filters)
   const refreshRef = useRef(null)
+  const reloadRef = useRef(null) // latest reloadJobs / fetchSummary, so handleHide keeps one identity (memoized rows)
+  const scrollToActiveRef = useRef(false) // set by keyboard / drawer moves; a tapped row is already on screen
 
   // New users pick their roles and skills first (the list is built from them)
   useEffect(() => {
@@ -173,6 +175,10 @@ export function JobsPage() {
   }, [fetchSummary])
 
   useEffect(() => {
+    reloadRef.current = { reloadJobs, fetchSummary }
+  }, [reloadJobs, fetchSummary])
+
+  useEffect(() => {
     fetchTrend()
     fetchFacets()
   }, [fetchTrend, fetchFacets])
@@ -183,6 +189,7 @@ export function JobsPage() {
   }, [updateJob])
 
   const openJob = useCallback((job) => {
+    scrollToActiveRef.current = false
     setActiveKey(job.job_key)
     setSelectedJob(job)
   }, [])
@@ -213,6 +220,7 @@ export function JobsPage() {
     const list = jobsRef.current
     const index = list.findIndex(item => item.job_key === job.job_key)
     const neighbour = index >= 0 ? list[index + 1] || list[index - 1] || null : null
+    scrollToActiveRef.current = true
     setActiveKey(prev => (prev === job.job_key ? neighbour?.job_key ?? null : prev))
     setSelectedJob(prev => (prev?.job_key === job.job_key ? neighbour : prev))
     removeJob(job.job_key)
@@ -221,8 +229,8 @@ export function JobsPage() {
       showToast('Job hidden', async () => {
         try {
           await api.setHidden(job.job_key, false)
-          reloadJobs()
-          fetchSummary()
+          reloadRef.current.reloadJobs()
+          reloadRef.current.fetchSummary()
         } catch (err) {
           showToast(`Could not restore: ${err.message}`)
         }
@@ -234,9 +242,9 @@ export function JobsPage() {
       }))
     } catch (err) {
       showToast(`Could not hide: ${err.message}`)
-      reloadJobs()
+      reloadRef.current.reloadJobs()
     }
-  }, [removeJob, showToast, reloadJobs, fetchSummary])
+  }, [removeJob, showToast])
 
   const changeView = (next) => {
     setView(next)
@@ -258,7 +266,7 @@ export function JobsPage() {
 
   // Mobile: pull down at the top of the list to refresh (not while a job, sheet or dialog is open)
   const [pullBusy, setPullBusy] = useState(false)
-  const { pull, armed } = usePullToRefresh(() => {
+  const { pulling, armed, indicatorRef } = usePullToRefresh(() => {
     setPullBusy(true)
     refreshAll()
   }, !selectedJob && !helpOpen)
@@ -306,7 +314,9 @@ export function JobsPage() {
     applied: Number(summary.applied ?? 0),
     pending: Number(summary.pending ?? 0),
   }
-  const tabCounts = { all: stats.total, pending: stats.pending, applied: stats.applied }
+  // '–' until the first summary arrives (a "0" that turns into "171" also widens the tabs and shifts the toolbar)
+  const summaryReady = summary.total !== undefined && summary.total !== null
+  const tabCounts = summaryReady ? { all: stats.total, pending: stats.pending, applied: stats.applied } : {}
 
   const toggleFilter = (key, value) => setFilters(prev => ({ ...prev, [key]: prev[key] === value ? EMPTY_FILTERS[key] : value }))
   const clearFilter = (key) => {
@@ -360,6 +370,7 @@ export function JobsPage() {
     if (!jobs.length) return
     const next = currentIndex < 0 ? 0 : Math.min(Math.max(currentIndex + delta, 0), jobs.length - 1)
     const job = jobs[next]
+    scrollToActiveRef.current = true
     setActiveKey(job.job_key)
     if (selectedJob) {
       setSelectedJob(job)
@@ -403,8 +414,24 @@ export function JobsPage() {
       },
     })
 
-  const ItemComponent = view === 'grid' ? JobCard : JobRow
-  const listClass = view === 'grid' ? 'jobs-grid' : 'jobs-list'
+  // Keyboard / drawer moves keep the selected row on screen (not on tap or click: that row is already visible,
+  // and scrolling there would force a layout inside the tap that opens the drawer)
+  useEffect(() => {
+    if (!scrollToActiveRef.current || !currentKey) return
+    scrollToActiveRef.current = false
+    const item = document.querySelector(`[data-job-key="${CSS.escape(currentKey)}"]`)
+    if (!item) return
+    // Focus follows j / k when it is on a row (e.g. restored there after closing the drawer); otherwise Enter
+    // would open the focused, previously selected row instead of the highlighted one
+    const focused = document.activeElement
+    if (focused !== item && focused?.dataset?.jobKey) item.focus({ preventScroll: true })
+    item.scrollIntoView({ block: 'nearest' })
+  }, [currentKey])
+
+  // The header toggle updates at once; the (heavier) list <-> grid re-render runs in the background
+  const listView = useDeferredValue(view)
+  const ItemComponent = listView === 'grid' ? JobCard : JobRow
+  const listClass = listView === 'grid' ? 'jobs-grid' : 'jobs-list'
   const metrics = <Metrics items={metricItems} trend={trend} onSelect={onMetric} />
   const [emptyTitle, emptyText] = emptyMessage({ narrowed: hasCustomFilters || tab !== 'all', scope, onlyFresh: onlyFreshFilter })
 
@@ -420,8 +447,8 @@ export function JobsPage() {
       />
 
       <main className="page-content">
-        {(pull > 0 || pullBusy) && (
-          <div className={`ptr ${armed ? 'armed' : ''}`} style={pull > 0 ? { height: pull } : undefined} aria-live="polite">
+        {(pulling || pullBusy) && (
+          <div ref={indicatorRef} className={`ptr ${armed ? 'armed' : ''}`} aria-live="polite">
             {pullBusy ? <><span className="spinner" /> Refreshing…</> : armed ? 'Release to refresh' : 'Pull to refresh'}
           </div>
         )}
@@ -462,7 +489,7 @@ export function JobsPage() {
                 title={`${label} (${key})`}
               >
                 {label}
-                <span className="count-badge">{tabCounts[value] ?? 0}</span>
+                <span className="count-badge">{tabCounts[value] ?? '–'}</span>
               </button>
             ))}
           </div>
@@ -524,8 +551,8 @@ export function JobsPage() {
                 <p>The first query after a pause can take up to a minute.</p>
               </div>
             )}
-            {Array.from({ length: view === 'grid' ? 6 : 10 }, (_, index) => (
-              <div key={index} className={`${view === 'grid' ? 'job-card' : 'job-row'} skeleton`} aria-hidden="true" />
+            {Array.from({ length: listView === 'grid' ? 6 : 10 }, (_, index) => (
+              <div key={index} className={`${listView === 'grid' ? 'job-card' : 'job-row'} skeleton`} aria-hidden="true" />
             ))}
           </section>
         )}
@@ -539,7 +566,7 @@ export function JobsPage() {
         )}
 
         {jobs.length > 0 && (
-          <section className={`${listClass} ${loading && page === 0 ? 'is-stale' : ''}`}>
+          <section key={listKey} className={`${listClass} ${loading && page === 0 ? 'is-stale' : ''}`}>
             {jobs.map(job => (
               <ItemComponent
                 key={job.job_key}
@@ -588,7 +615,7 @@ export function JobsPage() {
             onClick={() => setTab(value)}
             aria-pressed={tab === value}
           >
-            <strong>{tabCounts[value] ?? 0}</strong>
+            <strong>{tabCounts[value] ?? '–'}</strong>
             <span>{label}</span>
           </button>
         ))}

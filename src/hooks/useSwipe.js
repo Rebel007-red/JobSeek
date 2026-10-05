@@ -4,6 +4,7 @@ const INTENT_PX = 14 // movement before deciding between scroll and swipe
 const MIN_TRIGGER_PX = 110
 const TRIGGER_SHARE = 0.4 // or 40% of the element width, whichever is larger
 const MAX_DRAG_PX = 180
+const MAX_TRIGGER_PX = MAX_DRAG_PX - 30 // wide rows (tablets, landscape) must still be reachable within the drag clamp
 
 // Deliberate horizontal swipe on touch devices. Vertical scrolling wins as soon as the finger moves
 // more vertically than horizontally, so scrolling through the list never triggers an action.
@@ -22,7 +23,7 @@ export function useSwipe({ onLeft, onRight }) {
       if (e.touches.length !== 1) return
       const touch = e.touches[0]
       start.current = { x: touch.clientX, y: touch.clientY, lock: null }
-      threshold.current = Math.max(MIN_TRIGGER_PX, e.currentTarget.offsetWidth * TRIGGER_SHARE)
+      threshold.current = Math.min(Math.max(MIN_TRIGGER_PX, e.currentTarget.offsetWidth * TRIGGER_SHARE), MAX_TRIGGER_PX)
     },
     onTouchMove: (e) => {
       const state = start.current

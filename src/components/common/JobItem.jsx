@@ -1,23 +1,16 @@
-import { useEffect, useRef } from 'react'
 import { formatDate, formatRelativeAge, isNewJob } from '../../utils/job'
 import { experienceLabel, jobDate } from '../../utils/gold'
 import { Swipeable } from './Swipeable'
 
 // Shared shell of a list row / card: click or Enter opens the drawer, swipe right = applied, left = hide.
-// className is the base class ('job-row' | 'job-card'); the active item is scrolled into view.
+// className is the base class ('job-row' | 'job-card'); data-job-key lets the page scroll the selection into view.
 export function JobItem({ job, className, active, onOpen, onHide, onApplied, children }) {
-  const ref = useRef(null)
-
-  useEffect(() => {
-    if (active) ref.current?.scrollIntoView({ block: 'nearest' })
-  }, [active])
-
   const applied = Boolean(job.is_applied)
 
   return (
     <Swipeable onLeft={() => onHide(job)} onRight={applied ? undefined : () => onApplied(job, true)}>
       <article
-        ref={ref}
+        data-job-key={job.job_key}
         className={`${className} ${applied ? 'is-applied' : ''} ${active ? 'is-active' : ''}`}
         onClick={() => onOpen(job)}
         onKeyDown={(e) => {

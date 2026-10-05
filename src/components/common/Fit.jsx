@@ -48,7 +48,7 @@ export function FitBreakdown({ job, compact = false }) {
             <div className="fit-bar" aria-hidden={compact ? 'true' : undefined}>
               <i style={{ width: `${value}%` }} className={fitTone(value)} />
             </div>
-            {compact && <small>{part.label.slice(0, 3)}</small>}
+            {compact && <small>{part.short}</small>}
           </div>
         )
       })}

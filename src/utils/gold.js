@@ -6,9 +6,9 @@ export const FIT_WEIGHTS = { role: 0.4, skills: 0.45, experience: 0.15 }
 
 // Fit components as shown in the UI
 export const FIT_PARTS = [
-  { key: 'fit_role', label: 'Role', weight: FIT_WEIGHTS.role },
-  { key: 'fit_skills', label: 'Skills', weight: FIT_WEIGHTS.skills },
-  { key: 'fit_experience', label: 'Experience', weight: FIT_WEIGHTS.experience },
+  { key: 'fit_role', label: 'Role', short: 'Role', weight: FIT_WEIGHTS.role },
+  { key: 'fit_skills', label: 'Skills', short: 'Skills', weight: FIT_WEIGHTS.skills },
+  { key: 'fit_experience', label: 'Experience', short: 'Exp', weight: FIT_WEIGHTS.experience },
 ]
 
 // "For you" = the job's role/category matches one of your roles and the fit is at least this (shared with the API)
@@ -64,8 +64,11 @@ export function skillBuckets(job, profileSkills = []) {
   return { matchedLabels, have, missing }
 }
 
+let utcDayFormat = null // shared: creating an Intl formatter per day label is slow
+
 // Fills the last `days` UTC days so the trend strip always has one entry per day (oldest first).
 export function buildTrend(rows = [], days = 14, today = new Date()) {
+  utcDayFormat ??= new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' })
   const byDay = new Map(rows.map(row => [String(row.day).slice(0, 10), row]))
   const result = []
   for (let offset = days - 1; offset >= 0; offset -= 1) {
@@ -74,7 +77,7 @@ export function buildTrend(rows = [], days = 14, today = new Date()) {
     const row = byDay.get(key)
     result.push({
       key,
-      label: date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' }),
+      label: utcDayFormat.format(date),
       added: Number(row?.added ?? 0),
       applied: Number(row?.applied ?? 0),
     })

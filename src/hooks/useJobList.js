@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { startTransition, useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
 
 const PAGE_SIZE = 48
@@ -6,6 +6,8 @@ const PREFETCH_DISTANCE_PX = 1200 // start loading the next page well before the
 
 // The paged job list for the current filters / scope / sort / tab. The first page reloads whenever they change
 // (showing the cached page right away); later pages are appended near the end of the page or via loadMore().
+// listKey changes only when a different query's rows replace the list (not on a refresh of the same query),
+// so the page can mount the new result set instead of moving the old rows around (avoids layout shift).
 export function useJobList({ filters, scope, sort, tab }) {
   const [jobs, setJobs] = useState([])
   const [page, setPage] = useState(0)
@@ -15,16 +17,27 @@ export function useJobList({ filters, scope, sort, tab }) {
   const [refreshing, setRefreshing] = useState(false)
   const [waiting, setWaiting] = useState(false)
   const [error, setError] = useState('')
-  const requestRef = useRef(0)
+  const [listKey, setListKey] = useState(0)
+  const requestRef = useRef(0) // bumped by every first-page load; older responses are ignored
+  const busyRef = useRef(false) // a page request is in flight, so loadMore() must not skip ahead
+  const shownQueryRef = useRef(null)
 
   const fetchJobs = useCallback(async (pageToLoad) => {
-    const requestId = ++requestRef.current
+    // Later pages share the first page's request id: a page response is dropped only when the query changed,
+    // never because another page request started (that used to lose a whole page while scrolling fast).
+    const requestId = pageToLoad === 0 ? ++requestRef.current : requestRef.current
     const offset = pageToLoad * PAGE_SIZE
     const isCurrent = () => requestId === requestRef.current
+    const queryKey = JSON.stringify([filters, scope, sort, tab])
     let showedCache = false
+    let appended = false
 
     const applyRows = (rows) => {
       const total = rows.length ? Number(rows[0].total_count) || 0 : offset
+      if (pageToLoad === 0 && shownQueryRef.current !== queryKey) {
+        shownQueryRef.current = queryKey
+        setListKey(key => key + 1)
+      }
       setJobs(prev => {
         if (pageToLoad === 0) return rows
         const seen = new Set(prev.map(job => job.job_key))
@@ -34,6 +47,7 @@ export function useJobList({ filters, scope, sort, tab }) {
       setHasMore(rows.length > 0 && offset + rows.length < total)
     }
 
+    busyRef.current = true
     setLoading(true)
     setError('')
     try {
@@ -53,7 +67,17 @@ export function useJobList({ filters, scope, sort, tab }) {
           onWaiting: () => { if (isCurrent()) setWaiting(true) },
         },
       )
-      if (isCurrent()) applyRows(rows)
+      if (!isCurrent()) return
+      // An appended page renders as a transition, so React can yield while 48 new rows mount mid-scroll
+      if (pageToLoad > 0) {
+        appended = true
+        startTransition(() => {
+          applyRows(rows)
+          setLoading(false)
+        })
+      } else {
+        applyRows(rows)
+      }
     } catch (err) {
       if (!isCurrent()) return
       setError(err.message)
@@ -64,7 +88,8 @@ export function useJobList({ filters, scope, sort, tab }) {
       }
     } finally {
       if (isCurrent()) {
-        setLoading(false)
+        busyRef.current = false
+        if (!appended) setLoading(false)
         setRefreshing(false)
         setWaiting(false)
       }
@@ -77,7 +102,12 @@ export function useJobList({ filters, scope, sort, tab }) {
     fetchJobs(0)
   }, [fetchJobs])
 
-  const loadMore = useCallback(() => setPage(prev => prev + 1), [])
+  // One page at a time: a second call before the first page arrives would skip a page
+  const loadMore = useCallback(() => {
+    if (busyRef.current) return
+    busyRef.current = true
+    setPage(prev => prev + 1)
+  }, [])
 
   useEffect(() => {
     reload()
@@ -110,6 +140,7 @@ export function useJobList({ filters, scope, sort, tab }) {
   return {
     jobs,
     page,
+    listKey,
     totalCount,
     hasMore,
     loading,

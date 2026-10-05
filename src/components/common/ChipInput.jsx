@@ -89,7 +89,7 @@ export function ChipInput({ label, values, onChange, suggestions = [], resolve, 
             return (
               <span key={value} className={`skill-chip ${note ? 'is-custom' : ''}`} title={note || undefined}>
                 {numbered && <b>{index + 1}</b>}
-                {value}
+                <span className="skill-chip-label">{value}</span>
                 {note && <em>{note}</em>}
                 <button type="button" onClick={() => onChange(values.filter(item => item !== value))} aria-label={`Remove ${value}`}>
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -1,9 +1,14 @@
 const NEW_JOB_MS = 2 * 24 * 3600 * 1000 // 2 days
 
+// One shared formatter: toLocaleDateString builds a new Intl.DateTimeFormat on every call, which is slow per row.
+let dayFormat = null
+
 export function formatDate(dateStr) {
   if (!dateStr) return null
   const d = new Date(dateStr)
-  return isNaN(d) ? null : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  if (isNaN(d)) return null
+  dayFormat ??= new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' })
+  return dayFormat.format(d)
 }
 
 export function formatRelativeAge(dateStr) {

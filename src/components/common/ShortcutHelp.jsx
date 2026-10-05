@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
+import { useDialogFocus } from '../../hooks/useDialogFocus'
 import { CloseIcon } from './icons'
 
 const GROUPS = [
@@ -36,15 +37,13 @@ const GROUPS = [
 
 export function ShortcutHelp({ onClose }) {
   const closeRef = useRef(null)
-
-  useEffect(() => {
-    closeRef.current?.focus()
-  }, [])
+  const panelRef = useRef(null)
+  useDialogFocus(panelRef, closeRef)
 
   return (
     <div className="modal-root" role="dialog" aria-modal="true" aria-labelledby="shortcut-title">
       <div className="modal-backdrop" onClick={onClose} aria-hidden="true" />
-      <div className="modal-panel shortcut-panel">
+      <div className="modal-panel shortcut-panel" ref={panelRef}>
         <div className="modal-header">
           <h2 id="shortcut-title">Keyboard shortcuts</h2>
           <button ref={closeRef} type="button" className="icon-btn" onClick={onClose} aria-label="Close shortcuts">

@@ -17,7 +17,7 @@ export const JobCard = memo(function JobCard({ job, profileSkills = [], active =
     <JobItem job={job} className="job-card" active={active} onOpen={onOpen} onHide={onHide} onApplied={onApplied}>
       <div className="job-card-header">
         <div className="job-card-heading">
-          <p className="job-company">{job.company_name || 'Unknown company'}</p>
+          <p className="job-company" title={job.company_name || undefined}>{job.company_name || 'Unknown company'}</p>
           <h3>
             <NewJobDot job={job} />
             {job.title}

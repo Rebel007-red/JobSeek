@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useRef, useState } from 'react'
 import { api } from '../../lib/api'
+import { useDialogFocus } from '../../hooks/useDialogFocus'
 import { formatDate, formatRelativeAge } from '../../utils/job'
 import { experienceLabel, fitLabel, formatDescription, jobDate, jobUrl, skillBuckets } from '../../utils/gold'
 import { FitBreakdown, FitRing } from './Fit'
@@ -27,6 +28,17 @@ export function JobDrawer({ job, profile, position, onMove, onClose, onApplied, 
   const [detail, setDetail] = useState({ key: null, row: null, error: '' })
   const closeRef = useRef(null)
   const bodyRef = useRef(null)
+  const panelRef = useRef(null)
+  const jobKeyRef = useRef(job.job_key)
+  // First paint shows the panel shell (header, actions); the body renders right after, so the tap paints quickly
+  const bodyReady = useDeferredValue(true, false)
+
+  useEffect(() => {
+    jobKeyRef.current = job.job_key
+  }, [job.job_key])
+
+  // Tab stays in the drawer; closing returns focus to the current job's row (it may have moved with j / k)
+  useDialogFocus(panelRef, closeRef, () => document.querySelector(`[data-job-key="${CSS.escape(jobKeyRef.current)}"]`))
 
   useEffect(() => {
     let cancelled = false
@@ -39,7 +51,6 @@ export function JobDrawer({ job, profile, position, onMove, onClose, onApplied, 
   }, [job.job_key])
 
   useEffect(() => {
-    closeRef.current?.focus()
     const onKey = (e) => { if (e.key === 'Escape') onClose() }
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -62,7 +73,7 @@ export function JobDrawer({ job, profile, position, onMove, onClose, onApplied, 
   return (
     <div className="drawer-root" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
       <div className="drawer-backdrop" onClick={onClose} aria-hidden="true" />
-      <aside className="drawer-panel">
+      <aside className="drawer-panel" ref={panelRef}>
         <header className="drawer-header">
           <div className="drawer-title">
             <p className="job-company">{job.company_name}</p>
@@ -119,57 +130,63 @@ export function JobDrawer({ job, profile, position, onMove, onClose, onApplied, 
         </div>
 
         <div className="drawer-body" ref={bodyRef}>
-          <section className="drawer-section">
-            <div className="drawer-fit-head">
-              <FitRing score={job.fit_score} size="lg" />
-              <div>
-                <h3>{fitLabel(job.fit_score)}</h3>
-                <p>Match against your roles, skills and experience.</p>
-              </div>
-            </div>
-            <FitBreakdown job={job} />
-          </section>
+          {bodyReady ? (
+            <>
+              <section className="drawer-section">
+                <div className="drawer-fit-head">
+                  <FitRing score={job.fit_score} size="lg" />
+                  <div>
+                    <h3>{fitLabel(job.fit_score)}</h3>
+                    <p>Match against your roles, skills and experience.</p>
+                  </div>
+                </div>
+                <FitBreakdown job={job} />
+              </section>
 
-          <section className="drawer-section">
-            <h3>Skills</h3>
-            {matchedLabels.length > 0 && (
-              <p className="drawer-note">Matched from your profile: <strong>{matchedLabels.join(', ')}</strong></p>
-            )}
-            {have.length + missing.length > 0 ? (
-              <div className="skill-tags">
-                {have.map(skill => <span key={skill} className="skill-tag active">{skill}</span>)}
-                {missing.map(skill => <span key={skill} className="skill-tag missing" title="Not in your profile">{skill}</span>)}
-              </div>
-            ) : (
-              <p className="drawer-note">No skills extracted for this job.</p>
-            )}
-          </section>
+              <section className="drawer-section">
+                <h3>Skills</h3>
+                {matchedLabels.length > 0 && (
+                  <p className="drawer-note">Matched from your profile: <strong>{matchedLabels.join(', ')}</strong></p>
+                )}
+                {have.length + missing.length > 0 ? (
+                  <div className="skill-tags">
+                    {have.map(skill => <span key={skill} className="skill-tag active">{skill}</span>)}
+                    {missing.map(skill => <span key={skill} className="skill-tag missing" title="Not in your profile">{skill}</span>)}
+                  </div>
+                ) : (
+                  <p className="drawer-note">No skills extracted for this job.</p>
+                )}
+              </section>
 
-          <section className="drawer-section">
-            <h3>Description</h3>
-            {current.error && <p className="form-error">{current.error}</p>}
-            {!extra && !current.error && <div className="skeleton-lines"><i /><i /><i /><i /></div>}
-            {extra && <div className="drawer-description">{formatDescription(extra.description) || 'No description available.'}</div>}
-          </section>
+              <section className="drawer-section">
+                <h3>Description</h3>
+                {current.error && <p className="form-error">{current.error}</p>}
+                {!extra && !current.error && <div className="skeleton-lines"><i /><i /><i /><i /></div>}
+                {extra && <div className="drawer-description">{formatDescription(extra.description) || 'No description available.'}</div>}
+              </section>
 
-          <section className="drawer-section">
-            <h3>Details</h3>
-            <dl className="detail-list">
-              <DetailRow label="Standard role" value={job.role_title ? `${job.role_title}${roleScore ? ` (${Math.round(roleScore * 100)}% similar)` : ''}` : null} />
-              <DetailRow label="Also close to" value={extra?.role_alternative ?? job.role_alternative} />
-              <DetailRow label="Matched by" value={ROLE_METHODS[extra?.role_method] || extra?.role_method} />
-              <DetailRow label="Category" value={job.category} />
-              <DetailRow label="Level" value={job.experience_level || job.seniority_level} />
-              <DetailRow label="Employment" value={job.employment_type} />
-              <DetailRow label="Function" value={extra?.job_function} />
-              <DetailRow label="Industry" value={extra?.industries} />
-              <DetailRow label="Source" value={job.source} />
-              <DetailRow label="Posted" value={formatDate(job.posted_date)} />
-              <DetailRow label="First found" value={formatDate(job.first_seen_at)} />
-              <DetailRow label="Last seen" value={job.last_seen_at ? `${formatDate(job.last_seen_at)} (${formatRelativeAge(job.last_seen_at)})` : null} />
-              <DetailRow label="Seen in scrapes" value={job.times_seen ? `${job.times_seen}×` : null} />
-            </dl>
-          </section>
+              <section className="drawer-section">
+                <h3>Details</h3>
+                <dl className="detail-list">
+                  <DetailRow label="Standard role" value={job.role_title ? `${job.role_title}${roleScore ? ` (${Math.round(roleScore * 100)}% similar)` : ''}` : null} />
+                  <DetailRow label="Also close to" value={extra?.role_alternative ?? job.role_alternative} />
+                  <DetailRow label="Matched by" value={ROLE_METHODS[extra?.role_method] || extra?.role_method} />
+                  <DetailRow label="Category" value={job.category} />
+                  <DetailRow label="Level" value={job.experience_level || job.seniority_level} />
+                  <DetailRow label="Employment" value={job.employment_type} />
+                  <DetailRow label="Function" value={extra?.job_function} />
+                  <DetailRow label="Industry" value={extra?.industries} />
+                  <DetailRow label="Source" value={job.source} />
+                  <DetailRow label="Posted" value={formatDate(job.posted_date)} />
+                  <DetailRow label="First found" value={formatDate(job.first_seen_at)} />
+                  <DetailRow label="Last seen" value={job.last_seen_at ? `${formatDate(job.last_seen_at)} (${formatRelativeAge(job.last_seen_at)})` : null} />
+                  <DetailRow label="Seen in scrapes" value={job.times_seen ? `${job.times_seen}×` : null} />
+                </dl>
+              </section>
+            </>
+          ) : (
+            <div className="skeleton-lines drawer-section"><i /><i /><i /><i /></div>
+          )}
         </div>
       </aside>
     </div>

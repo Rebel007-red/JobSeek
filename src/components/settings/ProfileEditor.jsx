@@ -43,7 +43,7 @@ function toForm(profile) {
 // onboarding: first visit without a profile (shows a welcome note; the parent leaves the page after saving)
 export function ProfileEditor({ profile, onSave, onboarding = false }) {
   const [form, setForm] = useState(() => toForm(profile))
-  const [refs, setRefs] = useState([])
+  const [refs, setRefs] = useState(null) // null until the lists load: no "custom" notes yet (they'd be wrong, then jump)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
   const [dirty, setDirty] = useState(false)
@@ -52,7 +52,7 @@ export function ProfileEditor({ profile, onSave, onboarding = false }) {
     api.refs().then(setRefs).catch(err => console.error('Failed to load role/skill lists:', err))
   }, [])
 
-  const lookups = useMemo(() => buildLookups(refs), [refs])
+  const lookups = useMemo(() => buildLookups(refs || []), [refs])
   const roleOptions = useMemo(
     () => [...lookups.roles.values(), ...[...lookups.customRoles.values()].filter(role => role.status === 'active').map(role => role.value)],
     [lookups],
@@ -72,6 +72,7 @@ export function ProfileEditor({ profile, onSave, onboarding = false }) {
     return { value: custom.value }
   }
   const roleNote = (value) => {
+    if (!refs) return ''
     const key = value.toLowerCase()
     if (lookups.roles.has(key)) return ''
     const custom = lookups.customRoles.get(key)
@@ -82,7 +83,7 @@ export function ProfileEditor({ profile, onSave, onboarding = false }) {
     const value = lookups.skills.get(text.toLowerCase())
     return value ? { value } : null
   }
-  const skillNote = (value) => (lookups.refSkills.has(value.toLowerCase()) ? '' : 'custom')
+  const skillNote = (value) => (!refs || lookups.refSkills.has(value.toLowerCase()) ? '' : 'custom')
 
   const update = (key, value) => {
     setForm(prev => ({ ...prev, [key]: value }))

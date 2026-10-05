@@ -111,7 +111,7 @@ export function SettingsPage() {
           <div className="settings-header">
             <div>
               <p className="eyebrow">Preferences</p>
-              <h2>{isAdmin ? 'Manage sources & profile' : 'Your profile'}</h2>
+              <h2>{isAdmin ? 'Manage sources & profile' : 'Profile & hidden jobs'}</h2>
             </div>
             <div className="settings-tabs" role="tablist" aria-label="Settings sections">
               {settingsTabs.map(t => (
@@ -186,7 +186,7 @@ export function SettingsPage() {
                           <div className="settings-company-meta">
                             <span>{job.company_name}</span>
                             {job.location && <span>{job.location}</span>}
-                            {job.hidden_at && <span>hidden {formatDate(job.hidden_at)}</span>}
+                            {job.hidden_at && <span className="meta-date">hidden {formatDate(job.hidden_at)}</span>}
                           </div>
                         </div>
                         <div className="settings-row-actions">
