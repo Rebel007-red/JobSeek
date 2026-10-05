@@ -44,5 +44,4 @@ env/
 # Scraper temp files
 output.txt
 *.db
-scraper/output*
 databricks/output/*
