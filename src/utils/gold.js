@@ -1,13 +1,17 @@
 // Helpers for rows from Databricks gold.jobs.
 
-// Fit components computed per user by the API (weights fixed there too: role 40%, skills 45%, experience 15%).
+// Fit = 100 * (role * 0.40 + skills * 0.45 + experience * 0.15); the weights add up to 1.
+// Also used by the API (netlify/functions/api/sql.mjs), which computes the score per user, so keep this file import-free.
+export const FIT_WEIGHTS = { role: 0.4, skills: 0.45, experience: 0.15 }
+
+// Fit components as shown in the UI
 export const FIT_PARTS = [
-  { key: 'fit_role', label: 'Role', weight: 0.4 },
-  { key: 'fit_skills', label: 'Skills', weight: 0.45 },
-  { key: 'fit_experience', label: 'Experience', weight: 0.15 },
+  { key: 'fit_role', label: 'Role', weight: FIT_WEIGHTS.role },
+  { key: 'fit_skills', label: 'Skills', weight: FIT_WEIGHTS.skills },
+  { key: 'fit_experience', label: 'Experience', weight: FIT_WEIGHTS.experience },
 ]
 
-// "For you" shows jobs matching your roles with at least this fit (same number as the API)
+// "For you" = the job's role/category matches one of your roles and the fit is at least this (shared with the API)
 export const MATCH_MIN_FIT = 60
 
 export function fitTone(score) {

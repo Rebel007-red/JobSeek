@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
+import { FIT_PARTS, MATCH_MIN_FIT } from '../../../src/utils/gold.js'
 import { SHARED_ACTIONS, ValidationError, buildFilterWhere, buildStatement, convertValue, isStatementId, toObjects, validateProfile } from './sql.mjs'
 
 const KEY = 'a'.repeat(64)
@@ -146,4 +147,11 @@ test('result conversion follows column types', () => {
 test('statement ids are validated before polling', () => {
   assert.ok(isStatementId('01ef1234-5678-9abc-def0-123456789abc'))
   assert.ok(!isStatementId('../../jobs/delete'))
+})
+
+test('fit score uses the weights and "For you" threshold the UI shows', () => {
+  const { statement } = buildStatement('jobs', {}, USER)
+  const sum = FIT_PARTS.map(part => `${part.weight} * ${part.key}`).join(' + ')
+  assert.ok(statement.includes(`CAST(round(100 * (${sum})) AS INT) AS fit_score`))
+  assert.ok(statement.includes(`fit_score >= ${MATCH_MIN_FIT})`))
 })

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { buildTrend, experienceLabel, fitTone, formatDescription, skillBuckets } from './gold.js'
+import { FIT_PARTS, FIT_WEIGHTS, buildTrend, experienceLabel, fitTone, formatDescription, skillBuckets } from './gold.js'
 
 test('fitTone bands scores', () => {
   assert.equal(fitTone(85), 'strong')
@@ -44,4 +44,10 @@ test('formatDescription puts bullets and glued blocks on new lines', () => {
   // versions, URLs, acronyms and normal sentences stay as they are
   assert.equal(formatDescription('Use Node.js 3.5 at careers.bms.com. See U.S. office.'), 'Use Node.js 3.5 at careers.bms.com. See U.S. office.')
   assert.equal(formatDescription(null), '')
+})
+
+test('fit weights add up to 1 and every part has one', () => {
+  const total = Object.values(FIT_WEIGHTS).reduce((sum, weight) => sum + weight, 0)
+  assert.ok(Math.abs(total - 1) < 1e-9)
+  assert.deepEqual(FIT_PARTS.map(part => part.weight), Object.values(FIT_WEIGHTS))
 })

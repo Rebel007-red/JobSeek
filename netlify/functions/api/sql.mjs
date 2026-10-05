@@ -1,7 +1,8 @@
 // Fixed, parameterised SQL for the Databricks SQL Statement API.
 // Only values travel as named parameters; clause text is chosen from this file, never from the request.
 // Every per-user statement is scoped by :user_id, which comes from the verified Supabase session, never from the request body.
-import { ENTRY_MAX_LENGTH, entryProblem } from '../../../src/utils/entries.js'
+import { ENTRY_MAX_LENGTH, PROFILE_LIMITS, entryProblem } from '../../../src/utils/entries.js'
+import { FIT_WEIGHTS, MATCH_MIN_FIT } from '../../../src/utils/gold.js'
 
 export class ValidationError extends Error {
   constructor(message) {
@@ -9,12 +10,6 @@ export class ValidationError extends Error {
     this.status = 400
   }
 }
-
-// Fit = 100 * (role * 0.40 + skills * 0.45 + experience * 0.15); the weights add up to 1.
-const FIT_WEIGHTS = { role: 0.4, skills: 0.45, experience: 0.15 }
-// "For you" = the job's role/category matches one of your roles and the fit is at least this.
-const MATCH_MIN_FIT = 60
-const PROFILE_LIMITS = { roles: 2, skills: 5 }
 
 // Visible = not hidden, and either still active or something you applied to (applied jobs stay after expiry).
 const VISIBLE_SQL = 'NOT coalesce(is_hidden, false) AND (coalesce(is_active, true) OR coalesce(is_applied, false))'

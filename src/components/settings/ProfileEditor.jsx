@@ -2,11 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../lib/api'
 import { ChipInput } from '../common/ChipInput'
 import { FIT_PARTS, MATCH_MIN_FIT } from '../../utils/gold'
-import { entryProblem } from '../../utils/entries'
+import { PROFILE_LIMITS, entryProblem } from '../../utils/entries'
 
 // Same limits as the API
-const MAX_ROLES = 2
-const MAX_SKILLS = 5
+const { roles: MAX_ROLES, skills: MAX_SKILLS } = PROFILE_LIMITS
 const NOT_SUPPORTED = 'is outside the supported roles (data, full stack / backend, DevOps and cloud)'
 const CHECK_PENDING = 'custom · checked on the next pipeline run'
 

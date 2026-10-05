@@ -1,0 +1,112 @@
+name: Scrape to Databricks volume
+description: Run one databricks/ scraper, upload its CSV to the Databricks landing volume and save it as an artifact.
+
+# Composite actions can't read the secrets context, so the calling step passes secrets in as inputs.
+# Each secret is handed only to the step that used it before this action existed.
+inputs:
+  scraper:
+    description: Scraper script to run, e.g. databricks/workday.py
+    required: true
+  csv-pattern:
+    description: Glob of the CSV(s) the scraper writes, e.g. databricks/output/workday*.csv
+    required: true
+  artifact-name:
+    description: Name of the uploaded CSV artifact
+    required: true
+  supabase-anon-key:
+    description: secrets.VITE_SUPABASE_ANON_KEY (scraper step)
+    required: true
+  supabase-service-role-key:
+    description: secrets.SUPABASE_SERVICE_ROLE_KEY (scraper step)
+    required: true
+  supabase-url:
+    description: secrets.SUPABASE_URL (scraper step)
+    required: true
+  databricks-host:
+    description: secrets.DATABRICKS_HOST (upload and trigger steps)
+    required: true
+  databricks-token:
+    description: secrets.DATABRICKS_TOKEN (upload and trigger steps)
+    required: true
+  scraper-reads-databricks:
+    description: "'true' also gives the scraper the Databricks credentials (linkedin.py reads the user roles file from the ops volume)"
+    required: false
+    default: 'false'
+  trigger-pipeline:
+    description: "'true' triggers the Databricks pipeline job after the upload"
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+        cache: 'pip'
+        cache-dependency-path: |
+          databricks/requirements.txt
+
+    - name: Install Python dependencies
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip setuptools wheel
+        pip install -r databricks/requirements.txt
+
+    - name: Install Playwright browser
+      shell: bash
+      run: |
+        python -m playwright install --with-deps chromium
+
+    # Two copies of the scraper step so the Databricks credentials only reach scrapers that need them
+    - name: Run scraper
+      if: inputs.scraper-reads-databricks != 'true'
+      shell: bash
+      env:
+        VITE_SUPABASE_ANON_KEY: ${{ inputs.supabase-anon-key }}
+        SUPABASE_SERVICE_ROLE_KEY: ${{ inputs.supabase-service-role-key }}
+        SUPABASE_URL: ${{ inputs.supabase-url }}
+      run: |
+        python ${{ inputs.scraper }}
+
+    - name: Run scraper (with Databricks access)
+      if: inputs.scraper-reads-databricks == 'true'
+      shell: bash
+      env:
+        VITE_SUPABASE_ANON_KEY: ${{ inputs.supabase-anon-key }}
+        SUPABASE_SERVICE_ROLE_KEY: ${{ inputs.supabase-service-role-key }}
+        SUPABASE_URL: ${{ inputs.supabase-url }}
+        DATABRICKS_HOST: ${{ inputs.databricks-host }}
+        DATABRICKS_TOKEN: ${{ inputs.databricks-token }}
+      run: |
+        python ${{ inputs.scraper }}
+
+    - name: Upload CSV to Databricks volume
+      shell: bash
+      env:
+        DATABRICKS_HOST: ${{ inputs.databricks-host }}
+        DATABRICKS_TOKEN: ${{ inputs.databricks-token }}
+      run: |
+        python databricks/upload_to_volume.py \
+          --volume /Volumes/jobseeker/default/scrapes \
+          --pattern "${{ inputs.csv-pattern }}"
+
+    - name: Trigger Databricks pipeline job
+      if: inputs.trigger-pipeline == 'true'
+      shell: bash
+      env:
+        DATABRICKS_HOST: ${{ inputs.databricks-host }}
+        DATABRICKS_TOKEN: ${{ inputs.databricks-token }}
+      run: |
+        python databricks/jobs/trigger_job.py
+
+    # always() here covers a failure in any step above, i.e. everything after checkout
+    - name: Save CSV artifact
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.csv-pattern }}
+        if-no-files-found: ignore
+        retention-days: 7
