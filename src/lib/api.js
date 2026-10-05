@@ -88,6 +88,12 @@ export function clearApiCache() {
   }
 }
 
+// Cached results are dropped first; ProtectedRoute then sends you to /login once the session is gone.
+export function signOut() {
+  clearApiCache()
+  supabase.auth.signOut()
+}
+
 // ---- transport ----
 
 async function post(body) {
@@ -135,7 +141,7 @@ async function callApi(action, params = {}, { onWaiting } = {}) {
  * - if the cached result is younger than maxAge (ms) it is returned without a network call
  * - identical requests in flight are shared (React StrictMode, quick re-renders)
  */
-export async function query(action, params = {}, { onCached, maxAge = 0, onWaiting, persist = true } = {}) {
+async function query(action, params = {}, { onCached, maxAge = 0, onWaiting, persist = true } = {}) {
   const key = keyFor(action, params)
   const cached = readCache(key)
   if (cached && maxAge && Date.now() - cached.at < maxAge) return cached.rows
@@ -159,8 +165,6 @@ const MINUTE = 60_000
 // (writes invalidate the affected views), so reads are served from cache for up to an hour instead of waking
 // the SQL warehouse and calling the Netlify Function on every visit. The jobs page auto-syncs once data is older.
 export const SYNC_MS = 60 * MINUTE
-const FRESH_MS = SYNC_MS
-const SLOW_MS = SYNC_MS
 const JOB_VIEWS = ['jobs', 'summary', 'hiddenJobs', 'trend']
 
 async function write(action, params, stale) {
@@ -177,14 +181,14 @@ function first(action, params, { onCached, ...options } = {}) {
 
 // scope: 'match' ("For you": your roles, fit 60+) or 'all'
 export const api = {
-  jobs: (params, options) => query('jobs', params, { maxAge: FRESH_MS, ...options }),
-  summary: (filters, options) => first('summary', filters, { maxAge: FRESH_MS, ...options }).then(row => row || {}),
-  trend: (params, options) => query('trend', params, { maxAge: SLOW_MS, ...options }),
-  facets: (params, options) => query('facets', params, { maxAge: SLOW_MS, ...options }),
+  jobs: (params, options) => query('jobs', params, { maxAge: SYNC_MS, ...options }),
+  summary: (filters, options) => first('summary', filters, { maxAge: SYNC_MS, ...options }).then(row => row || {}),
+  trend: (params, options) => query('trend', params, { maxAge: SYNC_MS, ...options }),
+  facets: (params, options) => query('facets', params, { maxAge: SYNC_MS, ...options }),
   job: (jobKey) => first('job', { jobKey }, { maxAge: 60 * MINUTE, persist: false }),
   prefetchJob: (jobKey) => { api.job(jobKey).catch(() => {}) },
-  hiddenJobs: (options) => query('hiddenJobs', {}, { maxAge: FRESH_MS, ...options }),
-  profile: (options) => first('profile', {}, { maxAge: SLOW_MS, ...options }),
+  hiddenJobs: (options) => query('hiddenJobs', {}, { maxAge: SYNC_MS, ...options }),
+  profile: (options) => first('profile', {}, { maxAge: SYNC_MS, ...options }),
   refs: () => query('refs', {}, { maxAge: 60 * MINUTE }),
   // Forget cached job data so the next reads go to Databricks (e.g. after a pipeline run)
   refreshData: () => invalidate([...JOB_VIEWS, 'facets']),

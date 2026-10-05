@@ -1,17 +1,11 @@
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../../lib/supabase'
-import { clearApiCache } from '../../lib/api'
+import { signOut } from '../../lib/api'
 import { GridIcon, KeyboardIcon, ListIcon, SearchIcon, SettingsIcon, SignOutIcon } from '../common/icons'
 
 // metrics: node shown in the bar (on mobile only its trend bars stay visible, see CSS).
 // onSearch: mobile-only toggle for the collapsed search box. The list/grid switch lives in Settings on mobile.
 export function Header({ metrics = null, onSearch, searchOpen = false, view, onViewChange, onHelp }) {
   const navigate = useNavigate()
-  // ProtectedRoute sends you to /login once the session is gone
-  const signOut = () => {
-    clearApiCache()
-    supabase.auth.signOut()
-  }
 
   return (
     <header className="topbar">

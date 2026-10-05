@@ -7,19 +7,27 @@ from urllib.parse import urlparse
 
 import aiohttp
 from bs4 import BeautifulSoup
-import pandas as pd
-from playwright.async_api import async_playwright
 
 from scraper_common import (
-	MAX_POSTED_DAYS,
-	OUTPUT_COLUMNS,
 	fetch_companies,
+	first_text,
 	format_calendar_date,
-	keep_recent_jobs,
+	goto_settled,
 	print_companies,
-	sanitize_text,
-	write_flat_jobs_csv,
+	relative_text_to_days,
+	write_recent_jobs,
 )
+
+DESCRIPTION_SELECTORS = [
+	".job-description",
+	".app-job-description",
+	".content",
+	'[data-testid="job-description"]',
+	".description",
+	".job-posting",
+	"article",
+	"main",
+]
 
 
 def normalize_board_url(raw_value):
@@ -68,39 +76,27 @@ def greenhouse_content_to_text(content):
 	return BeautifulSoup(decoded, "html.parser").get_text(" ", strip=True)
 
 
-def posted_iso_to_days(posted_date):
-	value = (posted_date or "").strip()
-	if not value:
-		return None
-
+def parse_iso_date(posted_date):
+	"""Local calendar date of an ISO timestamp, or None when the value isn't one."""
 	try:
 		# Convert to local time (IST via TZ) before taking the date so it matches date.today().
-		parsed = datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone().date()
-		return (date.today() - parsed).days
+		return datetime.fromisoformat((posted_date or "").strip().replace("Z", "+00:00")).astimezone().date()
 	except ValueError:
-		lowered = value.lower()
-		if "today" in lowered:
-			return 0
-		if "yesterday" in lowered:
-			return 1
+		return None
 
-		match = re.search(r"(\d+)\s+day", lowered)
-		if match:
-			return int(match.group(1))
 
-	return None
+def posted_iso_to_days(posted_date):
+	parsed = parse_iso_date(posted_date)
+	if parsed:
+		return (date.today() - parsed).days
+	return relative_text_to_days(posted_date)
 
 
 def format_posted_date(posted_date):
-	value = (posted_date or "").strip()
-	if not value:
-		return ""
-
-	try:
-		parsed = datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone().date()
-		return parsed.strftime("%d/%m/%Y")
-	except ValueError:
-		return value
+	parsed = parse_iso_date(posted_date)
+	if parsed:
+		return format_calendar_date(parsed)
+	return (posted_date or "").strip()
 
 
 def parse_jobs_from_api(payload, board_url):
@@ -161,112 +157,15 @@ async def fetch_board_jobs(session, api_url, attempts=3):
 	return None
 
 
-async def fetch_descriptions_for_jobs(jobs):
-	if not jobs:
-		return jobs
-
-	selectors = [
-		".job-description",
-		".app-job-description",
-		".content",
-		'[data-testid="job-description"]',
-		".description",
-		".job-posting",
-		"article",
-		"main",
-	]
-
-	try:
-		async with async_playwright() as p:
-			browser = await p.chromium.launch(headless=True)
-			total_jobs = len(jobs)
-			semaphore = asyncio.Semaphore(3)
-			progress_lock = asyncio.Lock()
-			progress = {"count": 0}
-
-			async def fetch_single_description(job):
-				if job.get("description"):
-					return
-
-				detail_url = job.get("job_url")
-				if not detail_url:
-					job["description"] = ""
-					return
-
-				async with semaphore:
-					page = await browser.new_page()
-					try:
-						async with progress_lock:
-							progress["count"] += 1
-							print(f"    [DESC] {progress['count']}/{total_jobs}")
-
-						try:
-							await page.goto(detail_url, wait_until="networkidle", timeout=30000)
-						except Exception:
-							await page.goto(detail_url, wait_until="domcontentloaded", timeout=20000)
-
-						await page.wait_for_timeout(1000)
-						description = ""
-						for selector in selectors:
-							locator = page.locator(selector).first
-							if await locator.count() > 0:
-								text = await locator.text_content()
-								if text and len(text.strip()) > 80:
-									description = text.strip()
-									break
-
-						if not description:
-							body = await page.locator("body").text_content()
-							description = body.strip() if body else ""
-
-						job["description"] = description
-					except Exception:
-						job["description"] = ""
-					finally:
-						await page.close()
-
-			await asyncio.gather(*(fetch_single_description(job) for job in jobs))
-			await browser.close()
-	except Exception as exc:
-		print(f"    [WARN] Failed to fetch filtered Greenhouse job descriptions: {exc}")
-		for job in jobs:
-			job.setdefault("description", "")
-
-	return jobs
-
-
-def jobs_to_dataframe(jobs):
-	rows = []
-	for job in jobs:
-		raw_posted_date = job.get("posted_date", "")
-		rows.append({
-			"company_name": job.get("company_name", ""),
-			"ats_type": job.get("ats_type", ""),
-			"company_url": job.get("company_url", ""),
-			"job_id": job.get("job_id", ""),
-			"title": job.get("title", ""),
-			"location": job.get("location", ""),
-			"posted_date": format_posted_date(raw_posted_date),
-			"posted_days": posted_iso_to_days(raw_posted_date),
-			"job_url": job.get("job_url", ""),
-			"description": sanitize_text(job.get("description", "")),
-			"collected_on": job.get("collected_on", ""),
-		})
-
-	dataframe = pd.DataFrame(rows)
-	if dataframe.empty:
-		return pd.DataFrame(columns=OUTPUT_COLUMNS)
-
-	return dataframe.reindex(columns=OUTPUT_COLUMNS)
-
-
-def finalize_dataframe(jobs):
-	"""Build the output frame from already-normalized rows without re-parsing dates."""
-	for job in jobs:
-		job["description"] = sanitize_text(job.get("description", ""))
-	dataframe = pd.DataFrame(jobs, columns=OUTPUT_COLUMNS)
-	dataframe["posted_days"] = dataframe["posted_days"].astype("Int64")
-	return dataframe
+async def read_greenhouse_description(page, job):
+	"""Only used when the board API returned no content for a job."""
+	await goto_settled(page, job["job_url"])
+	await page.wait_for_timeout(1000)
+	for selector in DESCRIPTION_SELECTORS:
+		text = await first_text(page, selector)
+		if len(text) > 80:
+			return text
+	return await first_text(page, "body")
 
 
 async def collect_greenhouse_jobs(companies):
@@ -300,6 +199,7 @@ async def collect_greenhouse_jobs(companies):
 			jobs = parse_jobs_from_api(payload, board_url)
 			print(f"[COMPANY] {company_name}: jobs found {len(jobs)}")
 			for job in jobs:
+				posted_date = job.get("posted_date", "")
 				collected_jobs.append({
 					"company_name": company_name,
 					"ats_type": "greenhouse",
@@ -307,10 +207,11 @@ async def collect_greenhouse_jobs(companies):
 					"job_id": job.get("job_id", ""),
 					"title": job.get("title", ""),
 					"location": job.get("location", ""),
-					"posted_date": job.get("posted_date", ""),
+					"posted_date": format_posted_date(posted_date),
 					"job_url": job.get("job_url", ""),
 					"description": job.get("description", ""),
 					"collected_on": collected_on,
+					"posted_days": posted_iso_to_days(posted_date),
 				})
 
 	return collected_jobs, failed_companies
@@ -324,13 +225,7 @@ async def main():
 		sys.exit(1)
 
 	jobs, failed_companies = await collect_greenhouse_jobs(companies)
-	jobs_dataframe = jobs_to_dataframe(jobs)
-	filtered_jobs_dataframe = keep_recent_jobs(jobs_dataframe)
-	print(f"[FILTER] Greenhouse jobs after filtering (posted_days <= {MAX_POSTED_DAYS}): {len(filtered_jobs_dataframe)}")
-	filtered_jobs = filtered_jobs_dataframe.to_dict(orient="records")
-	filtered_jobs = await fetch_descriptions_for_jobs(filtered_jobs)
-	filtered_jobs_dataframe = finalize_dataframe(filtered_jobs)
-	output_file = write_flat_jobs_csv(filtered_jobs_dataframe, "greenhouse")
+	filtered_jobs_dataframe, output_file = await write_recent_jobs(jobs, "Greenhouse", "greenhouse", read_greenhouse_description)
 
 	print(
 		f"[SUMMARY] companies={len(companies)} failed={len(failed_companies)} "

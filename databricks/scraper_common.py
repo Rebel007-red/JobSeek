@@ -3,14 +3,17 @@
 The scrapers read their company list from Supabase and write one CSV per run to databricks/output,
 which upload_to_volume.py then copies to the Databricks landing volume.
 """
+import asyncio
 import json
 import os
 import re
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import aiohttp
+import pandas as pd
 from dotenv import load_dotenv
+from playwright.async_api import async_playwright
 
 HERE = Path(__file__).resolve().parent
 load_dotenv(HERE / ".env")
@@ -39,15 +42,13 @@ OUTPUT_COLUMNS = [
 ]
 
 
-def build_headers(extra_headers=None):
+def build_headers():
     headers = {"Content-Type": "application/json"}
     api_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("VITE_SUPABASE_ANON_KEY")
     if api_key:
         headers["apikey"] = api_key
         if api_key.startswith("eyJ"):  # legacy JWT keys also go in Authorization (sb_secret_/sb_publishable_ keys must not)
             headers["Authorization"] = f"Bearer {api_key}"
-    if extra_headers:
-        headers.update(extra_headers)
     return headers
 
 
@@ -64,6 +65,27 @@ def sanitize_text(value):
 
 def format_calendar_date(value):
     return value.strftime("%d/%m/%Y")
+
+
+def format_days_ago(days_ago):
+    if days_ago is None:
+        return ""
+    return format_calendar_date(date.today() - timedelta(days=days_ago))
+
+
+def relative_text_to_days(text):
+    """Days ago from text like "Posted Today", "Posted Yesterday" or "Posted 3 Days Ago"; None when unrecognized."""
+    value = (text or "").strip().lower()
+    if "today" in value:
+        return 0
+    if "yesterday" in value:
+        return 1
+
+    match = re.search(r"(\d+)\s+day", value)
+    if match:
+        return int(match.group(1))
+
+    return None
 
 
 async def fetch_companies(ats_type, columns):
@@ -157,12 +179,87 @@ async def fetch_user_roles():
     return roles
 
 
+def jobs_to_dataframe(jobs):
+    """One row per job in OUTPUT_COLUMNS order; posted_date and posted_days must already be normalized."""
+    rows = [
+        {
+            **{column: job.get(column, "") for column in OUTPUT_COLUMNS},
+            "description": sanitize_text(job.get("description", "")),
+            "posted_days": job.get("posted_days"),
+        }
+        for job in jobs
+    ]
+    dataframe = pd.DataFrame(rows, columns=OUTPUT_COLUMNS)
+    dataframe["posted_days"] = dataframe["posted_days"].astype("Int64")
+    return dataframe
+
+
 def keep_recent_jobs(dataframe):
     if dataframe.empty:
         return dataframe
 
     filtered = dataframe[dataframe["posted_days"].notna()].copy()
     return filtered[filtered["posted_days"] <= MAX_POSTED_DAYS]
+
+
+async def first_text(page, selector):
+    """Stripped text of the first element matching selector, or "" when there is none."""
+    locator = page.locator(selector).first
+    if await locator.count() == 0:
+        return ""
+    text = await locator.text_content()
+    return text.strip() if text else ""
+
+
+async def goto_settled(page, url):
+    """Open url and wait for the network to go idle, falling back to DOM-ready for pages that never settle."""
+    try:
+        await page.goto(url, wait_until="networkidle", timeout=30000)
+    except Exception:
+        await page.goto(url, wait_until="domcontentloaded", timeout=20000)
+
+
+async def fetch_descriptions(jobs, label, read_description):
+    """Fill in missing descriptions by opening each job_url in headless Chromium, 3 pages at a time.
+
+    read_description(page, job) loads the job page and returns its description; any failure leaves "".
+    """
+    pending = [job for job in jobs if not job.get("description")]
+    if not pending:
+        return jobs
+
+    total_jobs = len(pending)
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            semaphore = asyncio.Semaphore(3)
+            fetched = 0
+
+            async def fetch_single_description(job):
+                nonlocal fetched
+                if not job.get("job_url"):
+                    job["description"] = ""
+                    return
+
+                async with semaphore:
+                    page = await browser.new_page()
+                    try:
+                        fetched += 1
+                        print(f"    [DESC] {fetched}/{total_jobs}")
+                        job["description"] = await read_description(page, job)
+                    except Exception:
+                        job["description"] = ""
+                    finally:
+                        await page.close()
+
+            await asyncio.gather(*(fetch_single_description(job) for job in pending))
+            await browser.close()
+    except Exception as exc:
+        print(f"    [WARN] Failed to fetch filtered {label} job descriptions: {exc}")
+        for job in jobs:
+            job.setdefault("description", "")
+
+    return jobs
 
 
 def write_flat_jobs_csv(dataframe, prefix, output_dir=OUTPUT_DIR):
@@ -177,3 +274,15 @@ def write_flat_jobs_csv(dataframe, prefix, output_dir=OUTPUT_DIR):
     except Exception as exc:
         print(f"[ERROR] Failed to write {prefix} CSV: {exc}")
         return None
+
+
+async def write_recent_jobs(jobs, label, prefix, read_description):
+    """Keep jobs posted within MAX_POSTED_DAYS, fetch their missing descriptions and write the CSV.
+
+    Returns the written dataframe and the output file (None when writing failed).
+    """
+    recent = keep_recent_jobs(jobs_to_dataframe(jobs))
+    print(f"[FILTER] {label} jobs after filtering (posted_days <= {MAX_POSTED_DAYS}): {len(recent)}")
+    recent_jobs = await fetch_descriptions(recent.to_dict(orient="records"), label, read_description)
+    dataframe = jobs_to_dataframe(recent_jobs)
+    return dataframe, write_flat_jobs_csv(dataframe, prefix)

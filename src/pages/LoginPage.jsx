@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authLinkError, supabase } from '../lib/supabase'
-import { MIN_PASSWORD_LENGTH, passwordProblem } from '../utils/password'
+import { AuthLayout, NewPasswordFields } from '../components/layout/AuthLayout'
+import { passwordProblem } from '../utils/password'
 
 // Supabase sends a 6-10 digit code (length is a project setting)
 const CODE_RE = /^\d{6,10}$/
@@ -86,108 +87,82 @@ export function LoginPage() {
   )
 
   return (
-    <div className="auth-page">
-      <div className="auth-box">
-        <div className="auth-brand">
-          <span className="brand-mark" aria-hidden="true"><img src="favicon.svg" alt="JobSeeker logo" /></span>
-          <h1>JobSeeker</h1>
-          <p>{mode === 'signin' ? 'Sign in to your job inbox' : 'Reset your password'}</p>
-        </div>
+    <AuthLayout title="JobSeeker" subtitle={mode === 'signin' ? 'Sign in to your job inbox' : 'Reset your password'}>
+      {mode === 'signin' && (
+        <form onSubmit={handleSignIn} className="auth-card">
+          {emailField}
 
-        {mode === 'signin' && (
-          <form onSubmit={handleSignIn} className="auth-card">
-            {emailField}
+          <div className="field">
+            <label htmlFor="login-password">Password</label>
+            <input
+              id="login-password"
+              type="password"
+              required
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              className="input"
+            />
+          </div>
 
-            <div className="field">
-              <label htmlFor="login-password">Password</label>
-              <input
-                id="login-password"
-                type="password"
-                required
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="input"
-              />
-            </div>
+          {error && <p className="form-error">{error}</p>}
 
-            {error && <p className="form-error">{error}</p>}
+          <button type="submit" disabled={loading} className="btn primary block">
+            {loading ? 'Signing in…' : 'Sign in'}
+          </button>
+          <button type="button" className="text-button" onClick={() => switchMode('reset')}>Forgot password?</button>
+        </form>
+      )}
 
-            <button type="submit" disabled={loading} className="btn primary block">
-              {loading ? 'Signing in…' : 'Sign in'}
-            </button>
-            <button type="button" className="text-button" onClick={() => switchMode('reset')}>Forgot password?</button>
-          </form>
-        )}
+      {mode === 'reset' && (
+        <form onSubmit={handleSendCode} className="auth-card">
+          {emailField}
+          {error && <p className="form-error">{error}</p>}
+          <button type="submit" disabled={loading} className="btn primary block">
+            {loading ? 'Sending…' : 'Email me a code'}
+          </button>
+          <button type="button" className="text-button" onClick={() => switchMode('signin')}>Back to sign in</button>
+        </form>
+      )}
 
-        {mode === 'reset' && (
-          <form onSubmit={handleSendCode} className="auth-card">
-            {emailField}
-            {error && <p className="form-error">{error}</p>}
-            <button type="submit" disabled={loading} className="btn primary block">
-              {loading ? 'Sending…' : 'Email me a code'}
-            </button>
-            <button type="button" className="text-button" onClick={() => switchMode('signin')}>Back to sign in</button>
-          </form>
-        )}
+      {mode === 'code' && (
+        <form onSubmit={handleReset} className="auth-card">
+          {emailField}
+          {info && <p className="form-info">{info}</p>}
 
-        {mode === 'code' && (
-          <form onSubmit={handleReset} className="auth-card">
-            {emailField}
-            {info && <p className="form-info">{info}</p>}
+          <div className="field">
+            <label htmlFor="reset-code">Code</label>
+            <input
+              id="reset-code"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              required
+              maxLength={10}
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+              className="input"
+            />
+          </div>
 
-            <div className="field">
-              <label htmlFor="reset-code">Code</label>
-              <input
-                id="reset-code"
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                required
-                maxLength={10}
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-                className="input"
-              />
-            </div>
+          <NewPasswordFields
+            passwordId="reset-password"
+            confirmId="reset-confirm"
+            password={newPassword}
+            confirm={confirm}
+            onPasswordChange={setNewPassword}
+            onConfirmChange={setConfirm}
+          />
 
-            <div className="field">
-              <label htmlFor="reset-password">New password</label>
-              <input
-                id="reset-password"
-                type="password"
-                required
-                minLength={MIN_PASSWORD_LENGTH}
-                autoComplete="new-password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="input"
-              />
-            </div>
+          {error && <p className="form-error">{error}</p>}
 
-            <div className="field">
-              <label htmlFor="reset-confirm">Confirm password</label>
-              <input
-                id="reset-confirm"
-                type="password"
-                required
-                autoComplete="new-password"
-                value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
-                className="input"
-              />
-            </div>
-
-            {error && <p className="form-error">{error}</p>}
-
-            <button type="submit" disabled={loading} className="btn primary block">
-              {loading ? 'Saving…' : 'Set new password'}
-            </button>
-            <button type="button" className="text-button" onClick={() => switchMode('reset')}>Send a new code</button>
-          </form>
-        )}
-      </div>
-    </div>
+          <button type="submit" disabled={loading} className="btn primary block">
+            {loading ? 'Saving…' : 'Set new password'}
+          </button>
+          <button type="button" className="text-button" onClick={() => switchMode('reset')}>Send a new code</button>
+        </form>
+      )}
+    </AuthLayout>
   )
 }

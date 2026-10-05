@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { clearAuthLinkType, supabase } from '../lib/supabase'
-import { MIN_PASSWORD_LENGTH, passwordProblem } from '../utils/password'
+import { AuthLayout, NewPasswordFields } from '../components/layout/AuthLayout'
+import { passwordProblem } from '../utils/password'
 
 // Opened from an invite link (already signed in by the link): choose the password used on the login page.
 export function SetPasswordPage() {
@@ -46,49 +47,23 @@ export function SetPasswordPage() {
   if (!ready) return null
 
   return (
-    <div className="auth-page">
-      <div className="auth-box">
-        <div className="auth-brand">
-          <span className="brand-mark" aria-hidden="true"><img src="favicon.svg" alt="JobSeeker logo" /></span>
-          <h1>Set your password</h1>
-          <p>{email ? `For ${email}` : 'Choose a password for your account'}</p>
-        </div>
+    <AuthLayout title="Set your password" subtitle={email ? `For ${email}` : 'Choose a password for your account'}>
+      <form onSubmit={handleSubmit} className="auth-card">
+        <NewPasswordFields
+          passwordId="new-password"
+          confirmId="confirm-password"
+          password={password}
+          confirm={confirm}
+          onPasswordChange={setPassword}
+          onConfirmChange={setConfirm}
+        />
 
-        <form onSubmit={handleSubmit} className="auth-card">
-          <div className="field">
-            <label htmlFor="new-password">New password</label>
-            <input
-              id="new-password"
-              type="password"
-              required
-              minLength={MIN_PASSWORD_LENGTH}
-              autoComplete="new-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="input"
-            />
-          </div>
+        {error && <p className="form-error">{error}</p>}
 
-          <div className="field">
-            <label htmlFor="confirm-password">Confirm password</label>
-            <input
-              id="confirm-password"
-              type="password"
-              required
-              autoComplete="new-password"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              className="input"
-            />
-          </div>
-
-          {error && <p className="form-error">{error}</p>}
-
-          <button type="submit" disabled={saving} className="btn primary block">
-            {saving ? 'Saving…' : 'Save password'}
-          </button>
-        </form>
-      </div>
-    </div>
+        <button type="submit" disabled={saving} className="btn primary block">
+          {saving ? 'Saving…' : 'Save password'}
+        </button>
+      </form>
+    </AuthLayout>
   )
 }

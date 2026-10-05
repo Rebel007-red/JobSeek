@@ -25,7 +25,7 @@ const READ_TTL_MS = {
 const WRITE_ACTIONS = new Set(['setApplied', 'setHidden', 'restoreHidden', 'saveProfile'])
 const authCache = new Map() // sha256(token) -> { expires, user: { id, email } }
 const resultCache = new Map() // <user id | 'shared'>|action|params -> { expires, body }
-const pendingCacheKeys = new Map() // statement id -> { key, ttl, userId }
+const pendingStatements = new Map() // statement id -> { userId, shared, write, cache: { key, ttl } | null }
 
 function remember(map, key, value) {
   if (map.size >= CACHE_MAX_ENTRIES) map.delete(map.keys().next().value)
@@ -149,7 +149,6 @@ async function databricks(config, method, path, body) {
 async function statementResult(config, data, cache) {
   const state = data.status?.state
   if (state === 'PENDING' || state === 'RUNNING') {
-    if (cache) remember(pendingCacheKeys, data.statement_id, cache)
     return { status: 202, body: { pending: true, statementId: data.statement_id } }
   }
   if (state !== 'SUCCEEDED') {
@@ -163,8 +162,7 @@ async function statementResult(config, data, cache) {
   const columns = data.manifest?.schema?.columns || []
   const rows = [...(data.result?.data_array || [])]
   let next = data.result?.next_chunk_internal_link
-  while (next && rows.length < MAX_ROWS) {
-    if (!next.startsWith('/api/2.0/sql/statements/')) break
+  while (next?.startsWith('/api/2.0/sql/statements/') && rows.length < MAX_ROWS) {
     const chunk = await databricks(config, 'GET', next)
     rows.push(...(chunk.data_array || []))
     next = chunk.next_chunk_internal_link
@@ -193,24 +191,32 @@ async function runStatement(config, action, params, user) {
     disposition: 'INLINE',
     format: 'JSON_ARRAY',
   })
-  if (WRITE_ACTIONS.has(action)) forgetUserResults(user.id)
-  const result = await statementResult(config, data, key ? { key, ttl, userId: user.id } : null)
+  const write = WRITE_ACTIONS.has(action)
+  if (write) forgetUserResults(user.id)
+  const cache = key ? { key, ttl } : null
+  const result = await statementResult(config, data, cache)
+  if (result.status === 202) {
+    remember(pendingStatements, data.statement_id, { userId: user.id, shared: SHARED_ACTIONS.has(action), write, cache })
+  }
   return json(result.status, result.body)
 }
 
 // Waits server-side (short intervals) so the client needs few round trips while the warehouse starts.
-// A statement can only be polled by the user who started it.
+// A per-user statement started on this instance can only be polled by the user who started it.
 async function pollStatement(config, statementId, user) {
   const started = Date.now()
-  const cache = pendingCacheKeys.get(statementId) || null
-  if (cache && cache.userId !== user.id && !cache.key.startsWith('shared|')) throw new HttpError(403, 'Not your request')
+  const pending = pendingStatements.get(statementId)
+  if (pending && !pending.shared && pending.userId !== user.id) throw new HttpError(403, 'Not your request')
   for (;;) {
     const data = await databricks(config, 'GET', `/api/2.0/sql/statements/${statementId}`)
-    const result = await statementResult(config, data, cache)
-    if (result.status !== 202 || Date.now() - started > POLL_BUDGET_MS) {
-      if (result.status !== 202) pendingCacheKeys.delete(statementId)
+    const result = await statementResult(config, data, pending?.cache)
+    if (result.status !== 202) {
+      pendingStatements.delete(statementId)
+      // Reads cached while this write was running may predate it
+      if (pending?.write) forgetUserResults(user.id)
       return json(result.status, result.body)
     }
+    if (Date.now() - started > POLL_BUDGET_MS) return json(result.status, result.body)
     await sleep(POLL_INTERVAL_MS)
   }
 }
@@ -232,10 +238,11 @@ export default async (req) => {
 
     if (action === 'poll') {
       if (!isStatementId(body.statementId)) throw new ValidationError('Invalid statement id')
-      return pollStatement(config, body.statementId, user)
+      return await pollStatement(config, body.statementId, user)
     }
 
-    return runStatement(config, action, body.params, user)
+    // await: errors from the statement must reach the catch below, not escape as a rejected promise
+    return await runStatement(config, action, body.params, user)
   } catch (error) {
     const status = error.status || 500
     if (status >= 500) console.error(error)

@@ -32,7 +32,7 @@ flowchart LR
 | Path | What it is |
 |---|---|
 | `src/` | React 19 app (Vite, react-router). `pages/` (Jobs, Settings, Login), `components/common/` (list row, card, drawer, filters, metrics), `hooks/`, `lib/api.js` (cached API client), `utils/` |
-| `netlify/functions/api/` | Netlify Function: verifies the Supabase login and runs fixed, parameterised SQL on Databricks (`sql.mjs`) |
+| `netlify/functions/api/` | Netlify Function: verifies the Supabase login and runs fixed, parameterised SQL on Databricks (`sql.mjs`); tests in `*.test.mjs` |
 | `databricks/*.py` | Scrapers (Workday, Greenhouse, LinkedIn) + `upload_to_volume.py`; shared helpers in `scraper_common.py` |
 | `databricks/jobs/` | `jobseeker_pipeline.json` (job definition), `deploy_job.py`, `trigger_job.py` |
 | `databricks/notebooks/` | Pipeline notebooks `01_setup` … `06_cleanup` (+ `_common`, `00_capability_check`) |
@@ -51,8 +51,8 @@ cp .env.example .env   # fill in the values
 npm run dev            # http://localhost:5173 (also serves the API function)
 ```
 
-`npm run build` builds to `dist/`. Tests: `node --test netlify/functions/api/sql.test.mjs src/utils/*.test.js`.
-Lint: `npm run lint`.
+`npm run build` builds to `dist/`. Tests: `node --test netlify/functions/api/*.test.mjs src/utils/*.test.js`.
+Lint: `npm run lint`. Legacy scraper tests: `python -m unittest discover -s tests`.
 
 ### 2. Environment variables
 

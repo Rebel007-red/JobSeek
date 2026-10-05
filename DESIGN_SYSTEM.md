@@ -1,7 +1,7 @@
 # JobSeeker UI design system
 
 Compact, mobile-first and theme-aware. Everything is styled in `src/index.css` with CSS variables; Tailwind is only
-used for a few utility classes (`w-4`, `h-4`, `min-h-screen`).
+used for a few utility classes (`w-4`/`h-4`, `w-3.5`/`h-3.5`, `min-h-screen`).
 
 ## Principles
 
@@ -20,8 +20,10 @@ used for a few utility classes (`w-4`, `h-4`, `min-h-screen`).
 | `--primary`, `--on-primary` | Actions, selection, focus ring |
 | `--success`, `--warning`, `--orange`, `--danger`, `--accent` | Applied / fit bands / hide / strong-fit metric |
 | `--*-soft` | 12-14% tints of the colours above (`color-mix`) for chips and badges |
+| `--shadow-sm`, `--shadow-lg`, `--backdrop` | Raised controls, popups (drawer, modal, toast) and their scrim |
 | `--radius` 8px, `--radius-sm` 6px | Cards / controls |
 | `--header-h` 48px, `--control-h` 32px | Top bar and control height |
+| `--font`, `--mono` | UI text and `kbd` / `code` |
 
 Never hard-code colours in components; add a token instead. Base font size is 14px.
 
@@ -31,7 +33,8 @@ Never hard-code colours in components; add a token instead. Base font size is 14
 |---|---|
 | `.btn` (`.primary`, `.success`, `.danger`, `.sm`, `.block`) | Text buttons. `.primary-button` / `.secondary-button` are aliases used by Settings |
 | `.icon-btn` (`.is-on`, `.danger`) | 30px icon buttons; icons come from `components/common/icons.jsx` (`.icon`, 16px) |
-| `.segmented`, `.tab-group` | Two-state toggles and tabs on a `--surface-2` track |
+| `.segmented`, `.tab-group` | Two-state toggles and tabs on a `--surface-2` track (`.settings-tabs` shares the `.tab-group` styles) |
+| `.eyebrow` | Small all-caps section label (also used for drawer and shortcut-help headings) |
 | `.pill-toggle`, `.filter-chip` | Quick filters (toggle) and removable active filters |
 | `JobRow` (`.job-row`) | List item: fit score, title, company · location, role/exp/skills/age, actions |
 | `JobCard` (`.job-card`) | Card item: fit ring, skills, fit bars, footer with exp/age/actions |

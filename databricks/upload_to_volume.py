@@ -1,16 +1,12 @@
 import argparse
-import os
 import sys
 import time
 from datetime import date
 from pathlib import Path
 
-from dotenv import load_dotenv
 import requests
 
-
-load_dotenv(Path(__file__).resolve().parent / ".env")
-load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+from jobs.databricks_api import auth_headers, host
 
 
 def newest_match(pattern: str) -> Path:
@@ -29,26 +25,19 @@ def build_remote_path(volume_path: str, local_file: Path) -> str:
 
 
 def create_remote_directory(remote_directory: str) -> None:
-    host = (os.getenv("DATABRICKS_HOST") or "").strip().strip('"')
-    token = (os.getenv("DATABRICKS_TOKEN") or "").strip().strip('"')
+    headers = auth_headers()
+    url = f"{host()}/api/2.0/fs/directories{remote_directory}"
 
-    if not host or not token:
-        raise EnvironmentError("DATABRICKS_HOST and DATABRICKS_TOKEN must be set before uploading.")
-
-    metadata_url = f"{host}/api/2.0/fs/directories{remote_directory}"
-    headers = {"Authorization": f"Bearer {token}"}
-
-    metadata_response = requests.head(metadata_url, headers=headers, timeout=60)
+    metadata_response = requests.head(url, headers=headers, timeout=60)
     if metadata_response.status_code == 200:
         print(f"[MKDIR] Exists: {remote_directory}")
         return
-    if metadata_response.status_code not in (404,):
+    if metadata_response.status_code != 404:
         raise RuntimeError(
             f"Directory check failed with status {metadata_response.status_code}: "
             f"{metadata_response.text[:500]}"
         )
 
-    url = f"{host}/api/2.0/fs/directories{remote_directory}"
     print(f"[MKDIR] PUT {url}")
     response = requests.put(url, headers=headers, timeout=120)
     if response.status_code != 204:
@@ -56,17 +45,8 @@ def create_remote_directory(remote_directory: str) -> None:
 
 
 def upload_file(local_file: Path, remote_path: str, attempts: int = 3) -> None:
-    host = (os.getenv("DATABRICKS_HOST") or "").strip().strip('"')
-    token = (os.getenv("DATABRICKS_TOKEN") or "").strip().strip('"')
-
-    if not host or not token:
-        raise EnvironmentError("DATABRICKS_HOST and DATABRICKS_TOKEN must be set before uploading.")
-
-    url = f"{host}/api/2.0/fs/files{remote_path}?overwrite=true"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/octet-stream",
-    }
+    headers = {**auth_headers(), "Content-Type": "application/octet-stream"}
+    url = f"{host()}/api/2.0/fs/files{remote_path}?overwrite=true"
 
     error = ""
     for attempt in range(1, attempts + 1):

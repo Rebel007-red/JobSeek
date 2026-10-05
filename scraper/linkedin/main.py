@@ -1,10 +1,10 @@
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
-import os
 import sys
 import re
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import quote
 
 # Add parent directory to sys.path to import skill_Filter
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -13,12 +13,6 @@ from skill_Filter import SkillFilter
 class Scraper:
     def __init__(self, company):
         self.company = company
-        supabase_url = (os.getenv("SUPABASE_URL") or "").rstrip("/")
-        self.base_url = f"{supabase_url}/rest/v1" if supabase_url else ""
-        self.headers = {
-            'apikey': os.getenv("VITE_SUPABASE_ANON_KEY"),
-            'Content-Type': 'application/json'
-        }
         # Initialize SkillFilter with user skills
         self.skill_filter = SkillFilter(company.get('user_skills', []))
         
@@ -40,7 +34,6 @@ class Scraper:
             return None
         
         # URL encode the keywords
-        from urllib.parse import quote
         encoded_keywords = quote(keywords_str.strip())
         
         # Keep the 6-hour recency filter and fetch more by loading additional results.
@@ -65,7 +58,7 @@ class Scraper:
         print(f"[SCRAPE] {self.company['name']} with keywords: {self.company.get('api_url', 'N/A')}")
         
         if not self.search_url:
-            print(f"    [ERROR] No keywords provided in api_url field")
+            print("    [ERROR] No keywords provided in api_url field")
             return []
         
         try:
@@ -74,16 +67,14 @@ class Scraper:
                 page = await browser.new_page()
                 
                 # Navigate to LinkedIn search URL (URL handles location + recency filter)
-                search_url = self.search_url
-                
-                await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
+                await page.goto(self.search_url, wait_until="domcontentloaded", timeout=30000)
                 await page.wait_for_selector('div[class*="base-card"]', timeout=10000)
 
                 # STEP 1: Crawl paginated results to reach target volume.
                 all_jobs = await self._collect_jobs_across_pages(page)
                 print(f"    [TOTAL] {len(all_jobs)} jobs fetched from LinkedIn")
                 
-                # DEBUG: Show job list in pipe-separated format
+                # Show job list in pipe-separated format
                 if all_jobs:
                     jobs_list = " | ".join([f"{i+1}. {job['title'][:30]}" for i, job in enumerate(all_jobs)])
                     print(f"    [JOBS] {jobs_list}")
@@ -123,16 +114,10 @@ class Scraper:
                 # STEP 4: Sort by freshness (most recent first)
                 filtered_jobs = self._sort_by_freshness(filtered_jobs)
                 
-                # DEBUG: Show filtered jobs list in pipe-separated format
+                # Show filtered jobs list in pipe-separated format
                 if filtered_jobs:
                     matched_list = " | ".join([f"{i+1}. {job['title'][:35]} ({job['location'][:15]})" for i, job in enumerate(filtered_jobs)])
                     print(f"    [MATCHED] {matched_list}")
-                    
-                    # FULL LIST: title | posted | location
-                    print(f"\n    [FULL LIST]")
-                    for i, job in enumerate(filtered_jobs):
-                        print(f"    {i+1}. {job['title']} | {job['posted_time']} | {job['location']}")
-                    print()
                 
                 return filtered_jobs
         
@@ -164,12 +149,10 @@ class Scraper:
         if not self.search_terms:
             return skill_matched_jobs
 
-        title_matched_jobs = []
         title_ids = set()
         for job in filtered_jobs:
             title = str(job.get('title', '')).lower()
             if any(term in title for term in self.search_terms):
-                title_matched_jobs.append(job)
                 title_ids.add(job.get('job_id'))
 
         # Keep jobs that match title OR skills.
@@ -348,7 +331,7 @@ class Scraper:
                 }
                 jobs.append(job)
                 
-            except Exception as e:
+            except Exception:
                 continue
         
         return jobs
@@ -380,33 +363,6 @@ class Scraper:
         # Sort jobs by freshness score (descending)
         sorted_jobs = sorted(jobs, key=get_freshness_score)
         
-        print(f"    [SORT] Jobs sorted by freshness (most recent first)")
+        print("    [SORT] Jobs sorted by freshness (most recent first)")
         
         return sorted_jobs
-    
-    async def _insert_jobs(self, jobs):
-        """Insert jobs into Supabase via REST API"""
-        url = f"{self.base_url}/jobs"
-        print(f"    [INSERT] Attempting to insert {len(jobs)} jobs to {url}")
-        
-        jobs_to_insert = []
-        for job in jobs:
-            cleaned_job = {
-                'company_id': job.get('company_id'),
-                'title': job.get('title'),
-                'location': job.get('location'),
-                'posted_date': job.get('posted_date')
-            }
-            jobs_to_insert.append(cleaned_job)
-        
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url, json=jobs_to_insert, headers=self.headers) as response:
-                    error_text = await response.text()
-                    print(f"    [INSERT] Status {response.status}: {error_text[:300]}")
-                    if response.status in [200, 201]:
-                        print(f"    [OK] Inserted {len(jobs_to_insert)} jobs into database")
-                    else:
-                        print(f"    [WARN] API error ({response.status})")
-        except Exception as e:
-            print(f"    [ERROR] Insert error: {e}")

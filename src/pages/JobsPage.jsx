@@ -6,25 +6,22 @@ import { JobRow } from '../components/common/JobRow'
 import { JobDrawer } from '../components/common/JobDrawer'
 import { Metrics } from '../components/common/Metrics'
 import { ShortcutHelp } from '../components/common/ShortcutHelp'
-import { CheckIcon, CloseIcon, SearchIcon } from '../components/common/icons'
+import { Toast } from '../components/common/Toast'
+import { SearchIcon } from '../components/common/icons'
 import { DEFAULT_FILTERS, EMPTY_FILTERS, FRESH_HOURS, PANEL_KEYS, POSTED_OPTIONS, SearchFilter } from '../components/common/SearchFilter'
 import { SYNC_MS, api } from '../lib/api'
-import { sessionUser } from '../lib/session'
 import { useProfile } from '../hooks/useProfile'
 import { useHotkeys } from '../hooks/useHotkeys'
+import { useJobList } from '../hooks/useJobList'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
+import { useToast } from '../hooks/useToast'
 import { MATCH_MIN_FIT, buildTrend, facetOptions, jobUrl } from '../utils/gold'
-import { readView, saveView } from '../utils/viewPref'
+import { readScope, readView, saveScope, saveView } from '../utils/viewPref'
 
-const PAGE_SIZE = 48
 const TREND_WINDOW_DAYS = 14
 const SEARCH_DEBOUNCE_MS = 350
-const TOAST_MS = 6000
-const PREFETCH_DISTANCE_PX = 1200 // start loading the next page well before the user reaches the end
 const LOAD_AHEAD_ROWS = 5 // keyboard navigation loads the next page this many rows before the end
 const AUTO_SYNC_CHECK_MS = 5 * 60_000 // how often an open, visible page checks whether data is older than SYNC_MS
-
-const TOAST_ICONS = { success: CheckIcon, danger: CloseIcon }
 
 const SORTS = [
   { value: 'fit', label: 'Best fit' },
@@ -43,23 +40,6 @@ const SCOPES = [
   { value: 'match', label: 'For you', title: `Jobs in your roles (or the same category) with fit ${MATCH_MIN_FIT}+` },
   { value: 'all', label: 'Show all', title: 'Every job, best fit first' },
 ]
-const scopeStoreKey = () => `jobseeker:scope:${sessionUser()?.id || 'anon'}`
-
-function readScope() {
-  try {
-    return localStorage.getItem(scopeStoreKey()) === 'all' ? 'all' : 'match'
-  } catch {
-    return 'match'
-  }
-}
-
-function saveScope(value) {
-  try {
-    localStorage.setItem(scopeStoreKey(), value)
-  } catch {
-    // storage unavailable
-  }
-}
 
 const FILTER_LABELS = {
   q: 'Search',
@@ -100,6 +80,16 @@ function bumpAppliedToday(rows, delta) {
   return rows.map(row => (String(row.day).slice(0, 10) === today ? { ...row, applied: Math.max(Number(row.applied) + delta, 0) } : row))
 }
 
+// [title, text] for an empty list. narrowed: filters or a tab other than "All" are hiding jobs.
+function emptyMessage({ narrowed, scope, onlyFresh }) {
+  if (narrowed) return ['No matching jobs', 'Try removing a filter or switching tabs.']
+  if (scope === 'match') {
+    return ['No jobs for your roles yet', `Nothing in your roles with fit ${MATCH_MIN_FIT}+ right now. New jobs arrive after each pipeline run, or see every job.`]
+  }
+  if (onlyFresh) return ['Nothing new in the last 24 hours', 'Older jobs are hidden. New ones appear after the next pipeline run.']
+  return ['No jobs yet', 'Jobs appear here after the Databricks pipeline runs.']
+}
+
 export function JobsPage() {
   const navigate = useNavigate()
   const { profile, loading: profileLoading, error: profileError } = useProfile()
@@ -109,14 +99,10 @@ export function JobsPage() {
   const [sort, setSort] = useState('fit')
   const [tab, setTab] = useState('all')
   const [view, setView] = useState(readView)
-  const [jobs, setJobs] = useState([])
-  const [page, setPage] = useState(0)
-  const [totalCount, setTotalCount] = useState(0)
-  const [hasMore, setHasMore] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
-  const [waiting, setWaiting] = useState(false)
-  const [error, setError] = useState('')
+  const {
+    jobs, page, totalCount, hasMore, loading, refreshing, waiting, error,
+    reload: reloadJobs, loadMore, retry, updateJob, removeJob,
+  } = useJobList({ filters, scope, sort, tab })
   const [summary, setSummary] = useState({})
   const [trendRows, setTrendRows] = useState([])
   const [facetRows, setFacetRows] = useState([])
@@ -124,10 +110,8 @@ export function JobsPage() {
   const [activeKey, setActiveKey] = useState(null)
   const [helpOpen, setHelpOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
-  const [toast, setToast] = useState(null)
-  const jobsRequestRef = useRef(0)
+  const { toast, showToast, runUndo } = useToast()
   const summaryRequestRef = useRef(0)
-  const toastTimerRef = useRef(null)
   const searchRef = useRef(null)
   const jobsRef = useRef(jobs)
   const filtersRef = useRef(filters)
@@ -153,15 +137,6 @@ export function JobsPage() {
 
   const profileSkills = useMemo(() => profile?.skills || [], [profile])
 
-  // tone: 'success' | 'danger' colours the toast like the swipe hint for the same action
-  const showToast = useCallback((message, undo, tone) => {
-    clearTimeout(toastTimerRef.current)
-    setToast({ message, undo, tone })
-    toastTimerRef.current = setTimeout(() => setToast(null), TOAST_MS)
-  }, [])
-
-  useEffect(() => () => clearTimeout(toastTimerRef.current), [])
-
   // Debounce the search box into filters.q
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -169,60 +144,6 @@ export function JobsPage() {
     }, SEARCH_DEBOUNCE_MS)
     return () => clearTimeout(timer)
   }, [searchInput])
-
-  const fetchJobs = useCallback(async (pageToLoad) => {
-    const requestId = ++jobsRequestRef.current
-    const offset = pageToLoad * PAGE_SIZE
-    const isCurrent = () => requestId === jobsRequestRef.current
-    let showedCache = false
-
-    const applyRows = (rows) => {
-      const total = rows.length ? Number(rows[0].total_count) || 0 : offset
-      setJobs(prev => {
-        if (pageToLoad === 0) return rows
-        const seen = new Set(prev.map(job => job.job_key))
-        return [...prev, ...rows.filter(job => !seen.has(job.job_key))]
-      })
-      setTotalCount(total)
-      setHasMore(rows.length > 0 && offset + rows.length < total)
-    }
-
-    setLoading(true)
-    setError('')
-    try {
-      const rows = await api.jobs(
-        { ...filters, scope, sort, tab, limit: PAGE_SIZE, offset },
-        {
-          // Show the last known first page immediately; the fresh result replaces it when it arrives
-          onCached: pageToLoad === 0
-            ? (cached) => {
-              if (!isCurrent()) return
-              showedCache = true
-              applyRows(cached)
-              setLoading(false)
-              setRefreshing(true)
-            }
-            : undefined,
-          onWaiting: () => { if (isCurrent()) setWaiting(true) },
-        },
-      )
-      if (isCurrent()) applyRows(rows)
-    } catch (err) {
-      if (!isCurrent()) return
-      setError(err.message)
-      if (pageToLoad === 0 && !showedCache) {
-        setJobs([])
-        setTotalCount(0)
-        setHasMore(false)
-      }
-    } finally {
-      if (isCurrent()) {
-        setLoading(false)
-        setRefreshing(false)
-        setWaiting(false)
-      }
-    }
-  }, [filters, scope, sort, tab])
 
   const fetchSummary = useCallback(async () => {
     const requestId = ++summaryRequestRef.current
@@ -248,11 +169,6 @@ export function JobsPage() {
   }, [scope])
 
   useEffect(() => {
-    setPage(0)
-    fetchJobs(0)
-  }, [fetchJobs])
-
-  useEffect(() => {
     fetchSummary()
   }, [fetchSummary])
 
@@ -261,24 +177,10 @@ export function JobsPage() {
     fetchFacets()
   }, [fetchTrend, fetchFacets])
 
-  useEffect(() => {
-    if (page > 0) fetchJobs(page)
-  }, [page])
-
-  useEffect(() => {
-    const handleScroll = () => {
-      if (loading || !hasMore || error) return
-      const distanceFromBottom = document.documentElement.scrollHeight - (window.innerHeight + window.scrollY)
-      if (distanceFromBottom <= PREFETCH_DISTANCE_PX) setPage(prev => prev + 1)
-    }
-    window.addEventListener('scroll', handleScroll, { passive: true })
-    return () => window.removeEventListener('scroll', handleScroll)
-  }, [loading, hasMore, error])
-
   const patchJob = useCallback((jobKey, patch) => {
-    setJobs(prev => prev.map(job => (job.job_key === jobKey ? { ...job, ...patch } : job)))
+    updateJob(jobKey, patch)
     setSelectedJob(prev => (prev?.job_key === jobKey ? { ...prev, ...patch } : prev))
-  }, [])
+  }, [updateJob])
 
   const openJob = useCallback((job) => {
     setActiveKey(job.job_key)
@@ -313,15 +215,13 @@ export function JobsPage() {
     const neighbour = index >= 0 ? list[index + 1] || list[index - 1] || null : null
     setActiveKey(prev => (prev === job.job_key ? neighbour?.job_key ?? null : prev))
     setSelectedJob(prev => (prev?.job_key === job.job_key ? neighbour : prev))
-    setJobs(prev => prev.filter(item => item.job_key !== job.job_key))
-    setTotalCount(count => Math.max(count - 1, 0))
+    removeJob(job.job_key)
     try {
       await api.setHidden(job.job_key, true)
       showToast('Job hidden', async () => {
         try {
           await api.setHidden(job.job_key, false)
-          setPage(0)
-          fetchJobs(0)
+          reloadJobs()
           fetchSummary()
         } catch (err) {
           showToast(`Could not restore: ${err.message}`)
@@ -334,26 +234,19 @@ export function JobsPage() {
       }))
     } catch (err) {
       showToast(`Could not hide: ${err.message}`)
-      fetchJobs(0)
+      reloadJobs()
     }
-  }, [showToast, fetchJobs, fetchSummary])
+  }, [removeJob, showToast, reloadJobs, fetchSummary])
 
   const changeView = (next) => {
     setView(next)
     saveView(next)
   }
 
-  const runUndo = () => {
-    const undo = toast?.undo
-    setToast(null)
-    undo?.()
-  }
-
   // Reads are cached (free-tier budget); this forces fresh data from Databricks.
   const refreshAll = () => {
     api.refreshData()
-    setPage(0)
-    fetchJobs(0)
+    reloadJobs()
     fetchSummary()
     fetchTrend()
     fetchFacets()
@@ -473,7 +366,7 @@ export function JobsPage() {
       const ahead = jobs[next + delta]
       if (ahead) api.prefetchJob(ahead.job_key)
     }
-    if (hasMore && !loading && next >= jobs.length - LOAD_AHEAD_ROWS) setPage(prev => prev + 1)
+    if (hasMore && !loading && next >= jobs.length - LOAD_AHEAD_ROWS) loadMore()
   }
 
   const needsJob = (action) => () => {
@@ -513,7 +406,7 @@ export function JobsPage() {
   const ItemComponent = view === 'grid' ? JobCard : JobRow
   const listClass = view === 'grid' ? 'jobs-grid' : 'jobs-list'
   const metrics = <Metrics items={metricItems} trend={trend} onSelect={onMetric} />
-  const ToastIcon = toast ? TOAST_ICONS[toast.tone] : null
+  const [emptyTitle, emptyText] = emptyMessage({ narrowed: hasCustomFilters || tab !== 'all', scope, onlyFresh: onlyFreshFilter })
 
   return (
     <div className="page-shell">
@@ -641,7 +534,7 @@ export function JobsPage() {
           <div className="state-block">
             <h3>Couldn't load jobs</h3>
             <p>{error}</p>
-            <button type="button" onClick={() => fetchJobs(page)} className="btn">Retry</button>
+            <button type="button" onClick={retry} className="btn">Retry</button>
           </div>
         )}
 
@@ -663,21 +556,8 @@ export function JobsPage() {
 
         {!loading && !error && jobs.length === 0 && (
           <div className="state-block">
-            <h3>
-              {hasCustomFilters || tab !== 'all'
-                ? 'No matching jobs'
-                : scope === 'match' ? 'No jobs for your roles yet'
-                  : onlyFreshFilter ? 'Nothing new in the last 24 hours' : 'No jobs yet'}
-            </h3>
-            <p>
-              {hasCustomFilters || tab !== 'all'
-                ? 'Try removing a filter or switching tabs.'
-                : scope === 'match'
-                  ? `Nothing in your roles with fit ${MATCH_MIN_FIT}+ right now. New jobs arrive after each pipeline run, or see every job.`
-                  : onlyFreshFilter
-                    ? 'Older jobs are hidden. New ones appear after the next pipeline run.'
-                    : 'Jobs appear here after the Databricks pipeline runs.'}
-            </p>
+            <h3>{emptyTitle}</h3>
+            <p>{emptyText}</p>
             <div className="actions-row">
               {scope === 'match' && <button type="button" onClick={() => changeScope('all')} className="btn">Show all jobs</button>}
               {hasCustomFilters && <button type="button" onClick={clearAll} className="btn">Clear filters</button>}
@@ -690,7 +570,7 @@ export function JobsPage() {
 
         {!loading && hasMore && !error && (
           <div className="footer-note">
-            <button type="button" className="btn" onClick={() => setPage(prev => prev + 1)}>Load more</button>
+            <button type="button" className="btn" onClick={loadMore}>Load more</button>
           </div>
         )}
 
@@ -729,15 +609,7 @@ export function JobsPage() {
 
       {helpOpen && <ShortcutHelp onClose={() => setHelpOpen(false)} />}
 
-      {toast && (
-        <div className={`toast ${toast.tone || ''}`} role="status">
-          {ToastIcon && <ToastIcon />}
-          <span>{toast.message}</span>
-          {toast.undo && (
-            <button type="button" onClick={runUndo}>Undo <kbd>u</kbd></button>
-          )}
-        </div>
-      )}
+      {toast && <Toast toast={toast} onUndo={runUndo} />}
     </div>
   )
 }

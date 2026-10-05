@@ -1,4 +1,4 @@
-"""Minimal Databricks REST client shared by deploy_job.py and trigger_job.py.
+"""Minimal Databricks REST client shared by deploy_job.py, trigger_job.py and ../upload_to_volume.py.
 
 Uses DATABRICKS_HOST and DATABRICKS_TOKEN from the environment, databricks/.env or the repo-root .env.
 """
@@ -21,11 +21,15 @@ def host():
     return env("DATABRICKS_HOST").rstrip("/")
 
 
-def api(method, path, **kwargs):
+def auth_headers():
     token = env("DATABRICKS_TOKEN")
     if not host() or not token:
         raise EnvironmentError("DATABRICKS_HOST and DATABRICKS_TOKEN must be set")
-    response = requests.request(method, f"{host()}{path}", headers={"Authorization": f"Bearer {token}"}, timeout=60, **kwargs)
+    return {"Authorization": f"Bearer {token}"}
+
+
+def api(method, path, **kwargs):
+    response = requests.request(method, f"{host()}{path}", headers=auth_headers(), timeout=60, **kwargs)
     if response.status_code >= 400:
         raise RuntimeError(f"{method} {path} failed with {response.status_code}: {response.text[:500]}")
     return response.json() if response.content else {}

@@ -1,25 +1,19 @@
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
-import aiohttp
-import os
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urljoin
 
-# Add parent directory to sys.path to import skill_Filter
+# Add parent directory to sys.path to import the shared filters
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from skill_Filter import SkillFilter
+from location_Filter import filter_india_jobs
 
 class Scraper:
     def __init__(self, company):
         self.company = company
-        supabase_url = (os.getenv("SUPABASE_URL") or "").rstrip("/")
-        self.base_url = f"{supabase_url}/rest/v1" if supabase_url else ""
-        self.headers = {
-            'apikey': os.getenv("VITE_SUPABASE_ANON_KEY"),
-            'Content-Type': 'application/json'
-        }
         # Workday-specific filters: default to India-only unless the company config explicitly overrides it.
         self.location_filter = (company.get('location_filter') or 'India').strip()
         self.date_filter = company.get('date_filter', ['today', 'yesterday', '0 days', '1 day'])
@@ -46,7 +40,6 @@ class Scraper:
                 # STEP 1: Fetch pages until we hit old jobs (optimization: stop early)
                 all_jobs = []
                 page_num = 1
-                consecutive_old_count = 0
                 
                 while True:
                     # Get page content
@@ -80,10 +73,6 @@ class Scraper:
                             break  # Exit outer loop
                         
                         all_jobs.extend(jobs_to_include)
-                    
-                    # Stop pagination if we hit consecutive old jobs
-                    if consecutive_old_count >= 5:
-                        break
                     
                     # Check if there's a next page button
                     next_button = await page.query_selector('button[aria-label*="next"]')
@@ -140,7 +129,7 @@ class Scraper:
                                 filtered_jobs[i]['description'] = description.strip() if description else "No description"
                             else:
                                 filtered_jobs[i]['description'] = "Description not available"
-                    except Exception as e:
+                    except Exception:
                         filtered_jobs[i]['description'] = "Description unavailable"
                 
                 await browser.close()
@@ -222,7 +211,7 @@ class Scraper:
                 }
                 jobs.append(job)
                 
-            except Exception as e:
+            except Exception:
                 continue
         
         return jobs
@@ -253,7 +242,6 @@ class Scraper:
         
         # Check for "X days ago" patterns (2 or more days)
         # Match patterns like: "2 days", "3 days", "4 days", etc.
-        import re
         days_match = re.search(r'(\d+)\s+days?', posted_lower)
         if days_match:
             days_num = int(days_match.group(1))
@@ -265,27 +253,7 @@ class Scraper:
     
     def _filter_by_location(self, jobs):
         """Only keep roles that are clearly India-focused, including India remote roles."""
-        india_markers = [
-            'india', 'indian', 'bengaluru', 'bangalore', 'hyderabad', 'gurugram', 'gurgaon',
-            'delhi', 'mumbai', 'pune', 'chennai', 'kochi', 'ahmedabad', 'noida', 'kolkata',
-            'jaipur', 'lucknow', 'bhubaneswar', 'visakhapatnam', 'coimbatore', 'trivandrum',
-            'india remote', 'remote - india', 'remote india'
-        ]
-
-        filtered = []
-        for job in jobs:
-            location = (job.get('location', '') or '').lower().strip()
-            if not location or location == 'not specified':
-                continue
-
-            if 'remote' in location and 'india' in location:
-                filtered.append(job)
-                continue
-
-            if any(marker in location for marker in india_markers):
-                filtered.append(job)
-
-        return filtered
+        return filter_india_jobs(jobs)
     
     def _filter_by_posted_date(self, jobs):
         """Filter jobs by posted date using scraper-specific filters."""
@@ -299,32 +267,3 @@ class Scraper:
                 filtered.append(job)
         
         return filtered
-    
-    
-    async def _insert_jobs(self, jobs):
-        """Insert jobs into Supabase via REST API"""
-        url = f"{self.base_url}/jobs"
-        print(f"    [INSERT] Attempting to insert {len(jobs)} jobs to {url}")
-        
-        # Prepare minimal jobs for insertion - use only id, title, company_id
-        jobs_to_insert = []
-        for i, job in enumerate(jobs):
-            cleaned_job = {
-                'company_id': job.get('company_id'),
-                'title': job.get('title'),
-                'location': job.get('location'),
-                'posted_date': job.get('posted_date')
-            }
-            jobs_to_insert.append(cleaned_job)
-        
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url, json=jobs_to_insert, headers=self.headers) as response:
-                    error_text = await response.text()
-                    print(f"    [INSERT] Status {response.status}: {error_text[:300]}")
-                    if response.status in [200, 201]:
-                        print(f"    [OK] Inserted {len(jobs_to_insert)} jobs into database")
-                    else:
-                        print(f"    [WARN] API error ({response.status})")
-        except Exception as e:
-            print(f"    [ERROR] Insert error: {e}")

@@ -120,6 +120,17 @@ kbd {
   text-align: center;
 }
 
+/* Small uppercase section labels */
+.eyebrow,
+.drawer-section > h3,
+.shortcut-groups h3 {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 /* =========================================================
    Buttons & inputs
    ========================================================= */
@@ -257,7 +268,8 @@ kbd {
 
 .input::placeholder,
 .settings-input::placeholder,
-.field-group input::placeholder {
+.field-group input::placeholder,
+.search-box input::placeholder {
   color: var(--muted);
 }
 
@@ -397,7 +409,7 @@ kbd {
   place-items: center;
   width: 24px;
   height: 24px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--primary);
   color: var(--on-primary);
   font-size: 13px;
@@ -479,12 +491,30 @@ button.metric:hover {
   outline-offset: 0;
 }
 
-.metric.trend.scrubbing .sparkline i:not(.selected) {
-  opacity: 0.4;
+.sparkline {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 18px;
+}
+
+.sparkline i {
+  display: block;
+  width: 4px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--primary) 55%, transparent);
 }
 
 .sparkline i.selected {
   background: var(--primary);
+}
+
+.sparkline i.has-applied {
+  background: var(--success);
+}
+
+.metric.trend.scrubbing .sparkline i:not(.selected) {
+  opacity: 0.4;
 }
 
 /* Day readout while scrubbing the trend (fixed so the scrolling metrics row can't clip it) */
@@ -506,24 +536,6 @@ button.metric:hover {
 
 .spark-tip b {
   color: var(--text);
-}
-
-.sparkline {
-  display: inline-flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 18px;
-}
-
-.sparkline i {
-  display: block;
-  width: 4px;
-  border-radius: 1px;
-  background: color-mix(in srgb, var(--primary) 55%, transparent);
-}
-
-.sparkline i.has-applied {
-  background: var(--success);
 }
 
 .topbar-actions {
@@ -598,10 +610,6 @@ button.metric:hover {
   font-size: 13px;
 }
 
-.search-box input::placeholder {
-  color: var(--muted);
-}
-
 .search-box:focus-within .search-kbd {
   display: none;
 }
@@ -652,7 +660,8 @@ button.metric:hover {
   font-weight: 700;
 }
 
-.tab-group {
+.tab-group,
+.settings-tabs {
   display: inline-flex;
   gap: 2px;
   padding: 2px;
@@ -677,11 +686,13 @@ button.metric:hover {
   white-space: nowrap;
 }
 
-.tab-button:hover {
+.tab-button:hover,
+.settings-tab:hover {
   color: var(--text);
 }
 
-.tab-button.active {
+.tab-button.active,
+.settings-tab.active {
   background: var(--surface);
   color: var(--text);
   box-shadow: var(--shadow-sm);
@@ -948,6 +959,11 @@ button.metric:hover {
   white-space: nowrap;
 }
 
+.skill-count.has {
+  color: var(--primary);
+  font-weight: 600;
+}
+
 .exp-tag {
   padding: 1px 8px;
   border-radius: 999px;
@@ -963,11 +979,6 @@ button.metric:hover {
   background: var(--surface-2);
   color: var(--muted);
   font-weight: 500;
-}
-
-.skill-count.has {
-  color: var(--primary);
-  font-weight: 600;
 }
 
 .row-date {
@@ -1483,11 +1494,6 @@ button.metric:hover {
 
 .drawer-section > h3 {
   margin-bottom: 8px;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 .drawer-fit-head {
@@ -1578,11 +1584,6 @@ button.metric:hover {
 
 .shortcut-groups h3 {
   margin-bottom: 6px;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 .shortcut-groups dl {
@@ -1713,28 +1714,12 @@ button.metric:hover {
   margin-bottom: 12px;
 }
 
-.eyebrow {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
 .settings-header h2 {
   font-size: 18px;
   font-weight: 700;
 }
 
-.settings-tabs {
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-}
-
+/* Track and hover/active states are shared with .tab-group / .tab-button */
 .settings-tab {
   display: inline-flex;
   align-items: center;
@@ -1748,16 +1733,6 @@ button.metric:hover {
   font-size: 13px;
   font-weight: 500;
   text-transform: capitalize;
-}
-
-.settings-tab:hover {
-  color: var(--text);
-}
-
-.settings-tab.active {
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: var(--shadow-sm);
 }
 
 .settings-tab em {
@@ -1840,8 +1815,7 @@ button.metric:hover {
   grid-column: 1 / -1;
 }
 
-.settings-field small,
-.weight-item small {
+.settings-field small {
   color: var(--muted);
   font-size: 11px;
 }
@@ -1888,17 +1862,6 @@ button.metric:hover {
   font-style: normal;
 }
 
-.custom-confirm {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  font-size: 12px;
-}
-
 .skill-chip button {
   display: grid;
   place-items: center;
@@ -1915,19 +1878,15 @@ button.metric:hover {
   background: var(--primary-soft);
 }
 
-.weight-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 10px;
-}
-
-.weight-item {
+.custom-confirm {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px;
-  border: 1px solid var(--border);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
   border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 12px;
 }
 
 .settings-list-card {
@@ -2174,6 +2133,10 @@ button.metric:hover {
   from { opacity: 0; transform: translate(-50%, 8px); }
 }
 
+@keyframes sheet-up {
+  from { opacity: 0; transform: translateY(24px); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation: none !important;
@@ -2414,7 +2377,6 @@ button.metric:hover {
   /* Toast sits above the bottom bar */
   .toast {
     bottom: calc(54px + env(safe-area-inset-bottom));
-    max-width: calc(100vw - 20px);
   }
 
   .job-row {
@@ -2470,10 +2432,6 @@ button.metric:hover {
   .job-row .job-actions .icon-btn {
     width: 28px;
   }
-}
-
-@keyframes sheet-up {
-  from { opacity: 0; transform: translateY(24px); }
 }
 
 /* Touch devices: no keyboard hints */

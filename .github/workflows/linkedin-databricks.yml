@@ -1,6 +1,6 @@
 name: LinkedIn Databricks Scraper
 
-"on":
+on:
   schedule:
     - cron: '0 */4 * * *'
   workflow_dispatch:

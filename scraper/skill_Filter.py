@@ -1,16 +1,4 @@
-import os
-import aiohttp
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
-
-SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").rstrip("/")
-BASE_URL = f"{SUPABASE_URL}/rest/v1" if SUPABASE_URL else ""
-HEADERS = {
-    'apikey': os.getenv("VITE_SUPABASE_ANON_KEY"),
-    'Content-Type': 'application/json'
-}
+import re
 
 
 class SkillFilter:
@@ -43,8 +31,6 @@ class SkillFilter:
             r'(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*\+?\s*yrs?\s*exp',
             r'(\d+(?:\.\d+)?)\s*\+\s*yrs?\s*exp',
         ]
-
-        import re
 
         for pattern in patterns:
             match = re.search(pattern, normalized)
@@ -146,9 +132,6 @@ class SkillFilter:
                 filtered_jobs.append(job)
                 matched_count += 1
                 skills_used.update(matched_skills)
-
-                # DEBUG: Print which skills matched
-                print(f"        [SKILL MATCH] {matched_skills} matched in: {job.get('title', '')[:50]}")
         
         # Store stats for later retrieval
         self.last_filter_stats = {

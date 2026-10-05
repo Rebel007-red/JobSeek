@@ -1,23 +1,31 @@
 import asyncio
 import re
 import sys
-from datetime import date, timedelta
+from datetime import date
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
-import pandas as pd
 from playwright.async_api import async_playwright
 
 from scraper_common import (
-    MAX_POSTED_DAYS,
-    OUTPUT_COLUMNS,
     fetch_companies,
+    first_text,
     format_calendar_date,
-    keep_recent_jobs,
+    format_days_ago,
+    goto_settled,
     print_companies,
-    sanitize_text,
-    write_flat_jobs_csv,
+    relative_text_to_days,
+    write_recent_jobs,
 )
+
+NEXT_BUTTON_SELECTORS = [
+    'button[aria-label*="Next"]',
+    'button[aria-label*="next"]',
+    'a[aria-label*="Next"]',
+    'a[aria-label*="next"]',
+    'button[data-automation-id="paginationNext"]',
+    'a[data-automation-id="paginationNext"]',
+]
 
 
 def extract_workday_job_id(job_url):
@@ -32,6 +40,13 @@ def extract_workday_job_id(job_url):
     return value.rstrip('/').split('/')[-1]
 
 
+def automation_field_text(item, automation_id):
+    """Text of the <dd> inside the item's div[data-automation-id=...], or "Not specified"."""
+    field = item.find("div", attrs={"data-automation-id": automation_id})
+    value = field.find("dd") if field else None
+    return value.get_text(" ", strip=True) if value else "Not specified"
+
+
 def parse_workday_page_jobs(html, workday_url):
     soup = BeautifulSoup(html, "html.parser")
     jobs = []
@@ -41,9 +56,6 @@ def parse_workday_page_jobs(html, workday_url):
         item_nodes = job_list.find_all("li", recursive=False)
     else:
         item_nodes = soup.select("li")
-
-    if not item_nodes:
-        return jobs
 
     for item in item_nodes:
         try:
@@ -55,26 +67,12 @@ def parse_workday_page_jobs(html, workday_url):
             raw_url = title_link.get("href", "")
             job_url = raw_url if raw_url.startswith("http") else urljoin(workday_url, raw_url)
 
-            location = "Not specified"
-            loc_div = item.find("div", attrs={"data-automation-id": "locations"})
-            if loc_div:
-                loc_dd = loc_div.find("dd")
-                if loc_dd:
-                    location = loc_dd.get_text(" ", strip=True)
-
-            posted_date = "Not specified"
-            date_div = item.find("div", attrs={"data-automation-id": "postedOn"})
-            if date_div:
-                date_dd = date_div.find("dd")
-                if date_dd:
-                    posted_date = date_dd.get_text(" ", strip=True)
-
             jobs.append({
                 "job_id": extract_workday_job_id(job_url),
                 "title": title,
-                "location": location,
+                "location": automation_field_text(item, "locations"),
                 "job_url": job_url,
-                "posted_date": posted_date,
+                "posted_date": automation_field_text(item, "postedOn"),
                 "description": "",
             })
         except Exception:
@@ -83,56 +81,10 @@ def parse_workday_page_jobs(html, workday_url):
     return jobs
 
 
-async def fetch_descriptions_for_jobs(jobs):
-    if not jobs:
-        return jobs
-
-    total_jobs = len(jobs)
-    try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            semaphore = asyncio.Semaphore(3)
-            progress_lock = asyncio.Lock()
-            progress = {"count": 0}
-
-            async def fetch_single_description(job):
-                detail_url = job.get("job_url")
-                if not detail_url:
-                    job["description"] = ""
-                    return
-
-                async with semaphore:
-                    page = await browser.new_page()
-                    try:
-                        async with progress_lock:
-                            progress["count"] += 1
-                            print(f"    [DESC] {progress['count']}/{total_jobs}")
-
-                        try:
-                            await page.goto(detail_url, wait_until="networkidle", timeout=30000)
-                        except Exception:
-                            await page.goto(detail_url, wait_until="domcontentloaded", timeout=20000)
-
-                        await page.wait_for_timeout(1500)
-                        locator = page.locator('[data-automation-id="jobPostingDescription"]').first
-                        if await locator.count() > 0:
-                            description = await locator.text_content()
-                            job["description"] = description.strip() if description else ""
-                        else:
-                            job["description"] = ""
-                    except Exception:
-                        job["description"] = ""
-                    finally:
-                        await page.close()
-
-            await asyncio.gather(*(fetch_single_description(job) for job in jobs))
-            await browser.close()
-    except Exception as exc:
-        print(f"    [WARN] Failed to fetch filtered job descriptions: {exc}")
-        for job in jobs:
-            job.setdefault("description", "")
-
-    return jobs
+async def read_workday_description(page, job):
+    await goto_settled(page, job["job_url"])
+    await page.wait_for_timeout(1500)
+    return await first_text(page, '[data-automation-id="jobPostingDescription"]')
 
 
 async def scrape_workday_jobs(workday_url):
@@ -178,16 +130,8 @@ async def scrape_workday_jobs(workday_url):
                     continue
                 stale_retry_used = False
 
-                next_selectors = [
-                    'button[aria-label*="Next"]',
-                    'button[aria-label*="next"]',
-                    'a[aria-label*="Next"]',
-                    'a[aria-label*="next"]',
-                    'button[data-automation-id="paginationNext"]',
-                    'a[data-automation-id="paginationNext"]',
-                ]
                 next_button = None
-                for selector in next_selectors:
+                for selector in NEXT_BUTTON_SELECTORS:
                     locator = page.locator(selector).first
                     if await locator.count() > 0:
                         next_button = locator
@@ -212,61 +156,12 @@ async def scrape_workday_jobs(workday_url):
     return jobs
 
 
-def posted_date_to_days(posted_date):
-    value = (posted_date or "").strip().lower()
-    if not value or value == "not specified":
-        return None
-    if "today" in value:
-        return 0
-    if "yesterday" in value:
-        return 1
-
-    match = re.search(r"(\d+)\s+day", value)
-    if match:
-        return int(match.group(1))
-
-    return None
-
-
 def format_posted_date(posted_date):
-    days_ago = posted_date_to_days(posted_date)
+    """Workday shows relative dates ("Posted 3 Days Ago"); turn them into calendar dates, else keep the text."""
+    days_ago = relative_text_to_days(posted_date)
     if days_ago is None:
         return posted_date or ""
-    return format_calendar_date(date.today() - timedelta(days=days_ago))
-
-
-def jobs_to_dataframe(jobs):
-    rows = []
-    for job in jobs:
-        raw_posted_date = job.get("posted_date", "")
-        rows.append({
-            "company_name": job.get("company_name", ""),
-            "ats_type": job.get("ats_type", ""),
-            "company_url": job.get("company_url", ""),
-            "job_id": job.get("job_id", ""),
-            "title": job.get("title", ""),
-            "location": job.get("location", ""),
-            "posted_date": format_posted_date(raw_posted_date),
-            "job_url": job.get("job_url", ""),
-            "description": sanitize_text(job.get("description", "")),
-            "collected_on": job.get("collected_on", ""),
-            "posted_days": posted_date_to_days(raw_posted_date),
-        })
-
-    dataframe = pd.DataFrame(rows)
-    if dataframe.empty:
-        return pd.DataFrame(columns=OUTPUT_COLUMNS)
-
-    return dataframe.reindex(columns=OUTPUT_COLUMNS)
-
-
-def finalize_dataframe(jobs):
-    """Build the output frame from already-normalized rows without re-parsing dates."""
-    for job in jobs:
-        job["description"] = sanitize_text(job.get("description", ""))
-    dataframe = pd.DataFrame(jobs, columns=OUTPUT_COLUMNS)
-    dataframe["posted_days"] = dataframe["posted_days"].astype("Int64")
-    return dataframe
+    return format_days_ago(days_ago)
 
 
 async def collect_workday_jobs(companies):
@@ -285,6 +180,7 @@ async def collect_workday_jobs(companies):
         print(f"[COMPANY] {company_name}: jobs found {len(jobs)}")
 
         for job in jobs:
+            posted_date = job.get("posted_date", "")
             collected_jobs.append({
                 "company_name": company_name,
                 "ats_type": "workday",
@@ -292,10 +188,11 @@ async def collect_workday_jobs(companies):
                 "job_id": job.get("job_id", ""),
                 "title": job.get("title", ""),
                 "location": job.get("location", ""),
-                "posted_date": job.get("posted_date", ""),
+                "posted_date": format_posted_date(posted_date),
                 "job_url": job.get("job_url", ""),
                 "description": job.get("description", ""),
                 "collected_on": collected_on,
+                "posted_days": relative_text_to_days(posted_date),
             })
 
     return collected_jobs, failed_companies
@@ -309,13 +206,7 @@ async def main():
         sys.exit(1)
 
     jobs, failed_companies = await collect_workday_jobs(companies)
-    jobs_dataframe = jobs_to_dataframe(jobs)
-    filtered_jobs_dataframe = keep_recent_jobs(jobs_dataframe)
-    print(f"[FILTER] Workday jobs after filtering (posted_days <= {MAX_POSTED_DAYS}): {len(filtered_jobs_dataframe)}")
-    filtered_jobs = filtered_jobs_dataframe.to_dict(orient="records")
-    filtered_jobs = await fetch_descriptions_for_jobs(filtered_jobs)
-    filtered_jobs_dataframe = finalize_dataframe(filtered_jobs)
-    output_file = write_flat_jobs_csv(filtered_jobs_dataframe, "workday")
+    filtered_jobs_dataframe, output_file = await write_recent_jobs(jobs, "Workday", "workday", read_workday_description)
 
     print(
         f"[SUMMARY] companies={len(companies)} failed={len(failed_companies)} "

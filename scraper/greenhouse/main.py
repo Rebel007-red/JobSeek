@@ -1,16 +1,14 @@
-import os
 import re
 import sys
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
 import aiohttp
-from bs4 import BeautifulSoup
-from playwright.async_api import async_playwright
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from skill_Filter import SkillFilter
+from location_Filter import filter_india_jobs
 
 
 class Scraper:
@@ -85,7 +83,7 @@ class Scraper:
         parsed = urlparse(board_url)
         board_name = parsed.path.strip('/').split('/')[-1]
         if not board_name:
-            board_name = (self.company_slug or self.company.get('slug') or '').strip().strip('/')
+            board_name = self.company_slug.strip().strip('/')
         if not board_name:
             raise ValueError(f"Unable to derive Greenhouse board slug from {board_url}")
         return f"https://boards-api.greenhouse.io/v1/boards/{board_name}/jobs"
@@ -120,143 +118,15 @@ class Scraper:
 
         return parsed_jobs
 
-    def _parse_jobs(self, html_content):
-        soup = BeautifulSoup(html_content, 'html.parser')
-        jobs = []
-
-        for card in soup.select('a[href*="/jobs/"]'):
-            href = card.get('href', '')
-            if not href or '/jobs/' not in href:
-                continue
-
-            title = card.get_text(' ', strip=True)
-            if not title:
-                continue
-
-            raw_url = href if href.startswith('http') else urljoin(self.board_url, href)
-            job_id = self._extract_job_id(raw_url)
-            location = self._extract_location(card)
-            posted_date = self._extract_posted_date(card)
-
-            jobs.append({
-                'company_id': self.company['id'],
-                'job_id': job_id or f"{self.company['id']}_{len(jobs)}",
-                'title': title,
-                'location': location,
-                'job_url': raw_url,
-                'posted_date': posted_date,
-                'description': 'Pending...',
-                'posted_at': datetime.now().isoformat(),
-                'skills': []
-            })
-
-        return jobs
-
-    async def _find_next_page_link(self, page):
-        selectors = [
-            'a[aria-label="Next page"]',
-            'a[rel="next"]',
-            'a.pagination-next',
-            'button[aria-label="Next page"]',
-            'a[href*="page="]',
-        ]
-        for selector in selectors:
-            locator = page.locator(selector).first
-            try:
-                count = await locator.count()
-                if count > 0:
-                    return locator
-            except Exception:
-                pass
-        return None
-
     def _extract_job_id(self, url):
         match = re.search(r'/jobs/(?:[^/]+-)?(\d+)', url)
         if match:
             return match.group(1)
         return re.sub(r'[^a-zA-Z0-9_-]', '_', url)[:80]
 
-    def _extract_location(self, card):
-        parent = card.find_parent()
-        if not parent:
-            return 'Not specified'
-
-        location = parent.select_one('[data-metric="location"], .location, .job-location, .location-name')
-        if location:
-            return location.get_text(' ', strip=True)
-
-        text = parent.get_text(' ', strip=True)
-        if '·' in text:
-            parts = [p.strip() for p in text.split('·') if p.strip()]
-            if len(parts) >= 2:
-                return parts[-1]
-        return 'Not specified'
-
-    def _extract_posted_date(self, card):
-        parent = card.find_parent()
-        if not parent:
-            return 'Not specified'
-
-        date_el = parent.select_one('.job-posted, .job-date, .timestamp, [data-metric="posted"]')
-        if date_el:
-            return date_el.get_text(' ', strip=True)
-
-        return 'Today'
-
-    async def _extract_job_description(self, page):
-        selectors = [
-            '.job-description',
-            '.app-job-description',
-            '.content',
-            '[data-testid="job-description"]',
-            '.description',
-            '.job-posting',
-            'article',
-            'main'
-        ]
-
-        for selector in selectors:
-            try:
-                locator = page.locator(selector).first
-                if await locator.count() > 0:
-                    text = await locator.text_content()
-                    if text and len(text.strip()) > 80:
-                        return text.strip()
-            except Exception:
-                pass
-
-        try:
-            body = await page.locator('body').text_content()
-            if body and len(body.strip()) > 80:
-                return body.strip()
-        except Exception:
-            pass
-
-        return ''
-
     def _filter_by_location(self, jobs):
         """Only keep roles tied to India or Indian cities; India remote is allowed."""
-        india_markers = [
-            'india', 'indian', 'bengaluru', 'bangalore', 'hyderabad', 'gurugram', 'gurgaon',
-            'delhi', 'mumbai', 'pune', 'chennai', 'kochi', 'ahmedabad', 'noida', 'kolkata',
-            'jaipur', 'lucknow', 'bhubaneswar', 'visakhapatnam', 'coimbatore', 'trivandrum',
-            'india remote', 'remote - india', 'remote india'
-        ]
-
-        filtered = []
-        for job in jobs:
-            location = (job.get('location') or '').lower().strip()
-            if not location or location == 'not specified':
-                continue
-
-            if 'remote' in location and 'india' in location:
-                filtered.append(job)
-                continue
-
-            if any(marker in location for marker in india_markers):
-                filtered.append(job)
-
-        return filtered
+        return filter_india_jobs(jobs)
 
     def _filter_by_posted_date(self, jobs):
         """Greenhouse boards often do not expose reliable posted-age text.

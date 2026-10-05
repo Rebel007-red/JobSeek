@@ -2,26 +2,41 @@ import asyncio
 import os
 import re
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from urllib.parse import quote
 
-import pandas as pd
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
 
 from scraper_common import (
-	MAX_POSTED_DAYS,
-	OUTPUT_COLUMNS,
 	fetch_companies,
 	fetch_user_roles,
+	first_text,
 	format_calendar_date,
-	keep_recent_jobs,
+	format_days_ago,
 	print_companies,
-	sanitize_text,
-	write_flat_jobs_csv,
+	write_recent_jobs,
 )
 
 BLOCKED_URL_MARKERS = ("authwall", "/login", "checkpoint")
+
+# Job detail page: "About the job" text plus the job criteria list, fallbacks when it is missing, and the company name
+ABOUT_SELECTOR = ".show-more-less-html__markup"
+METADATA_SELECTORS = [
+	".description__job-criteria-list",
+	".description__job-criteria-text",
+	".description__job-criteria-subheader",
+]
+DESCRIPTION_SELECTORS = [
+	".show-more-less-html__markup",
+	".description__text",
+	"[data-job-id] .show-more-less-html__markup",
+	"section.show-more-less-html",
+]
+COMPANY_SELECTORS = [
+	".artdeco-entity-lockup__subtitle.ember-view",
+	".job-details-jobs-unified-top-card__company-name",
+]
 
 # Searches per run (Companies rows first, then user roles), pause between searches, and results per role search
 MAX_LINKEDIN_SEARCHES = int(os.getenv("MAX_LINKEDIN_SEARCHES", "60"))
@@ -43,12 +58,6 @@ def build_searches(companies, roles):
 		print(f"[WARN] {len(searches)} searches exceed MAX_LINKEDIN_SEARCHES={MAX_LINKEDIN_SEARCHES}; skipping: {', '.join(dropped)}")
 		searches = searches[:MAX_LINKEDIN_SEARCHES]
 	return searches
-
-
-def format_date_from_days_ago(days_ago):
-	if days_ago is None:
-		return ""
-	return format_calendar_date(date.today() - timedelta(days=days_ago))
 
 
 def build_search_url(keywords_str):
@@ -81,8 +90,7 @@ def format_posted_date(posted_datetime):
 		return ""
 
 	try:
-		parsed = datetime.fromisoformat(value.replace("Z", "+00:00")).date()
-		return parsed.strftime("%d/%m/%Y")
+		return format_calendar_date(datetime.fromisoformat(value.replace("Z", "+00:00")).date())
 	except ValueError:
 		return value
 
@@ -124,7 +132,6 @@ def parse_linkedin_jobs(html_content):
 				"company_name": f"LinkedIn | {company}" if company else "LinkedIn",
 				"job_id": job_id,
 				"title": title,
-				"company": company,
 				"location": location,
 				"job_url": job_url,
 				"posted_datetime": posted_datetime,
@@ -190,107 +197,33 @@ async def load_more_results(page, target_jobs, max_rounds, pagination_delay_seco
 	return await page.locator('div.base-card').count()
 
 
-async def fetch_descriptions_for_jobs(jobs):
-	if not jobs:
-		return jobs
+async def read_linkedin_description(page, job):
+	"""Description of a job detail page; also replaces the card's company name with the page's when present."""
+	await page.goto(job["job_url"], wait_until="domcontentloaded", timeout=20000)
+	await page.wait_for_timeout(1000)
+	for selector in COMPANY_SELECTORS:
+		company = await first_text(page, selector)
+		if company:
+			job["company_name"] = f"LinkedIn | {company}"
+			break
 
-	metadata_selectors = [
-		".description__job-criteria-list",
-		".description__job-criteria-text",
-		".description__job-criteria-subheader",
-	]
+	description = ""
+	if await page.locator(ABOUT_SELECTOR).count() > 0:
+		metadata_parts = []
+		for selector in METADATA_SELECTORS:
+			locators = page.locator(selector)
+			for idx in range(await locators.count()):
+				text = await locators.nth(idx).text_content()
+				if text and text.strip():
+					metadata_parts.append(text.strip())
+		about = await first_text(page, ABOUT_SELECTOR)
+		description = " ".join(part for part in (about, " ".join(metadata_parts)) if part)
 
-	selectors = [
-		".show-more-less-html__markup",
-		".description__text",
-		"[data-job-id] .show-more-less-html__markup",
-		"section.show-more-less-html",
-	]
-	company_selectors = [
-		".artdeco-entity-lockup__subtitle.ember-view",
-		".job-details-jobs-unified-top-card__company-name",
-	]
-
-	try:
-		async with async_playwright() as p:
-			browser = await p.chromium.launch(headless=True)
-			total_jobs = len(jobs)
-			semaphore = asyncio.Semaphore(3)
-			progress_lock = asyncio.Lock()
-			progress = {"count": 0}
-
-			async def fetch_single_description(job):
-				detail_url = job.get("job_url")
-				if not detail_url:
-					job["description"] = ""
-					return
-
-				async with semaphore:
-					page = await browser.new_page()
-					try:
-						async with progress_lock:
-							progress["count"] += 1
-							print(f"    [DESC] {progress['count']}/{total_jobs}")
-
-						await page.goto(detail_url, wait_until="domcontentloaded", timeout=20000)
-						await page.wait_for_timeout(1000)
-						for company_selector in company_selectors:
-							company_locator = page.locator(company_selector).first
-							if await company_locator.count() == 0:
-								continue
-							company_text = await company_locator.text_content()
-							company_cleaned = company_text.strip() if company_text else ""
-							if company_cleaned:
-								job["company_name"] = f"LinkedIn | {company_cleaned}"
-								break
-
-						description = ""
-						about_locator = page.locator(".show-more-less-html__markup").first
-						if await about_locator.count() > 0:
-							about_text = await about_locator.text_content()
-							metadata_parts = []
-							for selector in metadata_selectors:
-								locators = page.locator(selector)
-								count = await locators.count()
-								for idx in range(count):
-									text = await locators.nth(idx).text_content()
-									cleaned = text.strip() if text else ""
-									if cleaned:
-										metadata_parts.append(cleaned)
-
-							about_cleaned = about_text.strip() if about_text else ""
-							combined_parts = []
-							if about_cleaned:
-								combined_parts.append(about_cleaned)
-							if metadata_parts:
-								combined_parts.append(" ".join(metadata_parts))
-							description = " ".join(part for part in combined_parts if part)
-
-						for selector in selectors:
-							if description:
-								break
-							locator = page.locator(selector).first
-							if await locator.count() == 0:
-								continue
-							text = await locator.text_content()
-							cleaned = text.strip() if text else ""
-							if cleaned:
-								description = cleaned
-								break
-						job["description"] = description
-					except Exception:
-						job["description"] = ""
-					finally:
-						await page.close()
-
-			await asyncio.gather(*(fetch_single_description(job) for job in jobs))
-			await browser.close()
-	except Exception as exc:
-		print(f"    [WARN] Failed to fetch filtered LinkedIn job descriptions: {exc}")
-		for job in jobs:
-			job.setdefault("description", "")
-
-	return jobs
+	for selector in DESCRIPTION_SELECTORS:
+		if description:
+			break
+		description = await first_text(page, selector)
+	return description
 
 
 async def scrape_linkedin_jobs(company):
@@ -337,30 +270,6 @@ async def scrape_linkedin_jobs(company):
 	return jobs
 
 
-def jobs_to_dataframe(jobs):
-	rows = []
-	for job in jobs:
-		rows.append({
-			"company_name": job.get("company_name", ""),
-			"ats_type": job.get("ats_type", ""),
-			"company_url": job.get("company_url", ""),
-			"job_id": job.get("job_id", ""),
-			"title": job.get("title", ""),
-			"location": job.get("location", ""),
-			"posted_date": job.get("posted_date", ""),
-			"job_url": job.get("job_url", ""),
-			"description": sanitize_text(job.get("description", "")),
-			"collected_on": job.get("collected_on", ""),
-			"posted_days": job.get("posted_days"),
-		})
-
-	dataframe = pd.DataFrame(rows)
-	if dataframe.empty:
-		return pd.DataFrame(columns=OUTPUT_COLUMNS)
-
-	return dataframe.reindex(columns=OUTPUT_COLUMNS)
-
-
 async def collect_linkedin_jobs(companies):
 	collected_jobs = []
 	failed_companies = []
@@ -379,6 +288,7 @@ async def collect_linkedin_jobs(companies):
 			continue
 		print(f"[COMPANY] {company_name}: jobs found {len(jobs)}")
 
+		company_url = build_search_url(company.get("api_url", "")) or ""
 		for job in jobs:
 			job_id = job.get("job_id", "")
 			if job_id in seen_job_ids:
@@ -388,12 +298,12 @@ async def collect_linkedin_jobs(companies):
 
 			posted_days = posted_time_to_days(job.get("posted_time", ""))
 			posted_datetime = (job.get("posted_datetime") or "").strip()
-			posted_date = format_posted_date(posted_datetime) if posted_datetime else format_date_from_days_ago(posted_days)
+			posted_date = format_posted_date(posted_datetime) if posted_datetime else format_days_ago(posted_days)
 
 			collected_jobs.append({
-				"company_name": job.get("company_name") or f"LinkedIn | {job.get('company', '')}".strip() or company_name,
+				"company_name": job["company_name"],
 				"ats_type": "linkedin",
-				"company_url": build_search_url(company.get("api_url", "")) or "",
+				"company_url": company_url,
 				"job_id": job.get("job_id", ""),
 				"title": job.get("title", ""),
 				"location": job.get("location", ""),
@@ -420,14 +330,7 @@ async def main():
 		sys.exit(1)
 
 	jobs, failed_companies = await collect_linkedin_jobs(searches)
-	jobs_dataframe = jobs_to_dataframe(jobs)
-	filtered_jobs_dataframe = keep_recent_jobs(jobs_dataframe)
-	print(f"[FILTER] LinkedIn jobs after filtering (posted_days <= {MAX_POSTED_DAYS}): {len(filtered_jobs_dataframe)}")
-	filtered_jobs = filtered_jobs_dataframe.to_dict(orient="records")
-	filtered_jobs = await fetch_descriptions_for_jobs(filtered_jobs)
-	filtered_jobs_dataframe = jobs_to_dataframe(filtered_jobs)
-	filtered_jobs_dataframe["posted_days"] = filtered_jobs_dataframe["posted_days"].astype("Int64")
-	output_file = write_flat_jobs_csv(filtered_jobs_dataframe, "linkedin")
+	filtered_jobs_dataframe, output_file = await write_recent_jobs(jobs, "LinkedIn", "linkedin", read_linkedin_description)
 
 	print(
 		f"[SUMMARY] searches={len(searches)} failed={len(failed_companies)} "

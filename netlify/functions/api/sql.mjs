@@ -11,10 +11,10 @@ export class ValidationError extends Error {
 }
 
 // Fit = 100 * (role * 0.40 + skills * 0.45 + experience * 0.15); the weights add up to 1.
-export const FIT_WEIGHTS = { role: 0.4, skills: 0.45, experience: 0.15 }
+const FIT_WEIGHTS = { role: 0.4, skills: 0.45, experience: 0.15 }
 // "For you" = the job's role/category matches one of your roles and the fit is at least this.
-export const MATCH_MIN_FIT = 60
-export const PROFILE_LIMITS = { roles: 2, skills: 5 }
+const MATCH_MIN_FIT = 60
+const PROFILE_LIMITS = { roles: 2, skills: 5 }
 
 // Visible = not hidden, and either still active or something you applied to (applied jobs stay after expiry).
 const VISIBLE_SQL = 'NOT coalesce(is_hidden, false) AND (coalesce(is_active, true) OR coalesce(is_applied, false))'

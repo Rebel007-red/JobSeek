@@ -2,10 +2,10 @@ import asyncio
 import aiohttp
 from dotenv import load_dotenv
 import os
-import json
 from workday.main import Scraper as WorkdayScraper
 from greenhouse.main import Scraper as GreenhouseScraper
 from linkedin.main import Scraper as LinkedInScraper
+from indeed.main import Scraper as IndeedScraper
 
 # Load environment variables from .env
 load_dotenv()
@@ -13,39 +13,42 @@ load_dotenv()
 SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").rstrip("/")
 BASE_URL = f"{SUPABASE_URL}/rest/v1" if SUPABASE_URL else ""
 
+# ats_type -> (log label, scraper class, job field holding the posted date shown in the sample log)
+SCRAPERS = {
+    "workday": ("Workday", WorkdayScraper, "posted_date"),
+    "greenhouse": ("Greenhouse", GreenhouseScraper, "posted_date"),
+    "linkedin": ("LinkedIn", LinkedInScraper, "posted_time"),
+    "indeed": ("Indeed", IndeedScraper, "posted_time"),
+}
 
-def build_headers(extra_headers=None):
+
+def build_headers():
     headers = {'Content-Type': 'application/json'}
     api_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("VITE_SUPABASE_ANON_KEY")
     if api_key:
         headers['apikey'] = api_key
-    if extra_headers:
-        headers.update(extra_headers)
     return headers
 
 
 HEADERS = build_headers()
 
 
-async def fetch_componies():
-    table_name = "companies"
+async def fetch_companies():
     if not BASE_URL:
         print("    [WARN] SUPABASE_URL not configured. Skipping company fetch.")
-        return {table_name: []}
+        return []
 
-    # Try without limit first to see all data
-    url = f"{BASE_URL}/{table_name}"
+    url = f"{BASE_URL}/companies"
     print(f"[API] Fetching: {url}")
 
     if not HEADERS.get('apikey'):
         print("    [WARN] No Supabase API key configured. Skipping company fetch.")
-        return {table_name: []}
+        return []
 
     async with aiohttp.ClientSession() as session:
         async with session.get(url, headers=HEADERS) as response:
             print(f"    Status: {response.status}")
-            data = await response.json()
-            return {table_name: data}
+            return await response.json()
 
 
 async def fetch_user_skills():
@@ -73,14 +76,27 @@ async def fetch_user_skills():
                         # Handle string format like "skill1, skill2, skill3"
                         all_skills.extend([s.strip() for s in skills.split(',')])
 
-                print(f"    Found {len(set(all_skills))} unique skills: {list(set(all_skills))[:10]}...")
-                return list(set(all_skills))  # Return unique skills
+                unique_skills = list(set(all_skills))
+                print(f"    Found {len(unique_skills)} unique skills: {unique_skills[:10]}...")
+                return unique_skills
     except Exception as e:
         print(f"    [WARN] Error fetching user skills: {e}")
         return []
 
 
-async def insert_jobs_to_db(jobs, ats_type):
+def _dedupe_key(row):
+    company_part = str(row['company_id'] or "").strip().lower()
+    job_part = str(row['job_id'] or "").strip().lower()
+    url_part = str(row['url'] or "").strip().lower()
+
+    if company_part and job_part:
+        return ('company_job', company_part, job_part)
+    if url_part:
+        return ('url', url_part)
+    return ('fallback', company_part, job_part, str(row['title'] or '').strip().lower())
+
+
+async def insert_jobs_to_db(jobs):
     """Insert jobs into Supabase jobs table"""
     if not jobs:
         return
@@ -91,20 +107,9 @@ async def insert_jobs_to_db(jobs, ats_type):
 
     url = f"{BASE_URL}/jobs?on_conflict=company_id,job_id"
     print(f"    [UPSERT] Upserting {len(jobs)} jobs to database...")
-    
+
     # Normalize fields to match Supabase schema
     # Schema: company_id, job_id, title, location, url, posted_at, skills
-    def _canonical_key(company_id, job_id, url):
-        company_part = str(company_id or "").strip().lower()
-        job_part = str(job_id or "").strip().lower()
-        url_part = str(url or "").strip().lower()
-
-        if company_part and job_part:
-            return ('company_job', company_part, job_part)
-        if url_part:
-            return ('url', url_part)
-        return ('fallback', company_part, job_part, str(job.get('title') or '').strip().lower())
-
     normalized_jobs = []
     seen_keys = set()
     for job in jobs:
@@ -121,7 +126,7 @@ async def insert_jobs_to_db(jobs, ats_type):
         }
 
         # Deduplicate aggressively to avoid reinserting the same job with different page variants.
-        dedupe_key = _canonical_key(normalized['company_id'], normalized['job_id'], normalized['url'])
+        dedupe_key = _dedupe_key(normalized)
         if dedupe_key in seen_keys:
             continue
 
@@ -131,7 +136,7 @@ async def insert_jobs_to_db(jobs, ats_type):
     dropped_count = len(jobs) - len(normalized_jobs)
     if dropped_count > 0:
         print(f"    [UPSERT] Dropped {dropped_count} duplicate jobs in current batch")
-    
+
     try:
         upsert_headers = {
             **HEADERS,
@@ -165,165 +170,68 @@ async def insert_jobs_to_db(jobs, ats_type):
 
 async def scrape_all():
     # Fetch companies from Supabase
-    results = await fetch_componies()
-    
+    companies = await fetch_companies()
+
     # Fetch user skills from Supabase
     print("\n")
     user_skills = await fetch_user_skills()
     print("")
-    
-    companies = results.get('companies', [])
+
     print(f"\n[API] Fetched {len(companies)} companies from database\n")
-    
+
     all_results = []
-    
+
     # Scrape each company based on ATS type
     for company in companies:
         # Skip disabled companies
         if company.get('disabled', False):
             print(f"[SKIP] {company['name']}: Company disabled\n")
             continue
-        
+
         ats_type = company.get("ats_type")
-        
+
         # Add user skills to company object for scraper to use
         company['user_skills'] = user_skills
-        
-        if ats_type == "workday":
-            try:
-                print(f"[SCRAPER] Workday: {company['name']}")
-                scraper = WorkdayScraper(company)
-                jobs = await scraper.scrape()
-                
-                # Store results
-                all_results.append({
-                    "company": company['name'],
-                    "ats_type": ats_type,
-                    "jobs_found": len(jobs),
-                    "jobs": jobs
-                })
-                
-                print(f"[RESULT] {company['name']}: {len(jobs)} jobs ready")
-                
-                # Show sample job if available
-                if jobs:
-                    sample = jobs[0]
-                    print(f"    Sample: {sample['title']}")
-                    print(f"    Location: {sample['location']}")
-                    print(f"    Posted: {sample['posted_date']}")
-                    print(f"    Description: {sample['description'][:80]}...")
-                    
-                    # INSERT WORKDAY JOBS TO DB
-                    await insert_jobs_to_db(jobs, ats_type)
-                else:
-                    print(f"    No jobs found after filtering")
-                
-                print()
-                    
-            except Exception as e:
-                print(f"[ERROR] {company['name']}: {str(e)}\n")
 
-        elif ats_type == "greenhouse":
-            try:
-                print(f"[SCRAPER] Greenhouse: {company['name']}")
-                scraper = GreenhouseScraper(company)
-                jobs = await scraper.scrape()
-
-                all_results.append({
-                    "company": company['name'],
-                    "ats_type": ats_type,
-                    "jobs_found": len(jobs),
-                    "jobs": jobs
-                })
-
-                print(f"[RESULT] {company['name']}: {len(jobs)} jobs ready")
-
-                if jobs:
-                    sample = jobs[0]
-                    print(f"    Sample: {sample['title']}")
-                    print(f"    Location: {sample['location']}")
-                    print(f"    Posted: {sample['posted_date']}")
-                    print(f"    Description: {sample['description'][:80]}...")
-                    await insert_jobs_to_db(jobs, ats_type)
-                else:
-                    print(f"    No jobs found after filtering")
-
-                print()
-
-            except Exception as e:
-                print(f"[ERROR] {company['name']}: {str(e)}\n")
-        
-        elif ats_type == "linkedin":
-            try:
-                print(f"[SCRAPER] LinkedIn: {company['name']}")
-                scraper = LinkedInScraper(company)
-                jobs = await scraper.scrape()
-                
-                # Store results
-                all_results.append({
-                    "company": company['name'],
-                    "ats_type": ats_type,
-                    "jobs_found": len(jobs),
-                    "jobs": jobs
-                })
-                
-                print(f"[RESULT] {company['name']}: {len(jobs)} jobs ready")
-                
-                # Show sample job if available
-                if jobs:
-                    sample = jobs[0]
-                    print(f"    Sample: {sample['title']}")
-                    print(f"    Location: {sample['location']}")
-                    print(f"    Posted: {sample['posted_time']}")
-                    print(f"    Description: {sample['description'][:80]}...")
-                    # INSERT LINKEDIN JOBS TO DB
-                    await insert_jobs_to_db(jobs, ats_type)
-                else:
-                    print(f"    No jobs found after filtering")
-                
-                print()
-                    
-            except Exception as e:
-                print(f"[ERROR] {company['name']}: {str(e)}\n")
-
-        elif ats_type == "indeed":
-            try:
-                print(f"[SCRAPER] Indeed: {company['name']}")
-                from indeed.main import Scraper as IndeedScraper
-                scraper = IndeedScraper(company)
-                jobs = await scraper.scrape()
-
-                all_results.append({
-                    "company": company['name'],
-                    "ats_type": ats_type,
-                    "jobs_found": len(jobs),
-                    "jobs": jobs
-                })
-
-                print(f"[RESULT] {company['name']}: {len(jobs)} jobs ready")
-
-                if jobs:
-                    sample = jobs[0]
-                    print(f"    Sample: {sample['title']}")
-                    print(f"    Location: {sample['location']}")
-                    print(f"    Posted: {sample['posted_time']}")
-                    print(f"    Description: {sample['description'][:80]}...")
-                    await insert_jobs_to_db(jobs, ats_type)
-                else:
-                    print(f"    No jobs found after filtering")
-
-                print()
-
-            except Exception as e:
-                print(f"[ERROR] {company['name']}: {str(e)}\n")
-        
-        else:
+        if ats_type not in SCRAPERS:
             print(f"[SKIP] {company['name']}: ATS type '{ats_type}' not supported\n")
-    
+            continue
+
+        label, scraper_class, posted_field = SCRAPERS[ats_type]
+        try:
+            print(f"[SCRAPER] {label}: {company['name']}")
+            scraper = scraper_class(company)
+            jobs = await scraper.scrape()
+
+            all_results.append({
+                "company": company['name'],
+                "ats_type": ats_type,
+                "jobs_found": len(jobs),
+                "jobs": jobs
+            })
+
+            print(f"[RESULT] {company['name']}: {len(jobs)} jobs ready")
+
+            # Show sample job if available
+            if jobs:
+                sample = jobs[0]
+                print(f"    Sample: {sample['title']}")
+                print(f"    Location: {sample['location']}")
+                print(f"    Posted: {sample[posted_field]}")
+                print(f"    Description: {sample['description'][:80]}...")
+                await insert_jobs_to_db(jobs)
+            else:
+                print("    No jobs found after filtering")
+
+            print()
+
+        except Exception as e:
+            print(f"[ERROR] {company['name']}: {str(e)}\n")
+
     # Summary
     total_jobs = sum(r['jobs_found'] for r in all_results)
     print(f"\n[SUMMARY] Scraped {len(all_results)} companies, {total_jobs} total jobs")
-    
+
     return all_results
 
 # Run the scraper
