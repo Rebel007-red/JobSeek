@@ -10,9 +10,11 @@
 import { createHash } from 'node:crypto'
 import { SHARED_ACTIONS, ValidationError, buildStatement, isStatementId, missingPipelineTable, toObjects, withoutPipelineTables } from './sql.mjs'
 
-const WAIT_TIMEOUT = '8s' // keep below the function time limit; slower statements are polled by the client
+// Netlify stops a synchronous function after 10 s, and a cold warehouse makes every Databricks call slow, so both
+// waits leave headroom for the auth check and one more slow call.
+const WAIT_TIMEOUT = '6s' // slower statements are polled by the client
 const RETRY_WAIT_TIMEOUT = '5s' // the minimum the Statement API accepts besides 0
-const POLL_BUDGET_MS = 6000 // a poll request waits server-side this long before telling the client to ask again
+const POLL_BUDGET_MS = 5000 // a poll request waits server-side at most this long before telling the client to ask again
 const POLL_INTERVAL_MS = 400
 const MAX_ROWS = 5000
 
@@ -216,6 +218,7 @@ async function pollStatement(config, statementId, user) {
   const pending = pendingStatements.get(statementId)
   if (pending && !pending.shared && pending.userId !== user.id) throw new HttpError(403, 'Not your request')
   for (;;) {
+    const callStarted = Date.now()
     const data = await databricks(config, 'GET', `/api/2.0/sql/statements/${statementId}`)
     const result = await statementResult(config, data, pending?.cache)
     if (result.status !== 202) {
@@ -224,7 +227,9 @@ async function pollStatement(config, statementId, user) {
       if (pending?.write) forgetUserResults(user.id)
       return json(result.status, result.body)
     }
-    if (Date.now() - started > POLL_BUDGET_MS) return json(result.status, result.body)
+    // Stop before a pause plus another call as slow as this one could overrun the budget
+    const callMs = Date.now() - callStarted
+    if (Date.now() - started + POLL_INTERVAL_MS + callMs > POLL_BUDGET_MS) return json(result.status, result.body)
     await sleep(POLL_INTERVAL_MS)
   }
 }
