@@ -9,8 +9,10 @@ from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
 
 from scraper_common import (
+	CRITERIA_COLUMNS,
 	fetch_companies,
-	fetch_user_roles,
+	fetch_linkedin_seen_ids,
+	fetch_user_searches,
 	first_text,
 	format_calendar_date,
 	format_days_ago,
@@ -20,13 +22,14 @@ from scraper_common import (
 
 BLOCKED_URL_MARKERS = ("authwall", "/login", "checkpoint")
 
-# Job detail page: "About the job" text plus the job criteria list, fallbacks when it is missing, and the company name
-ABOUT_SELECTOR = ".show-more-less-html__markup"
-METADATA_SELECTORS = [
-	".description__job-criteria-list",
-	".description__job-criteria-text",
-	".description__job-criteria-subheader",
-]
+# Job detail page: "About the job" text (with fallbacks), the job criteria list and the company name
+CRITERIA_LIST_SELECTOR = ".description__job-criteria-list"
+CRITERIA_LABELS = {
+	"seniority level": "seniority_level",
+	"employment type": "employment_type",
+	"job function": "job_function",
+	"industries": "industries",
+}
 DESCRIPTION_SELECTORS = [
 	".show-more-less-html__markup",
 	".description__text",
@@ -38,19 +41,27 @@ COMPANY_SELECTORS = [
 	".job-details-jobs-unified-top-card__company-name",
 ]
 
-# Searches per run (Companies rows first, then user roles), pause between searches, and results per role search
-MAX_LINKEDIN_SEARCHES = int(os.getenv("MAX_LINKEDIN_SEARCHES", "60"))
+# Searches per run (Companies rows first, then user role x city), pause between searches, and results per role search
+MAX_LINKEDIN_SEARCHES = int(os.getenv("MAX_LINKEDIN_SEARCHES", "90"))
 SEARCH_DELAY_SECONDS = int(os.getenv("LINKEDIN_SEARCH_DELAY_SECONDS", "5"))
-ROLE_SEARCH_TARGET_JOBS = int(os.getenv("LINKEDIN_ROLE_TARGET_JOBS", "100"))
+ROLE_SEARCH_TARGET_JOBS = int(os.getenv("LINKEDIN_ROLE_TARGET_JOBS", "250"))
+# Look-back of every search: 12 h covers the 4-hourly cron plus GitHub's schedule drift. Overlapping sightings are cheap
+# because ids the pipeline already has a description for skip the job page fetch.
+POSTED_WITHIN = "r43200"
 
 
-def build_searches(companies, roles):
-	"""Companies rows (admin-managed keywords) plus one search per user role not already covered, capped."""
+def build_searches(companies, user_searches):
+	"""Companies rows (admin-managed keywords, India-wide) plus one search per user (role, city) not already covered, capped."""
 	covered = {(company.get("api_url") or "").strip().lower() for company in companies}
 	role_searches = [
-		{"name": f"Role | {role}", "api_url": role, "linkedin_target_jobs": ROLE_SEARCH_TARGET_JOBS}
-		for role in roles
-		if role.strip().lower() not in covered
+		{
+			"name": f"Role | {role} | {city}" if city else f"Role | {role}",
+			"api_url": role,
+			"location": city,
+			"linkedin_target_jobs": ROLE_SEARCH_TARGET_JOBS,
+		}
+		for role, city in user_searches
+		if city or role.strip().lower() not in covered
 	]
 	searches = companies + role_searches
 	if len(searches) > MAX_LINKEDIN_SEARCHES:
@@ -60,12 +71,17 @@ def build_searches(companies, roles):
 	return searches
 
 
-def build_search_url(keywords_str):
+def build_search_url(keywords_str, city=None):
+	"""Newest-first (sortBy=DD) search of the last 12 hours, around one Indian city (25 mi) or India-wide."""
 	if not keywords_str:
 		return None
 
 	encoded_keywords = quote(keywords_str.strip())
-	return f"https://www.linkedin.com/jobs/search/?keywords={encoded_keywords}&location=India&distance=25&f_TPR=r21600"
+	location = quote(f"{city.strip()}, India" if city and city.strip() else "India")
+	return (
+		f"https://www.linkedin.com/jobs/search/?keywords={encoded_keywords}&location={location}"
+		f"&distance=25&f_TPR={POSTED_WITHIN}&sortBy=DD"
+	)
 
 
 def posted_time_to_days(posted_time):
@@ -129,7 +145,7 @@ def parse_linkedin_jobs(html_content):
 			posted_time = time_elem.get_text(strip=True) if time_elem else "Unknown"
 
 			jobs.append({
-				"company_name": f"LinkedIn | {company}" if company else "LinkedIn",
+				"company_name": company,
 				"job_id": job_id,
 				"title": title,
 				"location": location,
@@ -197,39 +213,49 @@ async def load_more_results(page, target_jobs, max_rounds, pagination_delay_seco
 	return await page.locator('div.base-card').count()
 
 
+def parse_job_criteria(criteria_html):
+	"""{column: value} of a job criteria list (<li><h3>Seniority level</h3><span>Entry level</span></li>...)."""
+	criteria = {}
+	for item in BeautifulSoup(criteria_html or "", "html.parser").find_all("li"):
+		label = item.find("h3")
+		value = item.find("span")
+		column = CRITERIA_LABELS.get(label.get_text(" ", strip=True).lower()) if label else None
+		if column and value and value.get_text(strip=True):
+			criteria[column] = value.get_text(" ", strip=True)
+	return criteria
+
+
 async def read_linkedin_description(page, job):
-	"""Description of a job detail page; also replaces the card's company name with the page's when present."""
+	"""Description of a job detail page; also fills the job criteria columns, and the company name when the card had none.
+
+	The card's company name is kept otherwise: it is part of the downstream job_key, and re-sightings of already seen
+	jobs (no job page fetch) only have the card's name.
+	"""
 	await page.goto(job["job_url"], wait_until="domcontentloaded", timeout=20000)
 	await page.wait_for_timeout(1000)
-	for selector in COMPANY_SELECTORS:
-		company = await first_text(page, selector)
-		if company:
-			job["company_name"] = f"LinkedIn | {company}"
-			break
+	if not job.get("company_name"):
+		for selector in COMPANY_SELECTORS:
+			company = await first_text(page, selector)
+			if company:
+				job["company_name"] = company
+				break
+
+	criteria_list = page.locator(CRITERIA_LIST_SELECTOR).first
+	if await criteria_list.count() > 0:
+		job.update(parse_job_criteria(await criteria_list.inner_html()))
 
 	description = ""
-	if await page.locator(ABOUT_SELECTOR).count() > 0:
-		metadata_parts = []
-		for selector in METADATA_SELECTORS:
-			locators = page.locator(selector)
-			for idx in range(await locators.count()):
-				text = await locators.nth(idx).text_content()
-				if text and text.strip():
-					metadata_parts.append(text.strip())
-		about = await first_text(page, ABOUT_SELECTOR)
-		description = " ".join(part for part in (about, " ".join(metadata_parts)) if part)
-
 	for selector in DESCRIPTION_SELECTORS:
+		description = await first_text(page, selector)
 		if description:
 			break
-		description = await first_text(page, selector)
 	return description
 
 
 async def scrape_linkedin_jobs(company):
 	"""Return a list of jobs, or None when the search failed or LinkedIn blocked the request."""
 	keywords = company.get("api_url", "")
-	search_url = build_search_url(keywords)
+	search_url = build_search_url(keywords, company.get("location"))
 	if not search_url:
 		print(f"    [ERROR] No keywords provided in api_url field for {company.get('name')}")
 		return None
@@ -288,7 +314,7 @@ async def collect_linkedin_jobs(companies):
 			continue
 		print(f"[COMPANY] {company_name}: jobs found {len(jobs)}")
 
-		company_url = build_search_url(company.get("api_url", "")) or ""
+		company_url = build_search_url(company.get("api_url", ""), company.get("location")) or ""
 		for job in jobs:
 			job_id = job.get("job_id", "")
 			if job_id in seen_job_ids:
@@ -312,6 +338,7 @@ async def collect_linkedin_jobs(companies):
 				"description": job.get("description", ""),
 				"collected_on": collected_on,
 				"posted_days": posted_days,
+				**{column: "" for column in CRITERIA_COLUMNS},  # filled from the job page with the description
 			})
 
 	if duplicate_count:
@@ -323,19 +350,24 @@ async def collect_linkedin_jobs(companies):
 async def main():
 	companies = await fetch_companies("linkedin", "name,api_url,ats_type,disabled")
 	print_companies(companies, "LinkedIn")
-	searches = build_searches(companies, await fetch_user_roles())
+	searches = build_searches(companies, await fetch_user_searches())
 	print(f"[INFO] LinkedIn searches this run: {len(searches)} -> {', '.join(search.get('name') or '?' for search in searches)}")
 	if not searches:
 		print("[ERROR] No LinkedIn searches to run.")
 		sys.exit(1)
 
+	# Ids the pipeline already has a description for are still written (refreshing last_seen_at) but not fetched again
+	seen_ids = await fetch_linkedin_seen_ids()
 	jobs, failed_companies = await collect_linkedin_jobs(searches)
-	filtered_jobs_dataframe, output_file = await write_recent_jobs(jobs, "LinkedIn", "linkedin", read_linkedin_description)
+	filtered_jobs_dataframe, output_file = await write_recent_jobs(
+		jobs, "LinkedIn", "linkedin", read_linkedin_description, skip_ids=seen_ids
+	)
 
+	already_seen = filtered_jobs_dataframe["job_id"].astype(str).isin(seen_ids)
 	print(
 		f"[SUMMARY] searches={len(searches)} failed={len(failed_companies)} "
-		f"jobs_scraped={len(jobs)} jobs_written={len(filtered_jobs_dataframe)} "
-		f"missing_descriptions={int((filtered_jobs_dataframe['description'] == '').sum())}"
+		f"jobs_scraped={len(jobs)} jobs_written={len(filtered_jobs_dataframe)} already_seen={int(already_seen.sum())} "
+		f"missing_descriptions={int(((filtered_jobs_dataframe['description'] == '') & ~already_seen).sum())}"
 	)
 	if failed_companies:
 		print(f"[SUMMARY] failed searches: {', '.join(failed_companies)}")

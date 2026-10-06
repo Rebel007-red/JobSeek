@@ -1,10 +1,13 @@
 {
   "name": "JobSeeeker",
-  "description": "Scrapes volume -> setup -> bronze -> silver -> enrich -> gold -> cleanup. Started by the GitHub Actions scraper workflows (databricks/jobs/trigger_job.py) after uploading CSVs.",
+  "description": "Scrapes volume -> ingest + silver -> enrich -> gold + cleanup. Started by the LinkedIn GitHub Actions workflow (databricks/jobs/trigger_job.py) after uploading CSVs. Needs the unscheduled 'JobSeeker setup' job (01_setup) to have run for the current setup version.",
   "max_concurrent_runs": 1,
   "queue": { "enabled": true },
   "timeout_seconds": 7200,
   "performance_target": "STANDARD",
+  "environments": [
+    { "environment_key": "enrich", "spec": { "environment_version": "2", "dependencies": ["langdetect==1.0.9"] } }
+  ],
   "parameters": [
     { "name": "catalog", "default": "{{CATALOG}}" },
     { "name": "job_run_id", "default": "{{job.run_id}}" },
@@ -16,55 +19,29 @@
   },
   "tasks": [
     {
-      "task_key": "Step_01_SetUp",
-      "description": "Idempotent schemas, tables and reference data",
-      "notebook_task": { "notebook_path": "{{NOTEBOOK_DIR}}/01_setup", "source": "WORKSPACE" },
-      "timeout_seconds": 900,
+      "task_key": "Step_01_Ingest_Silver",
+      "description": "Auto Loader: new CSVs -> bronze.jobs_raw; clean, dedupe, MERGE India jobs -> silver.jobs_clean",
+      "notebook_task": { "notebook_path": "{{NOTEBOOK_DIR}}/02_ingest_silver", "source": "WORKSPACE" },
+      "timeout_seconds": 2700,
       "max_retries": 1,
       "min_retry_interval_millis": 60000
     },
     {
-      "task_key": "Step_02_Ingest",
-      "description": "Auto Loader: new CSVs -> bronze.jobs_raw",
-      "depends_on": [{ "task_key": "Step_01_SetUp" }],
-      "notebook_task": { "notebook_path": "{{NOTEBOOK_DIR}}/02_bronze_ingest", "source": "WORKSPACE" },
-      "timeout_seconds": 1800,
-      "max_retries": 1,
-      "min_retry_interval_millis": 60000
-    },
-    {
-      "task_key": "Step_03_Transform",
-      "description": "Clean, dedupe, MERGE -> silver.jobs_clean",
-      "depends_on": [{ "task_key": "Step_02_Ingest" }],
-      "notebook_task": { "notebook_path": "{{NOTEBOOK_DIR}}/03_silver_transform", "source": "WORKSPACE" },
-      "timeout_seconds": 1800,
-      "max_retries": 1,
-      "min_retry_interval_millis": 60000
-    },
-    {
-      "task_key": "Step_04_Enrich",
-      "description": "Language, experience, skills (rules + cached LLM), standard role + category (cached embeddings + LLM tie-break)",
-      "depends_on": [{ "task_key": "Step_03_Transform" }],
-      "notebook_task": { "notebook_path": "{{NOTEBOOK_DIR}}/04_enrich", "source": "WORKSPACE" },
+      "task_key": "Step_02_Enrich",
+      "description": "Pending rows only: language, experience, skills (rules + capped LLM), standard role + category (cached embeddings + LLM tie-break), ops.role_similarity",
+      "depends_on": [{ "task_key": "Step_01_Ingest_Silver" }],
+      "notebook_task": { "notebook_path": "{{NOTEBOOK_DIR}}/03_enrich", "source": "WORKSPACE" },
+      "environment_key": "enrich",
       "timeout_seconds": 3600,
       "max_retries": 1,
       "min_retry_interval_millis": 120000
     },
     {
-      "task_key": "Step_05_Gold",
-      "description": "MERGE eligible jobs -> gold.jobs (tracking columns untouched), rebuild gold.job_skills",
-      "depends_on": [{ "task_key": "Step_04_Enrich" }],
-      "notebook_task": { "notebook_path": "{{NOTEBOOK_DIR}}/05_gold_merge", "source": "WORKSPACE" },
-      "timeout_seconds": 1800,
-      "max_retries": 1,
-      "min_retry_interval_millis": 60000
-    },
-    {
-      "task_key": "Step_06_Cleanup",
-      "description": "Landing file retention, table retention, gold expiry, LLM log pruning, OPTIMIZE/VACUUM",
-      "depends_on": [{ "task_key": "Step_05_Gold" }],
-      "notebook_task": { "notebook_path": "{{NOTEBOOK_DIR}}/06_cleanup", "source": "WORKSPACE" },
-      "timeout_seconds": 1800,
+      "task_key": "Step_03_Gold_Cleanup",
+      "description": "LinkedIn config exports, MERGE -> gold.jobs, ops.skill_stats, expiry; daily retention, weekly OPTIMIZE/VACUUM",
+      "depends_on": [{ "task_key": "Step_02_Enrich" }],
+      "notebook_task": { "notebook_path": "{{NOTEBOOK_DIR}}/04_gold_cleanup", "source": "WORKSPACE" },
+      "timeout_seconds": 2700,
       "max_retries": 0
     }
   ]

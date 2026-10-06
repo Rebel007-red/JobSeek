@@ -5,7 +5,7 @@ import { FIT_PARTS, MATCH_MIN_FIT } from '../../utils/gold'
 import { PROFILE_LIMITS, entryProblem } from '../../utils/entries'
 
 // Same limits as the API
-const { roles: MAX_ROLES, skills: MAX_SKILLS } = PROFILE_LIMITS
+const { roles: MAX_ROLES, skills: MAX_SKILLS, cities: MAX_CITIES } = PROFILE_LIMITS
 const NOT_SUPPORTED = 'is outside the supported roles (data, full stack / backend, DevOps and cloud)'
 const CHECK_PENDING = 'custom · checked on the next pipeline run'
 
@@ -16,6 +16,7 @@ function buildLookups(refs) {
   const skills = new Map()
   const refSkills = new Set()
   const customRoles = new Map()
+  const cities = new Map()
   const byKind = (kind) => refs.filter(row => row.kind === kind)
   for (const row of byKind('role')) roles.set(row.value.toLowerCase(), row.value)
   for (const row of byKind('role_out')) outOfScope.add(row.value.toLowerCase())
@@ -28,7 +29,12 @@ function buildLookups(refs) {
   for (const row of byKind('custom_role')) {
     customRoles.set(row.value.toLowerCase(), { value: row.value, status: row.detail, duplicateOf: row.aliases?.[0] || null })
   }
-  return { roles, outOfScope, skills, refSkills, customRoles }
+  // Other spellings (e.g. Bangalore) resolve to the list's city name
+  for (const row of byKind('city')) {
+    cities.set(row.value.toLowerCase(), row.value)
+    for (const alias of row.aliases || []) if (!cities.has(alias.toLowerCase())) cities.set(alias.toLowerCase(), row.value)
+  }
+  return { roles, outOfScope, skills, refSkills, customRoles, cities }
 }
 
 function toForm(profile) {
@@ -37,6 +43,7 @@ function toForm(profile) {
     skills: profile?.skills || [],
     min_years: profile?.min_years ?? '',
     max_years: profile?.max_years ?? '',
+    preferred_cities: profile?.preferred_cities || [],
   }
 }
 
@@ -58,6 +65,7 @@ export function ProfileEditor({ profile, onSave, onboarding = false }) {
     [lookups],
   )
   const skillOptions = useMemo(() => [...new Set(lookups.skills.values())], [lookups])
+  const cityOptions = useMemo(() => [...new Set(lookups.cities.values())], [lookups])
   const complete = form.target_roles.length > 0 && form.skills.length > 0
 
   // Known roles resolve to the list's spelling; a custom role the pipeline mapped resolves to the role it duplicates
@@ -84,6 +92,16 @@ export function ProfileEditor({ profile, onSave, onboarding = false }) {
     return value ? { value } : null
   }
   const skillNote = (value) => (!refs || lookups.refSkills.has(value.toLowerCase()) ? '' : 'custom')
+  // Cities come only from the list (no custom entries)
+  const resolveCity = (text) => {
+    // No city rows = lists cached from before the city list existed
+    if (!refs || !cityOptions.length) return { blocked: 'The city list is still loading, try again in a moment (or reload the page).' }
+    const value = lookups.cities.get(text.toLowerCase())
+    if (value) return { value }
+    const lower = text.toLowerCase()
+    const near = cityOptions.filter(city => city.toLowerCase().startsWith(lower.slice(0, 3))).slice(0, 3)
+    return { blocked: `"${text}" is not in the city list.${near.length ? ` Did you mean ${near.join(', ')}?` : ''}` }
+  }
 
   const update = (key, value) => {
     setForm(prev => ({ ...prev, [key]: value }))
@@ -101,6 +119,7 @@ export function ProfileEditor({ profile, onSave, onboarding = false }) {
         skills: form.skills,
         min_years: form.min_years === '' ? null : Number(form.min_years),
         max_years: form.max_years === '' ? null : Number(form.max_years),
+        preferred_cities: form.preferred_cities,
       })
       setDirty(false)
       setMessage({ tone: 'success', text: 'Profile saved. Your job list now uses it.' })
@@ -122,7 +141,8 @@ export function ProfileEditor({ profile, onSave, onboarding = false }) {
       <p className="settings-copy">
         {onboarding && 'Pick what you are looking for to see your jobs. '}
         Jobs are matched to your roles and scored 0–100 ({weights}). <strong>For you</strong> shows jobs in your roles
-        (or the same category) with fit {MATCH_MIN_FIT}+; <strong>Show all</strong> lists every job by fit.
+        (or closely related ones) with fit {MATCH_MIN_FIT}+, leaving out jobs that ask for over 2 years more than your
+        maximum; <strong>Show all</strong> lists every job by fit.
       </p>
 
       <div className="settings-form-grid">
@@ -161,6 +181,17 @@ export function ProfileEditor({ profile, onSave, onboarding = false }) {
           <label>Experience to (years)</label>
           <input type="number" min="0" max="40" value={form.max_years} onChange={e => update('max_years', e.target.value)} className="settings-input" />
         </div>
+
+        <ChipInput
+          label={`Preferred cities (optional, up to ${MAX_CITIES})`}
+          values={form.preferred_cities}
+          onChange={value => update('preferred_cities', value)}
+          suggestions={cityOptions}
+          resolve={resolveCity}
+          placeholder="e.g. Bengaluru"
+          help="Widens the LinkedIn search: your roles are also searched in each city, within a few hours of saving. Leave empty to search all of India. Your job list is not limited to these cities."
+          maxItems={MAX_CITIES}
+        />
       </div>
 
       {message && <p className={message.tone === 'error' ? 'settings-form-error' : 'settings-form-success'}>{message.text}</p>}

@@ -11,12 +11,14 @@ export const FIT_PARTS = [
   { key: 'fit_experience', label: 'Experience', short: 'Exp', weight: FIT_WEIGHTS.experience },
 ]
 
-// "For you" = the job's role/category matches one of your roles and the fit is at least this (shared with the API)
+// "For you" = the job's role matches (or is close to) one of your roles and the fit is at least this (shared with the API)
 export const MATCH_MIN_FIT = 60
+// "Strong fit" from this score up (the API's strong_fit count, the fit badge, the Fit 70+ filter)
+export const STRONG_FIT = 70
 
 export function fitTone(score) {
   if (score === null || score === undefined || Number.isNaN(Number(score))) return 'none'
-  if (score >= 70) return 'strong'
+  if (score >= STRONG_FIT) return 'strong'
   if (score >= 50) return 'good'
   return 'low'
 }

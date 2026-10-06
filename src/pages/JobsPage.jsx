@@ -15,7 +15,7 @@ import { useHotkeys } from '../hooks/useHotkeys'
 import { useJobList } from '../hooks/useJobList'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
 import { useToast } from '../hooks/useToast'
-import { MATCH_MIN_FIT, buildTrend, facetOptions, jobUrl } from '../utils/gold'
+import { MATCH_MIN_FIT, STRONG_FIT, buildTrend, facetOptions, jobUrl } from '../utils/gold'
 import { readScope, readView, saveScope, saveView } from '../utils/viewPref'
 
 const TREND_WINDOW_DAYS = 14
@@ -103,8 +103,9 @@ export function JobsPage() {
     jobs, page, listKey, totalCount, hasMore, loading, refreshing, waiting, error,
     reload: reloadJobs, loadMore, retry, updateJob, removeJob,
   } = useJobList({ filters, scope, sort, tab })
-  const [summary, setSummary] = useState({})
-  const [trendRows, setTrendRows] = useState([])
+  // Start from the cached counters (as the list does), so the header doesn't paint 0s and then widen to the real numbers
+  const [summary, setSummary] = useState(() => api.cachedRows('summary', { ...DEFAULT_FILTERS, scope: readScope() })?.[0] || {})
+  const [trendRows, setTrendRows] = useState(() => api.cachedRows('trend', { scope: readScope() }) || [])
   const [facetRows, setFacetRows] = useState([])
   const [selectedJob, setSelectedJob] = useState(null)
   const [activeKey, setActiveKey] = useState(null)
@@ -238,7 +239,7 @@ export function JobsPage() {
       setSummary(prev => adjustSummary(prev, {
         total: -1,
         [job.is_applied ? 'applied' : 'pending']: -1,
-        ...(Number(job.fit_score) >= 70 ? { strong_fit: -1 } : {}),
+        ...(Number(job.fit_score) >= STRONG_FIT ? { strong_fit: -1 } : {}),
       }))
     } catch (err) {
       showToast(`Could not hide: ${err.message}`)
@@ -332,19 +333,19 @@ export function JobsPage() {
 
   const metricItems = [
     { key: 'new', label: 'new', value: stats.new, tone: 'success', title: 'Found in the last 48 hours. Tap to sort by recently found', active: sort === 'found' },
-    { key: 'strong', label: 'strong fit', value: stats.strong, tone: 'accent', title: 'Fit score 70+. Tap to filter', active: filters.minFit === '70' },
+    { key: 'strong', label: 'strong fit', value: stats.strong, tone: 'accent', title: `Fit score ${STRONG_FIT}+. Tap to filter`, active: filters.minFit === String(STRONG_FIT) },
     { key: 'appliedToday', label: 'applied today', value: trend[trend.length - 1]?.applied ?? 0, tone: 'info', title: 'Tap to show applied jobs', active: tab === 'applied' },
   ]
   const onMetric = (key) => {
     if (key === 'new') setSort(prev => (prev === 'found' ? 'fit' : 'found'))
-    if (key === 'strong') toggleFilter('minFit', '70')
+    if (key === 'strong') toggleFilter('minFit', String(STRONG_FIT))
     if (key === 'appliedToday') setTab(prev => (prev === 'applied' ? 'all' : 'applied'))
   }
 
   const hasMaxYears = profile?.max_years !== null && profile?.max_years !== undefined
   const quickChips = [
     { key: 'postedWithin', value: FRESH_HOURS, label: 'Last 24h' },
-    { key: 'minFit', value: '70', label: 'Fit 70+' },
+    { key: 'minFit', value: String(STRONG_FIT), label: `Fit ${STRONG_FIT}+` },
     { key: 'matchedOnly', value: true, label: 'Has my skills', disabled: profileSkills.length === 0, reason: 'Add skills to your profile first' },
     {
       key: 'maxYears',

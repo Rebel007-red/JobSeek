@@ -39,7 +39,14 @@ OUTPUT_COLUMNS = [
     "description",
     "collected_on",
     "posted_days",
+    # LinkedIn job criteria; Workday/Greenhouse leave them empty. New columns are only ever appended (older files
+    # simply lack them).
+    "seniority_level",
+    "employment_type",
+    "job_function",
+    "industries",
 ]
+CRITERIA_COLUMNS = OUTPUT_COLUMNS[-4:]
 
 
 def build_headers():
@@ -116,25 +123,34 @@ def print_companies(companies, label):
     print(f"[INFO] {label} companies: {len(companies)}")
 
 
-# Written by 05_gold_merge: {"profiles": [{"user_id": ..., "roles": [...]}]}
-LINKEDIN_ROLES_FILE = os.getenv("LINKEDIN_ROLES_FILE", "/Volumes/jobseeker/ops/pipeline/config/linkedin_roles.json")
+# Written by 04_gold_cleanup (before its gold MERGE) to the ops volume:
+#   linkedin_roles.json    {"generated_at": ..., "profiles": [{"user_id": ..., "roles": [...], "cities": [...]}]}
+#   linkedin_seen_ids.json {"generated_at": ..., "job_ids": [...]}: LinkedIn ids silver already has a description for
+CONFIG_DIR = "/Volumes/jobseeker/ops/pipeline/config"
+LINKEDIN_ROLES_FILE = os.getenv("LINKEDIN_ROLES_FILE", f"{CONFIG_DIR}/linkedin_roles.json")
+LINKEDIN_SEEN_IDS_FILE = os.getenv("LINKEDIN_SEEN_IDS_FILE", f"{CONFIG_DIR}/linkedin_seen_ids.json")
 
 
-async def _download_roles_file(session):
+async def _download_config_file(session, path, skipped_note):
+    """Parsed JSON of a pipeline config file on the Databricks volume, or None (skipped_note says what is skipped)."""
     host = (os.getenv("DATABRICKS_HOST") or "").strip().strip('"').rstrip("/")
     token = (os.getenv("DATABRICKS_TOKEN") or "").strip().strip('"')
     if not host or not token:
-        print("    [WARN] DATABRICKS_HOST / DATABRICKS_TOKEN not set. Skipping user role searches.")
+        print(f"    [WARN] DATABRICKS_HOST / DATABRICKS_TOKEN not set. {skipped_note}")
         return None
-    url = f"{host}/api/2.0/fs/files{LINKEDIN_ROLES_FILE}"
-    async with session.get(url, headers={"Authorization": f"Bearer {token}"}) as response:
-        if response.status == 404:
-            print(f"    [INFO] {LINKEDIN_ROLES_FILE} not found yet (written by the pipeline). No user role searches.")
-            return None
-        if response.status != 200:
-            print(f"    [WARN] Could not read {LINKEDIN_ROLES_FILE}: HTTP {response.status} {(await response.text())[:300]}")
-            return None
-        return json.loads(await response.text())
+    url = f"{host}/api/2.0/fs/files{path}"
+    try:
+        async with session.get(url, headers={"Authorization": f"Bearer {token}"}) as response:
+            if response.status == 404:
+                print(f"    [INFO] {path} not found yet (written by the pipeline). {skipped_note}")
+                return None
+            if response.status != 200:
+                print(f"    [WARN] Could not read {path}: HTTP {response.status} {(await response.text())[:300]}")
+                return None
+            return json.loads(await response.text())
+    except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as exc:
+        print(f"    [WARN] Could not read {path}: {exc}. {skipped_note}")
+        return None
 
 
 async def _existing_user_ids(session):
@@ -156,27 +172,57 @@ async def _existing_user_ids(session):
         page += 1
 
 
-async def fetch_user_roles():
-    """Distinct role titles picked by current app users (first spelling wins), for LinkedIn keyword searches."""
+def user_searches(profiles, user_ids=None):
+    """Distinct (role, city) pairs of the profiles' roles x preferred cities; city None = India-wide.
+
+    A user without cities searches India-wide. Pairs are deduped case-insensitively across users (first spelling wins)
+    and ordered by the city's position in its user's list, so when MAX_LINKEDIN_SEARCHES cuts the list every role keeps
+    its first search before any role gets a second one. Profiles of users not in user_ids (when given) are skipped.
+    """
+    ranked, seen, skipped_users = [], set(), 0
+    for profile in profiles:
+        if user_ids is not None and str(profile.get("user_id", "")).lower() not in user_ids:
+            skipped_users += 1
+            continue
+        # 'India' is a city value of ops.ref_india_locations too; it means the India-wide search
+        cities = [str(city or "").strip() for city in profile.get("cities") or []]
+        cities = [city for city in cities if city.lower() not in ("", "india")] or [None]
+        for role in profile.get("roles") or []:
+            role = str(role).strip()
+            for rank, city in enumerate(cities if role else []):
+                key = (role.lower(), (city or "").lower())
+                if key not in seen:
+                    seen.add(key)
+                    ranked.append((rank, role, city))
+    ranked.sort(key=lambda item: item[0])  # stable, so profile and role order is kept within a rank
+    return [(role, city) for _, role, city in ranked], skipped_users
+
+
+async def fetch_user_searches():
+    """(role, city) LinkedIn keyword searches for the roles and preferred cities of current app users."""
     async with aiohttp.ClientSession() as session:
-        data = await _download_roles_file(session)
+        data = await _download_config_file(session, LINKEDIN_ROLES_FILE, "No user role searches.")
         if not data:
             return []
         user_ids = await _existing_user_ids(session)
 
-    roles, seen, skipped_users = [], set(), 0
-    for profile in data.get("profiles", []):
-        if user_ids is not None and str(profile.get("user_id", "")).lower() not in user_ids:
-            skipped_users += 1
-            continue
-        for role in profile.get("roles") or []:
-            role = str(role).strip()
-            if role and role.lower() not in seen:
-                seen.add(role.lower())
-                roles.append(role)
-    print(f"[INFO] User roles: {len(roles)} distinct from {len(data.get('profiles', []))} profiles "
+    profiles = data.get("profiles") or []
+    searches, skipped_users = user_searches(profiles, user_ids)
+    print(f"[INFO] User searches: {len(searches)} distinct role x city pairs "
+          f"({len({role.lower() for role, _ in searches})} roles) from {len(profiles)} profiles "
           f"(skipped {skipped_users} of removed users), file generated {data.get('generated_at')}")
-    return roles
+    return searches
+
+
+async def fetch_linkedin_seen_ids():
+    """LinkedIn job ids the pipeline already has a description for (empty set when the file is unavailable)."""
+    async with aiohttp.ClientSession() as session:
+        data = await _download_config_file(session, LINKEDIN_SEEN_IDS_FILE, "Fetching every description.")
+    if not data:
+        return set()
+    job_ids = {str(job_id).strip() for job_id in data.get("job_ids") or []} - {""}
+    print(f"[INFO] Seen LinkedIn job ids: {len(job_ids)}, file generated {data.get('generated_at')}")
+    return job_ids
 
 
 def jobs_to_dataframe(jobs):
@@ -185,6 +231,7 @@ def jobs_to_dataframe(jobs):
         {
             **{column: job.get(column, "") for column in OUTPUT_COLUMNS},
             "description": sanitize_text(job.get("description", "")),
+            **{column: sanitize_text(job.get(column, "")) for column in CRITERIA_COLUMNS},
             "posted_days": job.get("posted_days"),
         }
         for job in jobs
@@ -219,12 +266,17 @@ async def goto_settled(page, url):
         await page.goto(url, wait_until="domcontentloaded", timeout=20000)
 
 
-async def fetch_descriptions(jobs, label, read_description):
+async def fetch_descriptions(jobs, label, read_description, skip_ids=frozenset()):
     """Fill in missing descriptions by opening each job_url in headless Chromium, 3 pages at a time.
 
     read_description(page, job) loads the job page and returns its description; any failure leaves "".
+    Jobs whose job_id is in skip_ids keep an empty description: the pipeline already has it, and its silver MERGE never
+    overwrites a stored description with an empty one, so the row only refreshes last_seen_at.
     """
-    pending = [job for job in jobs if not job.get("description")]
+    missing = [job for job in jobs if not job.get("description")]
+    pending = [job for job in missing if str(job.get("job_id") or "") not in skip_ids]
+    if len(pending) < len(missing):
+        print(f"[DESC] {label}: {len(missing) - len(pending)} already seen jobs skipped, {len(pending)} to fetch")
     if not pending:
         return jobs
 
@@ -276,13 +328,13 @@ def write_flat_jobs_csv(dataframe, prefix, output_dir=OUTPUT_DIR):
         return None
 
 
-async def write_recent_jobs(jobs, label, prefix, read_description):
-    """Keep jobs posted within MAX_POSTED_DAYS, fetch their missing descriptions and write the CSV.
+async def write_recent_jobs(jobs, label, prefix, read_description, skip_ids=frozenset()):
+    """Keep jobs posted within MAX_POSTED_DAYS, fetch their missing descriptions (except skip_ids) and write the CSV.
 
     Returns the written dataframe and the output file (None when writing failed).
     """
     recent = keep_recent_jobs(jobs_to_dataframe(jobs))
     print(f"[FILTER] {label} jobs after filtering (posted_days <= {MAX_POSTED_DAYS}): {len(recent)}")
-    recent_jobs = await fetch_descriptions(recent.to_dict(orient="records"), label, read_description)
+    recent_jobs = await fetch_descriptions(recent.to_dict(orient="records"), label, read_description, skip_ids)
     dataframe = jobs_to_dataframe(recent_jobs)
     return dataframe, write_flat_jobs_csv(dataframe, prefix)

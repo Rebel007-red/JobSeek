@@ -161,7 +161,7 @@ export function JobDrawer({ job, profile, position, onMove, onClose, onApplied, 
               <section className="drawer-section">
                 <h3>Description</h3>
                 {current.error && <p className="form-error">{current.error}</p>}
-                {!extra && !current.error && <div className="skeleton-lines"><i /><i /><i /><i /></div>}
+                {!extra && !current.error && <div className="skeleton-lines description-placeholder"><i /><i /><i /><i /></div>}
                 {extra && <div className="drawer-description">{formatDescription(extra.description) || 'No description available.'}</div>}
               </section>
 

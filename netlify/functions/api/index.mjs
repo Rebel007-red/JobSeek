@@ -8,9 +8,10 @@
 //   SUPABASE_URL / VITE_SUPABASE_URL, SUPABASE_ANON_KEY / VITE_SUPABASE_ANON_KEY   to verify the login
 //   ALLOWED_EMAILS   optional comma-separated allow-list (sign-ups are invite-only in Supabase)
 import { createHash } from 'node:crypto'
-import { SHARED_ACTIONS, ValidationError, buildStatement, isStatementId, toObjects } from './sql.mjs'
+import { SHARED_ACTIONS, ValidationError, buildStatement, isStatementId, missingPipelineTable, toObjects, withoutPipelineTables } from './sql.mjs'
 
 const WAIT_TIMEOUT = '8s' // keep below the function time limit; slower statements are polled by the client
+const RETRY_WAIT_TIMEOUT = '5s' // the minimum the Statement API accepts besides 0
 const POLL_BUDGET_MS = 6000 // a poll request waits server-side this long before telling the client to ask again
 const POLL_INTERVAL_MS = 400
 const MAX_ROWS = 5000
@@ -181,16 +182,23 @@ async function runStatement(config, action, params, user) {
   }
 
   const { statement, parameters } = buildStatement(action, params, user)
-  const data = await databricks(config, 'POST', '/api/2.0/sql/statements/', {
+  const submit = async (text, waitTimeout = WAIT_TIMEOUT) => databricks(config, 'POST', '/api/2.0/sql/statements/', {
     warehouse_id: await warehouseId(config),
     catalog: config.catalog,
-    statement,
+    statement: text,
     parameters,
-    wait_timeout: WAIT_TIMEOUT,
+    wait_timeout: waitTimeout,
     on_wait_timeout: 'CONTINUE',
     disposition: 'INLINE',
     format: 'JSON_ARRAY',
   })
+  let data = await submit(statement)
+  // Before 01_setup has created the fit tables. A missing table fails at compile time, so this catches it unless the
+  // warehouse was still starting (then the poll reports the error and the next request retries here). Shorter wait so
+  // both submissions fit the function time limit.
+  if (data.status?.state === 'FAILED' && missingPipelineTable(data.status?.error?.message)) {
+    data = await submit(withoutPipelineTables(statement), RETRY_WAIT_TIMEOUT)
+  }
   const write = WRITE_ACTIONS.has(action)
   if (write) forgetUserResults(user.id)
   const cache = key ? { key, ttl } : null

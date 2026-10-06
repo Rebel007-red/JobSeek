@@ -1,8 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { FIT_PARTS, MATCH_MIN_FIT } from '../../../src/utils/gold.js'
-import { SHARED_ACTIONS, ValidationError, buildFilterWhere, buildStatement, convertValue, isStatementId, toObjects, validateProfile } from './sql.mjs'
+import { FIT_PARTS, FIT_WEIGHTS, MATCH_MIN_FIT, STRONG_FIT } from '../../../src/utils/gold.js'
+import {
+  FIT_TUNING, SHARED_ACTIONS, ValidationError, buildFilterWhere, buildStatement, convertValue, isStatementId, missingPipelineTable, toObjects,
+  validateProfile, withoutPipelineTables,
+} from './sql.mjs'
 
 const KEY = 'a'.repeat(64)
 const USER = { id: '0b6f3c1e-9a2d-4f7b-8c55-1d2e3f4a5b6c', email: 'me@example.com' }
@@ -30,12 +33,13 @@ test('empty filters keep the visibility rule and the "For you" scope', () => {
   const { where, parameters } = buildFilterWhere({ q: '  ', minFit: '', maxYears: null })
   assert.equal(parameters.length, 0)
   assert.ok(where.startsWith('(NOT coalesce(is_hidden, false)'))
-  assert.ok(where.includes('(is_applied OR (role_match AND fit_score >= 60))'))
+  assert.ok(where.includes('(is_applied OR (role_match AND fit_score >= 60 AND NOT above_experience))'))
 })
 
-test('scope=all drops the role / fit threshold', () => {
+test('scope=all drops the role / fit threshold and the experience gap', () => {
   const { where } = buildFilterWhere({ scope: 'all' })
   assert.ok(!where.includes('role_match'))
+  assert.ok(!where.includes('above_experience'))
 })
 
 test('per-user reads are scoped to the caller and read the per-user view', () => {
@@ -65,13 +69,14 @@ test('shared reads do not depend on the user', () => {
 test('jobs statement clamps paging and falls back to fit sort', () => {
   const { statement } = buildStatement('jobs', { limit: 5000, offset: -3, sort: 'DROP TABLE' }, USER)
   assert.match(statement, /LIMIT 100 OFFSET 0$/)
-  assert.match(statement, /ORDER BY fit_score DESC NULLS LAST/)
+  assert.match(statement, /ORDER BY fit_score DESC NULLS LAST, role_score DESC NULLS LAST, coalesce\(posted_date, to_date\(first_seen_at\)\) DESC NULLS LAST, job_key/)
 })
 
 test('summary ignores the tab so tab counts stay stable', () => {
   const { statement } = buildStatement('summary', { tab: 'applied', role: 'Data Engineer' }, USER)
   assert.ok(statement.includes('role_title = :role'))
   assert.ok(!statement.includes('AND coalesce(is_applied, false)) AS total'))
+  assert.ok(statement.includes(`coalesce(fit_score, 0) >= ${STRONG_FIT}) AS strong_fit`))
 })
 
 test('mutations validate job keys and booleans and only touch the caller rows', () => {
@@ -153,5 +158,93 @@ test('fit score uses the weights and "For you" threshold the UI shows', () => {
   const { statement } = buildStatement('jobs', {}, USER)
   const sum = FIT_PARTS.map(part => `${part.weight} * ${part.key}`).join(' + ')
   assert.ok(statement.includes(`CAST(round(100 * (${sum})) AS INT) AS fit_score`))
-  assert.ok(statement.includes(`fit_score >= ${MATCH_MIN_FIT})`))
+  assert.ok(statement.includes(`(role_match AND fit_score >= ${MATCH_MIN_FIT} AND NOT above_experience)`))
+})
+
+test('role fit: your roles first, then embedding similarity, with the category fallback before the pipeline ran', () => {
+  const { statement } = buildStatement('jobs', {}, USER)
+  assert.ok(statement.includes('FROM ops.role_similarity s\n    JOIN profile p ON array_contains(p.roles, s.role_a)'))
+  // the 2nd role keeps its 0.95 rank weight on related roles: 0.85 * clamp((sim - 0.75) / 0.11, 0, 1)
+  assert.ok(statement.includes('max(CASE WHEN array_position(p.roles, s.role_a) = 1 THEN 1.0 ELSE 0.95 END\n        * 0.85 * least(1.0, greatest(0.0, (s.sim - 0.75) / 0.11)))'))
+  assert.ok(statement.includes('WHEN role_rank = 1 THEN 1.0\n      WHEN role_rank > 1 THEN 0.95'))
+  assert.ok(statement.includes('WHEN related_ready THEN coalesce(related.score, 0.0)\n      WHEN alternative_is_role THEN 0.5\n      WHEN category_is_role THEN 0.3'))
+  assert.ok(statement.includes('WHEN related_ready THEN coalesce(related.sim >= 0.86, false)\n      ELSE alternative_is_role OR category_is_role'))
+  assert.ok(statement.includes('SELECT count(*) > 0 AS ready'))
+})
+
+test('related-role ramp reaches its full score exactly where a related role starts to match', () => {
+  const { ROLE_SIM_FLOOR, ROLE_SIM_MATCH, ROLE_SIM_SPAN } = FIT_TUNING
+  assert.ok(ROLE_SIM_FLOOR < ROLE_SIM_MATCH && ROLE_SIM_MATCH < 1)
+  assert.equal(ROLE_SIM_SPAN, Number((ROLE_SIM_MATCH - ROLE_SIM_FLOOR).toFixed(2)))
+  // a short literal in the SQL, not 0.10999999999999999
+  assert.ok(String(ROLE_SIM_SPAN).length <= 4)
+})
+
+test('skill fit: rarity-weighted, out of at least 3 skills, neutral for jobs without skills', () => {
+  const { statement } = buildStatement('jobs', {}, USER)
+  assert.ok(statement.includes('FROM ops.skill_stats'))
+  assert.ok(statement.includes('coalesce(try_element_at(si.m, lower(s)), 3)'))
+  assert.ok(statement.includes('greatest(3, size(skill_weights)) / greatest(1, size(skill_weights))'))
+  assert.ok(statement.includes('WHEN NOT has_profile_skills THEN 0.0\n      WHEN no_job_skills THEN 0.3'))
+  assert.ok(statement.includes('least(1.0, aggregate(matched_weights, 0D, (total, ps) -> total + ps.idf) / skill_idf_total)'))
+  // the matched list is still profile labels
+  assert.ok(statement.includes('coalesce(transform(matched_weights, ps -> ps.skill), CAST(array() AS ARRAY<STRING>)) AS fit_matched_skills'))
+})
+
+test('a job with no skills found can be "For you" but never a strong fit', () => {
+  const fit = (role, skills, experience) =>
+    Math.round(100 * (FIT_WEIGHTS.role * role + FIT_WEIGHTS.skills * skills + FIT_WEIGHTS.experience * experience))
+  const { NEUTRAL_SKILLS } = FIT_TUNING
+  // your first role with the best experience score still stays below STRONG_FIT without skill evidence
+  assert.ok(fit(1, NEUTRAL_SKILLS, 1) < STRONG_FIT)
+  // your first role with unknown experience (0.7) is still "For you"
+  assert.ok(fit(1, NEUTRAL_SKILLS, 0.7) >= MATCH_MIN_FIT)
+})
+
+test('experience fit uses both ends of the profile range and the level when years are unknown', () => {
+  const { statement } = buildStatement('jobs', {}, USER)
+  assert.ok(statement.includes('coalesce(j.experience_min_years, CASE j.experience_level'))
+  assert.ok(statement.includes("WHEN 'Senior' THEN 5"))
+  assert.ok(statement.includes('coalesce(j.experience_max_years, j.experience_min_years + 3,'))
+  assert.ok(statement.includes('WHEN exp_min > profile_max_years THEN greatest(0.0, 1.0 - 0.3 * (exp_min - profile_max_years))'))
+  assert.ok(statement.includes('WHEN exp_top < profile_min_years THEN greatest(0.5, 1.0 - 0.15 * (profile_min_years - exp_top))'))
+  // "For you" hides jobs asking for more than 2 years above your maximum
+  assert.ok(statement.includes('coalesce(j.experience_min_years > p.max_years + 2, false) AS above_experience'))
+  assert.ok(statement.includes('AND NOT above_experience'))
+})
+
+test('profile and refs carry preferred cities', () => {
+  assert.ok(buildStatement('profile', {}, USER).statement.includes('preferred_cities'))
+  const refs = buildStatement('refs').statement
+  assert.ok(refs.includes("SELECT 'city', city, max(state), collect_set(lower(alias)) FROM ops.ref_india_locations"))
+  assert.ok(refs.includes("city <> 'India'"))
+})
+
+test('preferred cities: optional, at most 3, names only, checked against the city list in SQL', () => {
+  const base = { target_roles: ['Data Engineer'], skills: ['SQL'] }
+  assert.equal(validateProfile(base).preferred_cities, null)
+  assert.deepEqual(validateProfile({ ...base, preferred_cities: [' Pune ', 'pune', 'Navi Mumbai'] }).preferred_cities, ['Pune', 'Navi Mumbai'])
+  assert.throws(() => validateProfile({ ...base, preferred_cities: ['Pune', 'Delhi', 'Noida', 'Goa'] }), /at most 3/)
+  assert.throws(() => validateProfile({ ...base, preferred_cities: ["Pune'; DROP"] }), /not a city name/)
+  assert.throws(() => validateProfile({ ...base, preferred_cities: 'Pune' }), /must be a list/)
+
+  const saved = buildStatement('saveProfile', { ...base, preferred_cities: ['Bangalore'] }, USER)
+  assert.ok(saved.statement.includes('FROM ops.ref_india_locations'))
+  assert.ok(saved.statement.includes("'Preferred cities: pick Indian cities from the list'"))
+  assert.ok(saved.statement.includes('preferred_cities = coalesce(s.preferred_cities, t.preferred_cities)'))
+  assert.deepEqual(saved.parameters.find(p => p.name === 'preferred_cities'), { name: 'preferred_cities', value: '["Bangalore"]', type: 'STRING' })
+
+  // an older client that does not send cities keeps the saved ones (NULL parameter)
+  const older = buildStatement('saveProfile', base, USER)
+  assert.deepEqual(older.parameters.find(p => p.name === 'preferred_cities'), { name: 'preferred_cities', type: 'STRING' })
+})
+
+test('missing fit tables (before 01_setup) are replaced by empty relations with the same columns', () => {
+  assert.ok(missingPipelineTable('[TABLE_OR_VIEW_NOT_FOUND] The table or view `ops`.`role_similarity` cannot be found.'))
+  assert.ok(!missingPipelineTable('[TABLE_OR_VIEW_NOT_FOUND] The table or view `gold`.`jobs` cannot be found.'))
+  assert.ok(!missingPipelineTable(undefined))
+  const statement = withoutPipelineTables(buildStatement('jobs', {}, USER).statement)
+  assert.ok(!statement.includes('ops.role_similarity') && !statement.includes('ops.skill_stats'))
+  assert.ok(statement.includes('CAST(NULL AS DOUBLE) AS sim WHERE false) s'))
+  assert.ok(statement.includes('CAST(NULL AS DOUBLE) AS idf WHERE false) WHERE skill IS NOT NULL'))
 })

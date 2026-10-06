@@ -1365,6 +1365,12 @@ button.metric:hover {
   border-radius: 0;
 }
 
+/* A failed refresh keeps the last rows below its error */
+.state-block + .jobs-list,
+.state-block + .jobs-grid {
+  margin-top: 12px;
+}
+
 .state-block h3 {
   color: var(--text);
   font-size: 15px;
@@ -1569,6 +1575,13 @@ button.metric:hover {
 
 .drawer-note strong {
   color: var(--text-2);
+}
+
+/* The description arrives a second or more after the drawer opens (it is fetched per job): hold about a short
+   description's height so the Details below don't jump down on screen when it lands */
+.description-placeholder {
+  align-content: start;
+  min-height: 320px;
 }
 
 .drawer-description {

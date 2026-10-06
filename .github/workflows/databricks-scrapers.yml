@@ -1,8 +1,10 @@
 name: Databricks Scrapers
 
+# Upload only: the next LinkedIn-triggered pipeline run ingests these CSVs (Auto Loader picks up every new file).
+# 02:07 / 14:07 UTC stays clear of LinkedIn's 4-hourly slots, so both scrapers usually finish before the next LinkedIn trigger.
 on:
   schedule:
-    - cron: '0 */12 * * *'
+    - cron: '7 2,14 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -50,29 +52,3 @@ jobs:
           supabase-url: ${{ secrets.SUPABASE_URL }}
           databricks-host: ${{ secrets.DATABRICKS_HOST }}
           databricks-token: ${{ secrets.DATABRICKS_TOKEN }}
-
-  databricks-pipeline:
-    # One pipeline run after both scrapers, as long as at least one of them uploaded its CSV
-    needs: [workday, greenhouse]
-    if: ${{ !cancelled() && (needs.workday.result == 'success' || needs.greenhouse.result == 'success') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: Install Python dependencies
-        run: |
-          pip install requests python-dotenv
-
-      - name: Trigger Databricks pipeline job
-        env:
-          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
-          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-        run: |
-          python databricks/jobs/trigger_job.py

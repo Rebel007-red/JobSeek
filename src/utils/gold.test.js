@@ -1,13 +1,15 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { FIT_PARTS, FIT_WEIGHTS, buildTrend, experienceLabel, fitTone, formatDescription, skillBuckets } from './gold.js'
+import { FIT_PARTS, FIT_WEIGHTS, STRONG_FIT, buildTrend, experienceLabel, fitTone, formatDescription, skillBuckets } from './gold.js'
 
 test('fitTone bands scores', () => {
   assert.equal(fitTone(85), 'strong')
   assert.equal(fitTone(55), 'good')
   assert.equal(fitTone(10), 'low')
   assert.equal(fitTone(null), 'none')
+  assert.equal(fitTone(STRONG_FIT), 'strong')
+  assert.equal(fitTone(STRONG_FIT - 1), 'good')
 })
 
 test('experienceLabel reads gold experience columns', () => {

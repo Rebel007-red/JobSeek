@@ -1,0 +1,23 @@
+{
+  "name": "JobSeeker setup",
+  "description": "Unscheduled. Schemas, tables, reference data and the setup marker the JobSeeeker pipeline checks (01_setup). Run it after importing new notebook versions: python databricks/jobs/deploy_job.py --import-notebooks --run-setup",
+  "max_concurrent_runs": 1,
+  "timeout_seconds": 1800,
+  "performance_target": "STANDARD",
+  "parameters": [
+    { "name": "catalog", "default": "{{CATALOG}}" }
+  ],
+  "email_notifications": {
+    "on_failure": ["{{NOTIFY_EMAIL}}"],
+    "no_alert_for_skipped_runs": true
+  },
+  "tasks": [
+    {
+      "task_key": "Setup",
+      "description": "Idempotent schemas, tables, reference data (rewritten only when changed), setup marker",
+      "notebook_task": { "notebook_path": "{{NOTEBOOK_DIR}}/01_setup", "source": "WORKSPACE" },
+      "timeout_seconds": 1800,
+      "max_retries": 0
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 // Rules for roles and skills people type themselves. Shared by the profile editor and the API (netlify/functions/api).
 export const ENTRY_MAX_LENGTH = 60
-// Most roles and skills one profile can have
-export const PROFILE_LIMITS = { roles: 2, skills: 5 }
+// Most roles, skills and preferred cities one profile can have
+export const PROFILE_LIMITS = { roles: 2, skills: 5, cities: 3 }
 
 // Letters, digits and the punctuation real tech names use (C++, C#, .NET, Node.js, CI/CD, A/B Testing).
 // No quotes: role titles end up inside LLM response schemas and SQL literals in the pipeline.

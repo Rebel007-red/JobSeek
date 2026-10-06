@@ -20,7 +20,7 @@ try {
 // ---- persistent cache (localStorage): last result per user + action + params, shown instantly on the next visit ----
 
 const memory = new Map() // key -> { at, rows }
-const inflight = new Map() // key -> Promise<rows>
+const inflight = new Map() // key -> { promise: Promise<rows>, waiters: Set<onWaiting>, waiting }
 
 const userPrefix = () => `${sessionUser()?.id || 'anon'}|`
 
@@ -101,11 +101,19 @@ async function post(body) {
   const token = data?.session?.access_token
   if (!token) throw new Error('Sign in required')
 
-  const response = await fetch(ENDPOINT, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify(body),
-  })
+  let response
+  try {
+    response = await fetch(ENDPOINT, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    })
+  } catch {
+    // fetch() only rejects when the request never got an answer; its own message is just "Failed to fetch"
+    throw new Error(navigator.onLine === false
+      ? 'You are offline. Check your connection and try again.'
+      : 'Could not reach the server. Check your connection and try again.')
+  }
 
   let payload = {}
   try {
@@ -147,17 +155,30 @@ async function query(action, params = {}, { onCached, maxAge = 0, onWaiting, per
   if (cached && maxAge && Date.now() - cached.at < maxAge) return cached.rows
   if (cached) onCached?.(cached.rows)
 
-  if (!inflight.has(key)) {
-    const request = callApi(action, params, { onWaiting })
+  let entry = inflight.get(key)
+  if (!entry) {
+    // Every caller sharing the request hears that the warehouse is starting, not only the first one (in StrictMode
+    // the first caller is the discarded effect run, so the "waking up" state never showed)
+    const waiters = new Set()
+    const notify = () => {
+      entry.waiting = true
+      waiters.forEach(fn => fn())
+    }
+    entry = { waiters, waiting: false }
+    entry.promise = callApi(action, params, { onWaiting: notify })
       .then(payload => {
         const rows = payload.rows || []
         writeCache(key, rows, persist)
         return rows
       })
       .finally(() => inflight.delete(key))
-    inflight.set(key, request)
+    inflight.set(key, entry)
   }
-  return inflight.get(key)
+  if (onWaiting) {
+    entry.waiters.add(onWaiting)
+    if (entry.waiting) onWaiting()
+  }
+  return entry.promise
 }
 
 const MINUTE = 60_000
@@ -194,6 +215,8 @@ export const api = {
   refreshData: () => invalidate([...JOB_VIEWS, 'facets']),
   // When the cached result for this read was fetched (0 = never)
   syncedAt: (action, params) => readCache(keyFor(action, params))?.at || 0,
+  // The cached rows for this read (null = none), for a first render that already shows them
+  cachedRows: (action, params) => readCache(keyFor(action, params))?.rows ?? null,
   setApplied: (jobKey, applied) => write('setApplied', { jobKey, applied }, JOB_VIEWS),
   setHidden: (jobKey, hidden) => write('setHidden', { jobKey, hidden }, JOB_VIEWS),
   restoreHidden: () => write('restoreHidden', {}, JOB_VIEWS),

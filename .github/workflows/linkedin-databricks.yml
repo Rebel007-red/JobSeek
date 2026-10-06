@@ -11,11 +11,17 @@ concurrency:
 
 env:
   TZ: Asia/Kolkata
+  # One search per user role x preferred city (India-wide when a user picked no city), identical searches deduped
+  LINKEDIN_ROLE_TARGET_JOBS: '250'
+  MAX_LINKEDIN_SEARCHES: '90'
+  LINKEDIN_SEARCH_DELAY_SECONDS: '5'
 
 jobs:
   linkedin:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # Worst case ~90 searches x ~95 s (5 s delay + ~10 pagination rounds of ~8 s for 250 cards) = ~140 min, plus
+    # descriptions for unseen jobs only (3 parallel pages, ~1 s per job). Public repo: Actions minutes are free.
+    timeout-minutes: 210
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -26,9 +32,12 @@ jobs:
           scraper: databricks/linkedin.py
           csv-pattern: databricks/output/linkedin*.csv
           artifact-name: linkedin-csv
-          # the scraper also reads the user roles file the pipeline writes to the ops volume
+          # the scraper also reads the user roles and seen job id files the pipeline writes to the ops volume
           scraper-reads-databricks: 'true'
           trigger-pipeline: 'true'
+          # manual dispatches within 3 h of the last pipeline run don't start a second one; scheduled runs always trigger
+          # (cron drift + scrape time can bring two scheduled triggers closer than 3 h)
+          trigger-min-interval-hours: ${{ github.event_name == 'schedule' && '0' || '3' }}
           supabase-anon-key: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           supabase-service-role-key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           supabase-url: ${{ secrets.SUPABASE_URL }}

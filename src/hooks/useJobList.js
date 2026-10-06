@@ -81,7 +81,8 @@ export function useJobList({ filters, scope, sort, tab }) {
     } catch (err) {
       if (!isCurrent()) return
       setError(err.message)
-      if (pageToLoad === 0 && !showedCache) {
+      // A failed refresh of the list on screen (e.g. pull to refresh while offline) keeps its rows under the error
+      if (pageToLoad === 0 && !showedCache && shownQueryRef.current !== queryKey) {
         setJobs([])
         setTotalCount(0)
         setHasMore(false)

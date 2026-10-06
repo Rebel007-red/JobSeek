@@ -29,13 +29,17 @@ inputs:
     description: secrets.DATABRICKS_TOKEN (upload and trigger steps)
     required: true
   scraper-reads-databricks:
-    description: "'true' also gives the scraper the Databricks credentials (linkedin.py reads the user roles file from the ops volume)"
+    description: "'true' also gives the scraper the Databricks credentials (linkedin.py reads the user roles and seen job id files from the ops volume)"
     required: false
     default: 'false'
   trigger-pipeline:
     description: "'true' triggers the Databricks pipeline job after the upload"
     required: false
     default: 'false'
+  trigger-min-interval-hours:
+    description: Skip the trigger when the latest pipeline run started less than N hours ago (0 = never skip)
+    required: false
+    default: '0'
 
 runs:
   using: composite
@@ -99,7 +103,7 @@ runs:
         DATABRICKS_HOST: ${{ inputs.databricks-host }}
         DATABRICKS_TOKEN: ${{ inputs.databricks-token }}
       run: |
-        python databricks/jobs/trigger_job.py
+        python databricks/jobs/trigger_job.py --min-interval-hours "${{ inputs.trigger-min-interval-hours }}"
 
     # always() here covers a failure in any step above, i.e. everything after checkout
     - name: Save CSV artifact

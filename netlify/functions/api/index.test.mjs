@@ -28,8 +28,9 @@ globalThis.fetch = async (url, init = {}) => {
     return user ? Response.json(user) : new Response('{}', { status: 401 })
   }
   if (pathname === '/api/2.0/sql/statements/' && init.method === 'POST') {
-    posts.push(JSON.parse(init.body))
-    return Response.json(nextPost ?? succeeded([]))
+    const body = JSON.parse(init.body)
+    posts.push(body)
+    return Response.json((typeof nextPost === 'function' ? nextPost(body) : nextPost) ?? succeeded([]))
   }
   if (pathname.startsWith('/api/2.0/sql/statements/')) return Response.json(statements.get(pathname.split('/').pop()))
   return new Response('{}', { status: 404 })
@@ -83,5 +84,16 @@ test('reads cached while a write was running are dropped when it finishes', asyn
   await call('token-a', { action: 'poll', statementId: 'stmt-write-0000000002' })
   nextPost = succeeded([['2']])
   assert.deepEqual((await call('token-a', { action: 'hiddenJobs' })).body, { rows: [{ n: 2 }] })
+  nextPost = null
+})
+
+test('before 01_setup has created the fit tables, reads retry with empty stand-ins', async () => {
+  const missing = { status: { state: 'FAILED', error: { message: '[TABLE_OR_VIEW_NOT_FOUND] The table or view `ops`.`skill_stats` cannot be found.' } } }
+  nextPost = body => (body.statement.includes('ops.skill_stats') ? missing : succeeded([['3']]))
+  const before = posts.length
+  assert.deepEqual(await call('token-a', { action: 'summary' }), { status: 200, body: { rows: [{ n: 3 }] } })
+  assert.equal(posts.length, before + 2)
+  const retried = posts.at(-1).statement
+  assert.ok(!retried.includes('ops.role_similarity') && !retried.includes('ops.skill_stats'))
   nextPost = null
 })
