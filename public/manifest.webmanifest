@@ -1,7 +1,7 @@
 {
   "name": "JobSeeker",
   "short_name": "JobSeeker",
-  "description": "Fresh jobs ranked by fit, from your Databricks pipeline",
+  "description": "Fresh jobs ranked by how well they fit you",
   "id": "/",
   "start_url": "/",
   "scope": "/",

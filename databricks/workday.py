@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
 
 from scraper_common import (
+    ScrapeFailed,
     fetch_companies,
     first_text,
     format_calendar_date,
@@ -15,6 +16,8 @@ from scraper_common import (
     goto_settled,
     print_companies,
     relative_text_to_days,
+    scrape_report,
+    short_error,
     write_recent_jobs,
 )
 
@@ -88,10 +91,10 @@ async def read_workday_description(page, job):
 
 
 async def scrape_workday_jobs(workday_url):
-    """Return a list of jobs, or None when the company could not be scraped."""
+    """Return a list of jobs; raises ScrapeFailed with the reason when the company could not be scraped."""
     if not workday_url:
         print("    [WARN] Missing Workday URL")
-        return None
+        raise ScrapeFailed("Missing Workday URL")
 
     jobs = []
     seen = set()
@@ -151,7 +154,7 @@ async def scrape_workday_jobs(workday_url):
             await browser.close()
     except Exception as exc:
         print(f"    [WARN] Failed to fetch Workday URL with Playwright: {exc}")
-        return None
+        raise ScrapeFailed(short_error(exc)) from exc
 
     return jobs
 
@@ -164,20 +167,22 @@ def format_posted_date(posted_date):
     return format_days_ago(days_ago)
 
 
-async def collect_workday_jobs(companies):
+async def collect_workday_jobs(companies, report):
+    """Jobs of every company, with one report outcome per company."""
     collected_jobs = []
-    failed_companies = []
     collected_on = format_calendar_date(date.today())
 
     for company in companies:
         company_name = company.get("name") or "Unknown"
         api_url = company.get("api_url")
-        jobs = await scrape_workday_jobs(api_url)
-        if jobs is None:
-            failed_companies.append(company_name)
+        try:
+            jobs = await scrape_workday_jobs(api_url)
+        except ScrapeFailed as exc:
+            report.outcome(company_name, False, error=str(exc))
             print(f"[COMPANY] {company_name}: failed")
             continue
         print(f"[COMPANY] {company_name}: jobs found {len(jobs)}")
+        report.outcome(company_name, True, jobs_found=len(jobs))
 
         for job in jobs:
             posted_date = job.get("posted_date", "")
@@ -195,32 +200,42 @@ async def collect_workday_jobs(companies):
                 "posted_days": relative_text_to_days(posted_date),
             })
 
-    return collected_jobs, failed_companies
+    return collected_jobs
 
 
 async def main():
-    companies = await fetch_companies("workday", "name,api_url,ats_type,disabled")
-    print_companies(companies, "Workday")
-    if not companies:
-        print("[ERROR] No Workday companies to scrape.")
-        sys.exit(1)
+    # Writes output/workday_report.json on every exit path (sys.exit and crashes included)
+    with scrape_report("workday") as report:
+        companies = await fetch_companies("workday", "name,api_url,ats_type,disabled")
+        print_companies(companies, "Workday")
+        report.totals["companies"] = len(companies)
+        if not companies:
+            print("[ERROR] No Workday companies to scrape.")
+            report.message = "No Workday companies to scrape"
+            sys.exit(1)
 
-    jobs, failed_companies = await collect_workday_jobs(companies)
-    filtered_jobs_dataframe, output_file = await write_recent_jobs(jobs, "Workday", "workday", read_workday_description)
+        jobs = await collect_workday_jobs(companies, report)
+        filtered_jobs_dataframe, output_file = await write_recent_jobs(jobs, "Workday", "workday", read_workday_description)
+        failed_companies = report.failed_names
+        missing_descriptions = int((filtered_jobs_dataframe['description'] == '').sum())
+        report.totals.update(jobs_scraped=len(jobs), jobs_written=len(filtered_jobs_dataframe),
+                             missing_descriptions=missing_descriptions)
 
-    print(
-        f"[SUMMARY] companies={len(companies)} failed={len(failed_companies)} "
-        f"jobs_scraped={len(jobs)} jobs_written={len(filtered_jobs_dataframe)} "
-        f"missing_descriptions={int((filtered_jobs_dataframe['description'] == '').sum())}"
-    )
-    if failed_companies:
-        print(f"[SUMMARY] failed companies: {', '.join(failed_companies)}")
+        print(
+            f"[SUMMARY] companies={len(companies)} failed={len(failed_companies)} "
+            f"jobs_scraped={len(jobs)} jobs_written={len(filtered_jobs_dataframe)} "
+            f"missing_descriptions={missing_descriptions}"
+        )
+        if failed_companies:
+            print(f"[SUMMARY] failed companies: {', '.join(failed_companies)}")
 
-    if not output_file:
-        sys.exit(1)
-    if len(failed_companies) == len(companies):
-        print("[ERROR] All Workday companies failed.")
-        sys.exit(1)
+        report.finish(output_file, None if output_file else "Failed to write the CSV")
+        if not output_file:
+            sys.exit(1)
+        if len(failed_companies) == len(companies):
+            print("[ERROR] All Workday companies failed.")
+            report.message = "All Workday companies failed"
+            sys.exit(1)
 
 
 if __name__ == "__main__":

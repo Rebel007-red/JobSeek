@@ -12,13 +12,14 @@
   --border-strong: #cbd0d8;
   --text: #171a1f;
   --text-2: #495060;
-  --muted: #7a8190;
-  --primary: #4c5bd4;
+  /* Text colours keep 4.5:1 or more on --surface-2, hovered and highlighted rows and their own tints, not only on white */
+  --muted: #626977;
+  --primary: #4150c4;
   --on-primary: #ffffff;
-  --success: #17875a;
-  --warning: #a86f12;
-  --orange: #cf5f0c;
-  --danger: #cc3f39;
+  --success: #0e6643;
+  --warning: #7a5005;
+  --orange: #934104;
+  --danger: #ad2e2a;
   --accent: #7446c9;
   --shadow-sm: 0 1px 2px rgb(16 24 40 / 0.06);
   --shadow-lg: 0 16px 40px rgb(16 24 40 / 0.18);
@@ -50,8 +51,8 @@
     --border-strong: #3a434f;
     --text: #e6e9ee;
     --text-2: #aeb6c2;
-    --muted: #7f8896;
-    --primary: #8c98ff;
+    --muted: #8e97a5; /* 4.5:1 or more on --surface-2 */
+    --primary: #98a3ff;
     --on-primary: #0e1116;
     --success: #43bd80;
     --warning: #d9a73a;
@@ -846,6 +847,26 @@ button.metric:hover {
 
 .updating {
   color: var(--primary);
+}
+
+/* "Updated 2 h ago" (last pipeline publish); sits at the end of the chip row, after the result count if shown */
+.data-freshness {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.result-count + .data-freshness {
+  margin-left: 0;
+}
+
+.result-count + .data-freshness::before {
+  content: '· ';
+}
+
+.data-freshness.stale {
+  color: var(--warning);
 }
 
 /* =========================================================
@@ -2639,13 +2660,13 @@ button.metric:hover {
   }
 
   .segmented button {
-    min-width: 40px;
-    height: 38px;
+    min-width: 44px;
+    height: 44px;
   }
 
   .tab-button,
   .settings-tab {
-    height: 38px;
+    height: 44px;
   }
 
   .metric {
@@ -2668,16 +2689,24 @@ button.metric:hover {
   .compact-button,
   .status-pill,
   .toast button {
-    height: 36px;
+    height: 44px;
   }
 
+  /* The × keeps its size inside the chip; its hit area reaches 44px */
   .skill-chip button {
+    position: relative;
     width: 28px;
     height: 28px;
   }
 
+  .skill-chip button::after {
+    content: "";
+    position: absolute;
+    inset: -8px;
+  }
+
   .range-input {
-    height: 32px;
+    height: 44px;
   }
 
   /* 16px text: iOS zooms into smaller fields on focus and stays zoomed */
@@ -2701,3 +2730,1161 @@ button.metric:hover {
     width: 44px;
   }
 }
+
+/* ==== FEATURES: jobs list (owner: jobs-list) ==== */
+
+/* Visually hidden, still announced (row summaries, labels); shared by every owner */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  border: 0;
+  white-space: nowrap;
+}
+
+/* Row and card state badges: posting closed, expiry, follow-up, duplicate applied, muted, stage, note */
+.job-flags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 200px;
+  overflow: hidden;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flag.warning {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.flag.closed {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.flag.muted {
+  border: 1px dashed var(--border-strong);
+  background: none;
+  color: var(--muted);
+}
+
+.flag.stage.interviewing,
+.flag.stage.offer {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.flag.stage.rejected,
+.flag.stage.withdrawn {
+  color: var(--muted);
+}
+
+.flag.note {
+  padding: 1px 4px;
+  background: none;
+  color: var(--muted);
+}
+
+.flag.note .icon {
+  width: 13px;
+  height: 13px;
+}
+
+/* Remote / Hybrid on the meta line */
+.job-row-meta .mode-tag,
+.job-card-meta .mode-tag {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* "+2 more · Pune, Hyderabad": opens the near-duplicate postings */
+.dup-toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.job-row-meta .dup-toggle::before {
+  content: "·";
+  margin: 0 6px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.dup-toggle:hover {
+  text-decoration: underline;
+}
+
+.dup-toggle.open {
+  color: var(--text-2);
+}
+
+.job-card > .dup-toggle {
+  align-self: flex-start;
+}
+
+/* Postings of an expanded group sit indented under their row */
+.job-row.is-group-child {
+  padding-left: 32px;
+  background: color-mix(in srgb, var(--surface-2) 55%, var(--surface));
+}
+
+.job-row.is-group-child::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 18px;
+  width: 2px;
+  background: var(--border-strong);
+}
+
+.job-card.is-group-child {
+  border-style: dashed;
+}
+
+.job-row.is-closed .job-row-title,
+.job-card.is-closed h3 {
+  color: var(--text-2);
+}
+
+.job-row.is-muted,
+.job-card.is-muted {
+  opacity: 0.85;
+}
+
+/* Bulk selection: the row tint and the checkbox (shown on hover, and on every row while something is selected) */
+.job-row.is-selected,
+.job-card.is-selected {
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+}
+
+.job-card.is-selected {
+  border-color: color-mix(in srgb, var(--primary) 50%, transparent);
+}
+
+.job-actions .select-box {
+  visibility: hidden;
+}
+
+.job-row:hover .select-box,
+.job-card:hover .select-box,
+.job-actions .select-box:focus-visible,
+.job-actions .select-box.is-visible {
+  visibility: visible;
+}
+
+.job-actions .select-box.is-on {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+/* Save for later */
+.job-actions .save-btn.is-saved,
+.job-row .icon-btn.save-btn.is-saved {
+  color: var(--primary);
+}
+
+.job-actions .save-btn.is-dim {
+  opacity: 0.35;
+}
+
+/* Applied tab: stage chips and the CSV export */
+.stage-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 10px;
+}
+
+.stage-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip-count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pill-toggle.active .chip-count {
+  color: inherit;
+}
+
+.export-btn {
+  margin-left: auto;
+}
+
+/* "N hidden by your rules · Show" */
+.pill-toggle.muted-peek {
+  border-style: dashed;
+}
+
+/* Sticky bar while jobs are selected */
+.bulk-bar {
+  position: sticky;
+  bottom: 12px;
+  z-index: 25;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  width: max-content;
+  max-width: 100%;
+  margin: 10px auto 0;
+  padding: 6px 8px 6px 12px;
+  border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--border));
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.bulk-count {
+  margin-right: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The toast steps above the bulk bar */
+.page-shell.has-bulk > .toast {
+  bottom: 72px;
+}
+
+/* "Applied to … ?" after coming back from a posting: a banner under the top bar, not modal */
+.return-prompt {
+  position: fixed;
+  top: calc(var(--header-h) + 8px);
+  left: 50%;
+  z-index: 65;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  width: max-content;
+  max-width: calc(100vw - 20px);
+  padding: 8px 8px 8px 14px;
+  border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--border));
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  font-size: 13px;
+  transform: translateX(-50%);
+  animation: toast-in 0.18s ease-out;
+}
+
+.return-prompt p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.return-prompt-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+/* One-time swipe tip on touch devices */
+.swipe-tip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 4px 4px 4px 12px;
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+  border-radius: var(--radius);
+  background: var(--primary-soft);
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+/* Toast with actions (hide reasons, "Mute <company>") */
+.toast.has-actions {
+  flex-wrap: wrap;
+}
+
+.toast-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.toast .toast-action {
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.toast .toast-action:hover {
+  background: var(--border);
+}
+
+@media (max-width: 720px) {
+  /* 4 tabs + Filters */
+  .bottom-nav {
+    grid-template-columns: repeat(5, 1fr);
+  }
+
+  .page-shell.has-bulk > .toast {
+    bottom: calc(118px + env(safe-area-inset-bottom));
+  }
+
+  .bulk-bar {
+    bottom: calc(64px + env(safe-area-inset-bottom));
+  }
+
+  .job-row.is-group-child {
+    padding-left: 26px;
+  }
+
+  .job-row.is-group-child::before {
+    left: 12px;
+  }
+
+  .export-btn {
+    margin-left: 0;
+  }
+
+  /* Stage chips scroll in one line, like the quick filters */
+  .stage-chips {
+    flex-wrap: nowrap;
+    margin: 0 calc(-1 * var(--gutter-r)) 0 calc(-1 * var(--gutter-l));
+    padding: 0 var(--gutter-r) 0 var(--gutter-l);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .stage-chips::-webkit-scrollbar {
+    display: none;
+  }
+
+  .stage-chips > * {
+    flex: none;
+  }
+
+  .return-prompt {
+    top: calc(var(--header-h) + 6px);
+    width: calc(100vw - 20px);
+  }
+
+  .toast.has-actions {
+    width: calc(100vw - 20px);
+  }
+
+  /* Rows keep the title's room for the bookmark: the posting opens from the drawer (cards keep the link) */
+  .job-row .job-actions a.icon-btn,
+  .job-row .job-actions .icon-btn[aria-label="No link for this job"] {
+    display: none;
+  }
+}
+
+/* Touch screens: no hover, so the checkbox only shows while selecting (it would take the title's room) */
+@media (hover: none) {
+  .job-actions .select-box {
+    display: none;
+  }
+
+  .job-actions .select-box.is-visible {
+    display: inline-grid;
+  }
+
+  /* While selecting, the bar below acts on the jobs: rows show only their checkbox */
+  .is-selecting .job-actions > :not(.select-box) {
+    display: none;
+  }
+
+  .return-prompt kbd {
+    display: none;
+  }
+}
+
+/* A quick chip that cannot apply (aria-disabled, so it stays focusable and its reason is read out) */
+.pill-toggle[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.pill-toggle[aria-disabled="true"]:hover {
+  border-color: var(--border);
+  color: var(--text-2);
+}
+
+@media (pointer: coarse) {
+  .bulk-bar .btn,
+  .bulk-bar .text-button {
+    min-width: 44px;
+    height: 44px;
+  }
+}
+
+/* ==== END FEATURES: jobs list ==== */
+
+/* ==== FEATURES: drawer and fit (owner: drawer-fit) ==== */
+
+/* Status picker (drawer and Applied rows) */
+.status-picker {
+  height: var(--control-h);
+  max-width: 100%;
+  padding: 0 26px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.status-picker.sm {
+  height: 26px;
+  padding: 0 22px 0 6px;
+  font-size: 12px;
+}
+
+.status-picker:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.status-picker.status-saved {
+  border-color: color-mix(in srgb, var(--primary) 40%, transparent);
+  color: var(--primary);
+}
+
+.status-picker.status-applied,
+.status-picker.status-interviewing,
+.status-picker.status-offer {
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
+  color: var(--success);
+}
+
+.status-picker.status-rejected,
+.status-picker.status-withdrawn {
+  color: var(--muted);
+}
+
+/* Badges under the drawer title */
+.drawer-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.drawer-badge {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.drawer-badge.warning {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.drawer-badge.closed {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.drawer-message {
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.drawer-save.is-saved {
+  border-color: color-mix(in srgb, var(--primary) 40%, transparent);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+/* Notices at the top of the body: duplicate applied, closed posting */
+.drawer-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 13px;
+}
+
+.drawer-banner.warning {
+  border-color: color-mix(in srgb, var(--warning) 35%, transparent);
+  background: var(--warning-soft);
+}
+
+.drawer-banner p {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.drawer-banner-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Fit explanations */
+.fit-reason {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.fit-not-for-you {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.fit-feedback {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.fit-feedback > span {
+  margin-right: 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Your application: status, note, follow-up date */
+.application-status-row,
+.note-date-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.application-panel label {
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.application-since,
+.note-status {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.note-status:empty {
+  display: none;
+}
+
+.note-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 12px 0 8px;
+}
+
+.note-label-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.note-counter {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.note-counter.warn {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.application-panel .note-input {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.application-panel .note-date {
+  width: auto;
+}
+
+.note-save {
+  margin-left: auto;
+}
+
+.application-panel .drawer-note,
+.application-panel .form-error {
+  margin: 8px 0 0;
+}
+
+/* Job skills: you have / to learn */
+.skill-groups {
+  display: grid;
+  gap: 10px;
+}
+
+.skill-group h4 {
+  margin-bottom: 4px;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  /* the title block is display: contents here, so the badges join the header grid */
+  .drawer-badges {
+    grid-column: 1 / -1;
+    padding-right: 10px;
+  }
+}
+
+@media (pointer: coarse) {
+  .status-picker.sm {
+    height: 44px;
+  }
+
+  .application-panel .note-input,
+  .status-picker {
+    font-size: 16px;
+  }
+}
+
+/* ==== END FEATURES: drawer and fit ==== */
+
+/* ==== FEATURES: settings and admin (owner: settings-admin) ==== */
+
+/* Tabs: sentence-case labels ("Mute rules"; overrides the capitalize of .settings-tab), and the row scrolls sideways
+   when the 7 admin tabs do not fit */
+.settings-tab {
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.settings-tabs {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.settings-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.settings-tabpanel:focus-visible {
+  outline-offset: 4px;
+  border-radius: var(--radius);
+}
+
+ul.settings-list,
+ol.settings-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* "Sign out?" / "Remove?" / "Restore N hidden jobs?" questions: the text, then the answer buttons */
+.inline-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.inline-confirm > span {
+  max-width: 320px;
+}
+
+.secondary-button.danger-button {
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  color: var(--danger);
+}
+
+.secondary-button.danger-button:hover:not(:disabled) {
+  background: var(--danger-soft);
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+}
+
+/* Sign out in the top bar: the question opens under the button */
+.signout {
+  position: relative;
+  display: inline-flex;
+}
+
+.signout-icon .signout-confirm {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 70;
+  flex-wrap: nowrap;
+  padding: 8px 8px 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.account-actions {
+  justify-content: flex-start;
+}
+
+/* Search boxes of the company and hidden lists */
+.settings-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.settings-search > .icon {
+  position: absolute;
+  left: 10px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.settings-search .settings-input {
+  padding-left: 32px;
+}
+
+.settings-list-card .settings-search {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-list-card .settings-search > .icon {
+  left: 24px;
+}
+
+.settings-head-warn {
+  color: var(--danger);
+}
+
+/* Health and run badges (a text label plus a tone) */
+.company-health.danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.company-health.running {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.settings-chip.not-scraped {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.settings-row .text-button {
+  height: 28px;
+}
+
+/* Inline edit of a company row */
+.company-edit-row {
+  flex-wrap: wrap;
+  align-items: flex-end;
+  background: var(--surface-2);
+}
+
+.company-edit-fields {
+  display: grid;
+  flex: 1 1 360px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.company-edit-fields .settings-inline-error {
+  grid-column: 1 / -1;
+}
+
+/* Access list */
+.access-list {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.access-list .settings-company-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.access-you {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.hidden-card .hide-reason {
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+/* Checkbox setting: the box, then its label and help */
+.settings-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.settings-check input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  accent-color: var(--primary);
+}
+
+.settings-check label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-check small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Mute rules: levels as toggle pills holding a checkbox */
+.mute-levels {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.mute-levels legend {
+  margin-bottom: 4px;
+  padding: 0;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mute-level-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mute-level-list .pill-toggle {
+  cursor: pointer;
+}
+
+.mute-level-list .pill-toggle:focus-within {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.mute-level-list input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--primary);
+}
+
+.mute-level-list .muted-text {
+  font-size: 11px;
+}
+
+/* System tab */
+.system-meter-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.system-meter {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--surface-2);
+}
+
+.system-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--primary);
+}
+
+.system-meter.warning > span {
+  background: var(--warning);
+}
+
+.system-counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.system-counts > div {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.system-counts dt {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.system-counts dd {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.system-schedule {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.system-schedule li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.system-schedule strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.system-list {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.system-list .settings-company-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  white-space: normal;
+}
+
+.system-panel .settings-company-meta span {
+  max-width: none;
+  white-space: normal;
+}
+
+.system-panel .settings-company-meta > span + span::before {
+  content: "·";
+  margin-right: 6px;
+  opacity: 0.7;
+}
+
+.system-message {
+  margin-top: 4px;
+  color: var(--text-2);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+/* The last scrapes of a source, newest first: one dot each; the label is in the title and for screen readers */
+.system-history {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.system-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.system-dot.success {
+  background: var(--success);
+}
+
+.system-dot.warning {
+  background: var(--warning);
+}
+
+.system-dot.danger {
+  background: var(--danger);
+}
+
+.system-linkedin {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.system-linkedin summary {
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.system-dropped {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.system-dropped li {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.system-run .settings-row-main {
+  flex: 1;
+}
+
+.system-tasks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.system-task {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.system-task > span {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.system-task.success > span {
+  color: var(--success);
+}
+
+.system-task.warning > span {
+  color: var(--warning);
+}
+
+.system-task.danger {
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+}
+
+.system-task.danger > span {
+  color: var(--danger);
+}
+
+@media (max-width: 720px) {
+  .settings-header > .settings-tabs {
+    width: 100%;
+  }
+
+  .settings-row.system-row {
+    align-items: flex-start;
+  }
+
+  /* A row asking "Remove?" puts the question on its own line */
+  .settings-row:has(.inline-confirm) {
+    flex-wrap: wrap;
+  }
+
+  .settings-row .inline-confirm {
+    width: 100%;
+  }
+}
+
+@media (pointer: coarse) {
+  .settings-check input,
+  .mute-level-list input {
+    width: 20px;
+    height: 20px;
+  }
+
+  .settings-row .text-button {
+    min-width: 44px;
+    height: 44px;
+  }
+
+  /* The label is the checkbox's finger-sized target (the layout keeps its height) */
+  .settings-check label {
+    margin: -12px 0;
+    padding: 12px 0;
+  }
+}
+
+/* ==== END FEATURES: settings and admin ==== */

@@ -3,18 +3,21 @@ import html
 import re
 import sys
 from datetime import date, datetime
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import aiohttp
 from bs4 import BeautifulSoup
 
 from scraper_common import (
+	ScrapeFailed,
 	fetch_companies,
 	first_text,
 	format_calendar_date,
 	goto_settled,
 	print_companies,
 	relative_text_to_days,
+	scrape_report,
+	short_error,
 	write_recent_jobs,
 )
 
@@ -30,29 +33,49 @@ DESCRIPTION_SELECTORS = [
 ]
 
 
-def normalize_board_url(raw_value):
-	value = (raw_value or "").strip().rstrip("/")
+BOARD_TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,99}")
+
+
+def board_token(value):
+	"""Greenhouse board token of a bare token ("stripe"), a board URL (job-boards.greenhouse.io/stripe[/jobs/<id>],
+	boards.greenhouse.io/stripe, the embed link with ?for=stripe) or an API URL (boards-api.greenhouse.io/v1/boards/stripe/jobs);
+	None when the value is none of these. Settings > Companies (CompaniesPanel) derives the token with the same rules.
+	"""
+	value = (value or "").strip()
 	if not value:
-		return ""
+		return None
+	if BOARD_TOKEN_RE.fullmatch(value.strip("/")):
+		return value.strip("/")
 
-	if value.startswith("http://") or value.startswith("https://"):
-		return value
+	parsed = urlparse(value if "://" in value else f"https://{value.lstrip('/')}")
+	host = (parsed.hostname or "").lower()
+	if host != "greenhouse.io" and not host.endswith(".greenhouse.io"):
+		return None
+	parts = [part for part in parsed.path.split("/") if part]
+	if parts and parts[0].lower() == "v1":
+		# API URL: the token follows /v1/boards/ (the last segment is "jobs")
+		token = parts[2] if len(parts) >= 3 and parts[1].lower() == "boards" else ""
+	elif parts and parts[0].lower() == "embed":
+		token = parse_qs(parsed.query).get("for", [""])[0]
+	else:
+		token = parts[0] if parts else ""
+	return token if BOARD_TOKEN_RE.fullmatch(token) else None
 
-	if "greenhouse.io" in value:
-		return f"https://{value.lstrip('/')}"
 
-	if value.startswith("/"):
-		return f"https://job-boards.greenhouse.io{value}"
-
-	return f"https://job-boards.greenhouse.io/{value.lstrip('/')}"
+def board_api_url(token):
+	return f"https://boards-api.greenhouse.io/v1/boards/{token}/jobs?content=true"
 
 
-def board_api_url(board_url):
-	parsed = urlparse(board_url)
-	board_name = parsed.path.strip("/").split("/")[-1]
-	if not board_name:
-		raise ValueError(f"Unable to derive Greenhouse board slug from {board_url}")
-	return f"https://boards-api.greenhouse.io/v1/boards/{board_name}/jobs?content=true"
+def company_board_token(company):
+	"""Board token of a companies row (slug wins over api_url); raises ScrapeFailed when neither gives one."""
+	values = [(company.get(column) or "").strip() for column in ("slug", "api_url")]
+	if not any(values):
+		raise ScrapeFailed("Missing Greenhouse board URL")
+	for value in values:
+		token = board_token(value)
+		if token:
+			return token
+	raise ScrapeFailed("Unable to derive Greenhouse board")
 
 
 def extract_greenhouse_job_id(job_url, fallback_value=""):
@@ -139,22 +162,27 @@ def parse_jobs_from_api(payload, board_url):
 
 
 async def fetch_board_jobs(session, api_url, attempts=3):
-	"""Return the board payload, or None after non-retryable errors or exhausted retries."""
+	"""Return the board payload; raises ScrapeFailed (e.g. "HTTP 404") after a non-retryable error or exhausted retries."""
+	error = "failed"
 	for attempt in range(1, attempts + 1):
 		try:
 			async with session.get(api_url, timeout=aiohttp.ClientTimeout(total=30)) as response:
 				if response.status == 200:
 					return await response.json()
 				print(f"    [WARN] Greenhouse API returned {response.status} for {api_url} (attempt {attempt}/{attempts})")
+				error = f"HTTP {response.status}"
 				if response.status < 500 and response.status != 429:
-					return None
+					raise ScrapeFailed(error)
+		except ScrapeFailed:
+			raise
 		except Exception as exc:
 			print(f"    [WARN] Greenhouse API request failed for {api_url} (attempt {attempt}/{attempts}): {exc}")
+			error = short_error(exc) if str(exc).strip() else type(exc).__name__
 
 		if attempt < attempts:
 			await asyncio.sleep(2 ** attempt)
 
-	return None
+	raise ScrapeFailed(error)
 
 
 async def read_greenhouse_description(page, job):
@@ -168,36 +196,33 @@ async def read_greenhouse_description(page, job):
 	return await first_text(page, "body")
 
 
-async def collect_greenhouse_jobs(companies):
+async def collect_greenhouse_jobs(companies, report):
+	"""Jobs of every company, with one report outcome per company."""
 	collected_jobs = []
-	failed_companies = []
 	collected_on = format_calendar_date(date.today())
 
 	async with aiohttp.ClientSession() as session:
 		for company in companies:
 			company_name = company.get("name") or "Unknown"
-			board_url = company.get("slug") or company.get("greenhouse_slug") or company.get("api_url") or company.get("board_url") or ""
-			board_url = normalize_board_url(board_url)
-			if not board_url:
-				print(f"    [WARN] Missing Greenhouse board URL for {company_name}")
-				failed_companies.append(company_name)
-				continue
-
 			try:
-				api_url = board_api_url(board_url)
-			except ValueError as exc:
-				print(f"    [WARN] {exc}")
-				failed_companies.append(company_name)
+				token = company_board_token(company)
+			except ScrapeFailed as exc:
+				print(f"    [WARN] {exc} for {company_name}")
+				report.outcome(company_name, False, error=str(exc))
 				continue
 
-			payload = await fetch_board_jobs(session, api_url)
-			if payload is None:
+			# The API URL is always built from the token
+			board_url = f"https://job-boards.greenhouse.io/{token}"
+			try:
+				payload = await fetch_board_jobs(session, board_api_url(token))
+			except ScrapeFailed as exc:
 				print(f"[COMPANY] {company_name}: failed")
-				failed_companies.append(company_name)
+				report.outcome(company_name, False, error=str(exc))
 				continue
 
 			jobs = parse_jobs_from_api(payload, board_url)
 			print(f"[COMPANY] {company_name}: jobs found {len(jobs)}")
+			report.outcome(company_name, True, jobs_found=len(jobs))
 			for job in jobs:
 				posted_date = job.get("posted_date", "")
 				collected_jobs.append({
@@ -214,32 +239,42 @@ async def collect_greenhouse_jobs(companies):
 					"posted_days": posted_iso_to_days(posted_date),
 				})
 
-	return collected_jobs, failed_companies
+	return collected_jobs
 
 
 async def main():
-	companies = await fetch_companies("greenhouse", "name,ats_type,disabled,slug")
-	print_companies(companies, "Greenhouse")
-	if not companies:
-		print("[ERROR] No Greenhouse companies to scrape.")
-		sys.exit(1)
+	# Writes output/greenhouse_report.json on every exit path (sys.exit and crashes included)
+	with scrape_report("greenhouse") as report:
+		companies = await fetch_companies("greenhouse", "name,ats_type,disabled,slug,api_url")
+		print_companies(companies, "Greenhouse")
+		report.totals["companies"] = len(companies)
+		if not companies:
+			print("[ERROR] No Greenhouse companies to scrape.")
+			report.message = "No Greenhouse companies to scrape"
+			sys.exit(1)
 
-	jobs, failed_companies = await collect_greenhouse_jobs(companies)
-	filtered_jobs_dataframe, output_file = await write_recent_jobs(jobs, "Greenhouse", "greenhouse", read_greenhouse_description)
+		jobs = await collect_greenhouse_jobs(companies, report)
+		filtered_jobs_dataframe, output_file = await write_recent_jobs(jobs, "Greenhouse", "greenhouse", read_greenhouse_description)
+		failed_companies = report.failed_names
+		missing_descriptions = int((filtered_jobs_dataframe['description'] == '').sum())
+		report.totals.update(jobs_scraped=len(jobs), jobs_written=len(filtered_jobs_dataframe),
+		                     missing_descriptions=missing_descriptions)
 
-	print(
-		f"[SUMMARY] companies={len(companies)} failed={len(failed_companies)} "
-		f"jobs_scraped={len(jobs)} jobs_written={len(filtered_jobs_dataframe)} "
-		f"missing_descriptions={int((filtered_jobs_dataframe['description'] == '').sum())}"
-	)
-	if failed_companies:
-		print(f"[SUMMARY] failed companies: {', '.join(failed_companies)}")
+		print(
+			f"[SUMMARY] companies={len(companies)} failed={len(failed_companies)} "
+			f"jobs_scraped={len(jobs)} jobs_written={len(filtered_jobs_dataframe)} "
+			f"missing_descriptions={missing_descriptions}"
+		)
+		if failed_companies:
+			print(f"[SUMMARY] failed companies: {', '.join(failed_companies)}")
 
-	if not output_file:
-		sys.exit(1)
-	if len(failed_companies) == len(companies):
-		print("[ERROR] All Greenhouse companies failed.")
-		sys.exit(1)
+		report.finish(output_file, None if output_file else "Failed to write the CSV")
+		if not output_file:
+			sys.exit(1)
+		if len(failed_companies) == len(companies):
+			print("[ERROR] All Greenhouse companies failed.")
+			report.message = "All Greenhouse companies failed"
+			sys.exit(1)
 
 
 if __name__ == "__main__":

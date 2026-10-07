@@ -1,5 +1,7 @@
 name: LinkedIn Databricks Scraper
 
+# scrape + upload -> send app user data to Databricks -> run the pipeline and wait -> publish the results to Supabase.
+# Databricks never gets a Supabase credential: user data and results move as files in the ops volume, carried here.
 on:
   schedule:
     - cron: '0 */4 * * *'
@@ -26,7 +28,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Scrape LinkedIn jobs to Databricks volume and trigger the pipeline
+      - name: Scrape LinkedIn jobs to Databricks volume
         uses: ./.github/actions/scrape-to-volume
         with:
           scraper: databricks/linkedin.py
@@ -34,12 +36,81 @@ jobs:
           artifact-name: linkedin-csv
           # the scraper also reads the user roles and seen job id files the pipeline writes to the ops volume
           scraper-reads-databricks: 'true'
-          trigger-pipeline: 'true'
-          # manual dispatches within 3 h of the last pipeline run don't start a second one; scheduled runs always trigger
-          # (cron drift + scrape time can bring two scheduled triggers closer than 3 h)
-          trigger-min-interval-hours: ${{ github.event_name == 'schedule' && '0' || '3' }}
           supabase-anon-key: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           supabase-service-role-key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           supabase-url: ${{ secrets.SUPABASE_URL }}
           databricks-host: ${{ secrets.DATABRICKS_HOST }}
           databricks-token: ${{ secrets.DATABRICKS_TOKEN }}
+
+  pipeline:
+    needs: linkedin
+    runs-on: ubuntu-latest
+    # The run waits up to 100 min (a run queued behind a running one included); a longer run ends as a warning and the
+    # hourly publish-supabase workflow publishes it once it finishes
+    timeout-minutes: 120
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+          cache-dependency-path: databricks/jobs/requirements.txt
+
+      - name: Install Python dependencies
+        run: pip install -r databricks/jobs/requirements.txt
+
+      # A Supabase outage must not stop ingestion: the run then uses the previous user_data.json
+      - name: Send app user data to Databricks
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: python databricks/jobs/sync_user_data.py
+
+      # Manual dispatches within 3 h of the last pipeline run don't start a second one (they wait for an active run, if
+      # any); scheduled runs always trigger (cron drift + scrape time can bring two scheduled triggers closer than 3 h)
+      - name: Run the Databricks pipeline and wait
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: >-
+          python databricks/jobs/trigger_job.py
+          --min-interval-hours "${{ github.event_name == 'schedule' && '0' || '3' }}"
+          --wait --wait-timeout-minutes 100
+
+  publish:
+    needs: pipeline
+    # Also after a failed run: the publisher picks the newest complete publish directory (a failed run writes none, so
+    # this is a quick no-op then, or it catches up on an earlier run whose publish failed)
+    if: always() && (needs.pipeline.result == 'success' || needs.pipeline.result == 'failure')
+    runs-on: ubuntu-latest
+    concurrency:
+      group: supabase-publish
+      cancel-in-progress: false
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+          cache-dependency-path: databricks/jobs/requirements.txt
+
+      - name: Install Python dependencies
+        run: pip install -r databricks/jobs/requirements.txt
+
+      - name: Publish the pipeline results to Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: python databricks/jobs/publish_to_supabase.py

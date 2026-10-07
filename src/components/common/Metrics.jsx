@@ -87,6 +87,7 @@ function Sparkline({ days }) {
 }
 
 // items: [{ key, label, value, title, tone, active }] rendered as tappable counters, plus the found-per-day trend.
+// value null = not loaded yet ('–', so a 0 never flashes before the real count).
 export function Metrics({ items, trend = [], onSelect }) {
   return (
     <div className="metrics" aria-label="Summary">
@@ -99,7 +100,7 @@ export function Metrics({ items, trend = [], onSelect }) {
           title={item.title}
           aria-pressed={item.active}
         >
-          <strong>{item.value}</strong>
+          <strong>{item.value ?? '–'}</strong>
           <span>{item.label}</span>
         </button>
       ))}

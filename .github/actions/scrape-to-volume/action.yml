@@ -1,6 +1,10 @@
 name: Scrape to Databricks volume
 description: Run one databricks/ scraper, upload its CSV to the Databricks landing volume and save it as an artifact.
 
+# Scrape + upload only (plus the scrape report to Supabase). The LinkedIn workflow starts the pipeline in its own job
+# (sync user data, run and wait, publish to Supabase); the Workday / Greenhouse uploads are ingested by the next
+# pipeline run.
+
 # Composite actions can't read the secrets context, so the calling step passes secrets in as inputs.
 # Each secret is handed only to the step that used it before this action existed.
 inputs:
@@ -17,29 +21,21 @@ inputs:
     description: secrets.VITE_SUPABASE_ANON_KEY (scraper step)
     required: true
   supabase-service-role-key:
-    description: secrets.SUPABASE_SERVICE_ROLE_KEY (scraper step)
+    description: secrets.SUPABASE_SERVICE_ROLE_KEY (scraper and record steps)
     required: true
   supabase-url:
-    description: secrets.SUPABASE_URL (scraper step)
+    description: secrets.SUPABASE_URL (scraper and record steps)
     required: true
   databricks-host:
-    description: secrets.DATABRICKS_HOST (upload and trigger steps)
+    description: secrets.DATABRICKS_HOST (upload step)
     required: true
   databricks-token:
-    description: secrets.DATABRICKS_TOKEN (upload and trigger steps)
+    description: secrets.DATABRICKS_TOKEN (upload step)
     required: true
   scraper-reads-databricks:
     description: "'true' also gives the scraper the Databricks credentials (linkedin.py reads the user roles and seen job id files from the ops volume)"
     required: false
     default: 'false'
-  trigger-pipeline:
-    description: "'true' triggers the Databricks pipeline job after the upload"
-    required: false
-    default: 'false'
-  trigger-min-interval-hours:
-    description: Skip the trigger when the latest pipeline run started less than N hours ago (0 = never skip)
-    required: false
-    default: '0'
 
 runs:
   using: composite
@@ -96,15 +92,6 @@ runs:
           --volume /Volumes/jobseeker/default/scrapes \
           --pattern "${{ inputs.csv-pattern }}"
 
-    - name: Trigger Databricks pipeline job
-      if: inputs.trigger-pipeline == 'true'
-      shell: bash
-      env:
-        DATABRICKS_HOST: ${{ inputs.databricks-host }}
-        DATABRICKS_TOKEN: ${{ inputs.databricks-token }}
-      run: |
-        python databricks/jobs/trigger_job.py --min-interval-hours "${{ inputs.trigger-min-interval-hours }}"
-
     # always() here covers a failure in any step above, i.e. everything after checkout
     - name: Save CSV artifact
       if: always()
@@ -114,3 +101,15 @@ runs:
         path: ${{ inputs.csv-pattern }}
         if-no-files-found: ignore
         retention-days: 7
+
+    # Run summary for Settings > System and the company health badges (app.scrape_runs / app.scrape_companies). Also
+    # after a failed or crashed scrape: without a report file it records the run as crashed. Never fails the job.
+    - name: Record scrape report
+      if: always()
+      continue-on-error: true
+      shell: bash
+      env:
+        SUPABASE_URL: ${{ inputs.supabase-url }}
+        SUPABASE_SERVICE_ROLE_KEY: ${{ inputs.supabase-service-role-key }}
+      run: |
+        python databricks/jobs/record_scrape_report.py --scraper "${{ inputs.scraper }}"

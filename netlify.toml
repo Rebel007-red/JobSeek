@@ -2,13 +2,8 @@
   command   = "npm run build"
   publish   = "dist"
   # Free plan: every production deploy costs 15 of the 300 monthly credits. Only build when something the
-  # site depends on changed (scraper, Databricks and workflow commits are skipped). Exit 0 = skip.
-  ignore    = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- src/ public/ netlify/ index.html package.json package-lock.json vite.config.js netlify.toml"
-
-# netlify/functions/api -> /.netlify/functions/api (Databricks proxy; set DATABRICKS_* env vars in Netlify)
-[functions]
-  directory    = "netlify/functions"
-  node_bundler = "esbuild"
+  # site depends on changed (scraper, Databricks, Supabase SQL and workflow commits are skipped). Exit 0 = skip.
+  ignore    = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- src/ public/ index.html package.json package-lock.json vite.config.js netlify.toml"
 
 [[redirects]]
   from   = "/*"

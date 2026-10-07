@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import { api } from '../../lib/api'
 import { ChipInput } from '../common/ChipInput'
-import { FIT_PARTS, MATCH_MIN_FIT } from '../../utils/gold'
-import { PROFILE_LIMITS, entryProblem } from '../../utils/entries'
+import { EXPERIENCE_HIDE_GAP, FIT_PARTS, MATCH_MIN_FIT } from '../../utils/gold'
+import { PROFILE_LIMITS, alsoSkillProblem, entryProblem } from '../../utils/entries'
 
 // Same limits as the API
-const { roles: MAX_ROLES, skills: MAX_SKILLS, cities: MAX_CITIES } = PROFILE_LIMITS
+const { roles: MAX_ROLES, skills: MAX_SKILLS, cities: MAX_CITIES, alsoSkills: MAX_ALSO_SKILLS } = PROFILE_LIMITS
 const NOT_SUPPORTED = 'is outside the supported roles (data, full stack / backend, DevOps and cloud)'
 const CHECK_PENDING = 'custom · checked on the next pipeline run'
 
@@ -41,6 +41,7 @@ function toForm(profile) {
   return {
     target_roles: profile?.target_roles || [],
     skills: profile?.skills || [],
+    also_skills: profile?.also_skills || [],
     min_years: profile?.min_years ?? '',
     max_years: profile?.max_years ?? '',
     preferred_cities: profile?.preferred_cities || [],
@@ -54,6 +55,8 @@ export function ProfileEditor({ profile, onSave, onboarding = false }) {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
   const [dirty, setDirty] = useState(false)
+  const minYearsId = useId()
+  const maxYearsId = useId()
 
   useEffect(() => {
     api.refs().then(setRefs).catch(err => console.error('Failed to load role/skill lists:', err))
@@ -91,6 +94,18 @@ export function ProfileEditor({ profile, onSave, onboarding = false }) {
     const value = lookups.skills.get(text.toLowerCase())
     return value ? { value } : null
   }
+  // A skill is either core or also-know, never both (the server refuses an also-know skill that is a core skill)
+  const sameSkill = (list, value) => list.some(item => item.toLowerCase() === value.toLowerCase())
+  const resolveCoreSkill = (text) => {
+    const known = resolveSkill(text)
+    if (sameSkill(form.also_skills, known?.value || text)) return { blocked: `"${known?.value || text}" is already in Also know. Remove it there first.` }
+    return known
+  }
+  const resolveAlsoSkill = (text) => {
+    const known = resolveSkill(text)
+    if (sameSkill(form.skills, known?.value || text)) return { blocked: 'Already a core skill' }
+    return known
+  }
   const skillNote = (value) => (!refs || lookups.refSkills.has(value.toLowerCase()) ? '' : 'custom')
   // Cities come only from the list (no custom entries)
   const resolveCity = (text) => {
@@ -117,6 +132,7 @@ export function ProfileEditor({ profile, onSave, onboarding = false }) {
       await onSave({
         target_roles: form.target_roles,
         skills: form.skills,
+        also_skills: form.also_skills,
         min_years: form.min_years === '' ? null : Number(form.min_years),
         max_years: form.max_years === '' ? null : Number(form.max_years),
         preferred_cities: form.preferred_cities,
@@ -141,8 +157,10 @@ export function ProfileEditor({ profile, onSave, onboarding = false }) {
       <p className="settings-copy">
         {onboarding && 'Pick what you are looking for to see your jobs. '}
         Jobs are matched to your roles and scored 0–100 ({weights}). <strong>For you</strong> shows jobs in your roles
-        (or closely related ones) with fit {MATCH_MIN_FIT}+, leaving out jobs that ask for over 2 years more than your
-        maximum; <strong>Show all</strong> lists every job by fit.
+        (or closely related ones) with fit {MATCH_MIN_FIT}+, leaving out jobs that ask for over {EXPERIENCE_HIDE_GAP} years
+        more than your maximum (stated, or implied by a level such as Lead/Manager); <strong>Show all</strong> lists
+        every job by fit. Core skills count fully and Also know skills half as much, so they lift a job's score without
+        outweighing your core skills.
       </p>
 
       <div className="settings-form-grid">
@@ -161,11 +179,11 @@ export function ProfileEditor({ profile, onSave, onboarding = false }) {
         />
 
         <ChipInput
-          label={`Main skills (1–${MAX_SKILLS})`}
+          label={`Core skills (1–${MAX_SKILLS}, full weight)`}
           values={form.skills}
           onChange={value => update('skills', value)}
           suggestions={skillOptions}
-          resolve={resolveSkill}
+          resolve={resolveCoreSkill}
           validate={entryProblem}
           noteFor={skillNote}
           placeholder="e.g. PySpark, Azure, SQL"
@@ -173,13 +191,26 @@ export function ProfileEditor({ profile, onSave, onboarding = false }) {
           maxItems={MAX_SKILLS}
         />
 
+        <ChipInput
+          label={`Also know (up to ${MAX_ALSO_SKILLS}, half weight)`}
+          values={form.also_skills}
+          onChange={value => update('also_skills', value)}
+          suggestions={skillOptions}
+          resolve={resolveAlsoSkill}
+          validate={text => alsoSkillProblem(text, form.skills)}
+          noteFor={skillNote}
+          placeholder="e.g. Kafka, Docker"
+          help="Skills you can work with but would not lead on. A job asking for them scores higher, by half as much as a core skill, and they show as skills you have instead of missing ones."
+          maxItems={MAX_ALSO_SKILLS}
+        />
+
         <div className="settings-field">
-          <label>Experience from (years)</label>
-          <input type="number" min="0" max="40" value={form.min_years} onChange={e => update('min_years', e.target.value)} className="settings-input" />
+          <label htmlFor={minYearsId}>Experience from (years)</label>
+          <input id={minYearsId} type="number" min="0" max="40" value={form.min_years} onChange={e => update('min_years', e.target.value)} className="settings-input" />
         </div>
         <div className="settings-field">
-          <label>Experience to (years)</label>
-          <input type="number" min="0" max="40" value={form.max_years} onChange={e => update('max_years', e.target.value)} className="settings-input" />
+          <label htmlFor={maxYearsId}>Experience to (years)</label>
+          <input id={maxYearsId} type="number" min="0" max="40" value={form.max_years} onChange={e => update('max_years', e.target.value)} className="settings-input" />
         </div>
 
         <ChipInput

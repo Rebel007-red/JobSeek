@@ -15,7 +15,6 @@ export function useJobList({ filters, scope, sort, tab }) {
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [waiting, setWaiting] = useState(false)
   const [error, setError] = useState('')
   const [listKey, setListKey] = useState(0)
   const requestRef = useRef(0) // bumped by every first-page load; older responses are ignored
@@ -52,7 +51,8 @@ export function useJobList({ filters, scope, sort, tab }) {
     setError('')
     try {
       const rows = await api.jobs(
-        { ...filters, scope, sort, tab, limit: PAGE_SIZE, offset },
+        // The muted view lists every posting (not groups), so it matches the "N hidden by your rules" count
+        { ...filters, scope, sort, tab, limit: PAGE_SIZE, offset, ...(filters.muteView === 'only' ? { collapse: false } : {}) },
         {
           // Show the last known first page immediately; the fresh result replaces it when it arrives
           onCached: pageToLoad === 0
@@ -64,7 +64,6 @@ export function useJobList({ filters, scope, sort, tab }) {
               setRefreshing(true)
             }
             : undefined,
-          onWaiting: () => { if (isCurrent()) setWaiting(true) },
         },
       )
       if (!isCurrent()) return
@@ -92,7 +91,6 @@ export function useJobList({ filters, scope, sort, tab }) {
         busyRef.current = false
         if (!appended) setLoading(false)
         setRefreshing(false)
-        setWaiting(false)
       }
     }
   }, [filters, scope, sort, tab])
@@ -146,7 +144,6 @@ export function useJobList({ filters, scope, sort, tab }) {
     hasMore,
     loading,
     refreshing,
-    waiting,
     error,
     reload,
     loadMore,

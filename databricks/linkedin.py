@@ -10,6 +10,7 @@ from playwright.async_api import async_playwright
 
 from scraper_common import (
 	CRITERIA_COLUMNS,
+	ScrapeFailed,
 	fetch_companies,
 	fetch_linkedin_seen_ids,
 	fetch_user_searches,
@@ -17,6 +18,8 @@ from scraper_common import (
 	format_calendar_date,
 	format_days_ago,
 	print_companies,
+	scrape_report,
+	short_error,
 	write_recent_jobs,
 )
 
@@ -51,7 +54,10 @@ POSTED_WITHIN = "r43200"
 
 
 def build_searches(companies, user_searches):
-	"""Companies rows (admin-managed keywords, India-wide) plus one search per user (role, city) not already covered, capped."""
+	"""Companies rows (admin-managed keywords, India-wide) plus one search per user (role, city) not already covered, capped.
+
+	Returns (searches, dropped): dropped are the names of the searches cut by MAX_LINKEDIN_SEARCHES.
+	"""
 	covered = {(company.get("api_url") or "").strip().lower() for company in companies}
 	role_searches = [
 		{
@@ -64,11 +70,12 @@ def build_searches(companies, user_searches):
 		if city or role.strip().lower() not in covered
 	]
 	searches = companies + role_searches
+	dropped = []
 	if len(searches) > MAX_LINKEDIN_SEARCHES:
-		dropped = [search.get("name") for search in searches[MAX_LINKEDIN_SEARCHES:]]
+		dropped = [search.get("name") or "?" for search in searches[MAX_LINKEDIN_SEARCHES:]]
 		print(f"[WARN] {len(searches)} searches exceed MAX_LINKEDIN_SEARCHES={MAX_LINKEDIN_SEARCHES}; skipping: {', '.join(dropped)}")
 		searches = searches[:MAX_LINKEDIN_SEARCHES]
-	return searches
+	return searches, dropped
 
 
 def build_search_url(keywords_str, city=None):
@@ -253,12 +260,12 @@ async def read_linkedin_description(page, job):
 
 
 async def scrape_linkedin_jobs(company):
-	"""Return a list of jobs, or None when the search failed or LinkedIn blocked the request."""
-	keywords = company.get("api_url", "")
+	"""Return a list of jobs; raises ScrapeFailed with the reason when the search failed or LinkedIn blocked it."""
+	keywords = (company.get("api_url") or "").strip()
 	search_url = build_search_url(keywords, company.get("location"))
 	if not search_url:
 		print(f"    [ERROR] No keywords provided in api_url field for {company.get('name')}")
-		return None
+		raise ScrapeFailed("No search keywords")
 
 	target_jobs = int(company.get("linkedin_target_jobs", 250) or 250)
 	max_pages = int(company.get("linkedin_max_pages", 20) or 20)
@@ -272,10 +279,10 @@ async def scrape_linkedin_jobs(company):
 				response = await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
 				if response is not None and response.status >= 400:
 					print(f"    [WARN] LinkedIn returned HTTP {response.status}")
-					return None
+					raise ScrapeFailed(f"HTTP {response.status}")
 				if any(marker in page.url for marker in BLOCKED_URL_MARKERS):
 					print(f"    [WARN] LinkedIn redirected to a login/authwall page: {page.url}")
-					return None
+					raise ScrapeFailed("LinkedIn authwall")
 
 				try:
 					await page.wait_for_selector('div[class*="base-card"]', timeout=10000)
@@ -287,18 +294,20 @@ async def scrape_linkedin_jobs(company):
 				html = await page.content()
 			finally:
 				await browser.close()
+	except ScrapeFailed:
+		raise
 	except Exception as exc:
 		print(f"    [WARN] Failed to fetch LinkedIn jobs: {exc}")
-		return None
+		raise ScrapeFailed(short_error(exc)) from exc
 
 	jobs = dedupe_jobs(parse_linkedin_jobs(html))
 	print(f"[SCRAPE] LinkedIn loaded {loaded_count} cards and parsed {len(jobs)} jobs")
 	return jobs
 
 
-async def collect_linkedin_jobs(companies):
+async def collect_linkedin_jobs(companies, report):
+	"""Jobs of every search (deduped across searches), with one report outcome per search."""
 	collected_jobs = []
-	failed_companies = []
 	seen_job_ids = set()
 	duplicate_count = 0
 	collected_on = format_calendar_date(date.today())
@@ -307,12 +316,14 @@ async def collect_linkedin_jobs(companies):
 		if index and SEARCH_DELAY_SECONDS > 0:
 			await asyncio.sleep(SEARCH_DELAY_SECONDS)  # spread searches out to avoid LinkedIn's authwall
 		company_name = company.get("name") or "Unknown"
-		jobs = await scrape_linkedin_jobs(company)
-		if jobs is None:
-			failed_companies.append(company_name)
+		try:
+			jobs = await scrape_linkedin_jobs(company)
+		except ScrapeFailed as exc:
+			report.outcome(company_name, False, error=str(exc))
 			print(f"[COMPANY] {company_name}: failed")
 			continue
 		print(f"[COMPANY] {company_name}: jobs found {len(jobs)}")
+		report.outcome(company_name, True, jobs_found=len(jobs))
 
 		company_url = build_search_url(company.get("api_url", ""), company.get("location")) or ""
 		for job in jobs:
@@ -344,39 +355,51 @@ async def collect_linkedin_jobs(companies):
 	if duplicate_count:
 		print(f"[DEDUPE] Skipped {duplicate_count} LinkedIn jobs already seen in another search")
 
-	return collected_jobs, failed_companies
+	return collected_jobs
 
 
 async def main():
-	companies = await fetch_companies("linkedin", "name,api_url,ats_type,disabled")
-	print_companies(companies, "LinkedIn")
-	searches = build_searches(companies, await fetch_user_searches())
-	print(f"[INFO] LinkedIn searches this run: {len(searches)} -> {', '.join(search.get('name') or '?' for search in searches)}")
-	if not searches:
-		print("[ERROR] No LinkedIn searches to run.")
-		sys.exit(1)
+	# Writes output/linkedin_report.json on every exit path (sys.exit and crashes included); one outcome per search
+	with scrape_report("linkedin") as report:
+		companies = await fetch_companies("linkedin", "name,api_url,ats_type,disabled")
+		print_companies(companies, "LinkedIn")
+		searches, dropped = build_searches(companies, await fetch_user_searches())
+		report.totals["companies"] = len(searches)
+		report.linkedin = {"searches_total": len(searches) + len(dropped), "searches_cap": MAX_LINKEDIN_SEARCHES,
+		                   "dropped": dropped}
+		print(f"[INFO] LinkedIn searches this run: {len(searches)} -> {', '.join(search.get('name') or '?' for search in searches)}")
+		if not searches:
+			print("[ERROR] No LinkedIn searches to run.")
+			report.message = "No LinkedIn searches to run"
+			sys.exit(1)
 
-	# Ids the pipeline already has a description for are still written (refreshing last_seen_at) but not fetched again
-	seen_ids = await fetch_linkedin_seen_ids()
-	jobs, failed_companies = await collect_linkedin_jobs(searches)
-	filtered_jobs_dataframe, output_file = await write_recent_jobs(
-		jobs, "LinkedIn", "linkedin", read_linkedin_description, skip_ids=seen_ids
-	)
+		# Ids the pipeline already has a description for are still written (refreshing last_seen_at) but not fetched again
+		seen_ids = await fetch_linkedin_seen_ids()
+		jobs = await collect_linkedin_jobs(searches, report)
+		filtered_jobs_dataframe, output_file = await write_recent_jobs(
+			jobs, "LinkedIn", "linkedin", read_linkedin_description, skip_ids=seen_ids
+		)
+		failed_companies = report.failed_names
 
-	already_seen = filtered_jobs_dataframe["job_id"].astype(str).isin(seen_ids)
-	print(
-		f"[SUMMARY] searches={len(searches)} failed={len(failed_companies)} "
-		f"jobs_scraped={len(jobs)} jobs_written={len(filtered_jobs_dataframe)} already_seen={int(already_seen.sum())} "
-		f"missing_descriptions={int(((filtered_jobs_dataframe['description'] == '') & ~already_seen).sum())}"
-	)
-	if failed_companies:
-		print(f"[SUMMARY] failed searches: {', '.join(failed_companies)}")
+		already_seen = filtered_jobs_dataframe["job_id"].astype(str).isin(seen_ids)
+		missing_descriptions = int(((filtered_jobs_dataframe['description'] == '') & ~already_seen).sum())
+		report.totals.update(jobs_scraped=len(jobs), jobs_written=len(filtered_jobs_dataframe),
+		                     missing_descriptions=missing_descriptions, already_seen=int(already_seen.sum()))
+		print(
+			f"[SUMMARY] searches={len(searches)} failed={len(failed_companies)} "
+			f"jobs_scraped={len(jobs)} jobs_written={len(filtered_jobs_dataframe)} already_seen={int(already_seen.sum())} "
+			f"missing_descriptions={missing_descriptions}"
+		)
+		if failed_companies:
+			print(f"[SUMMARY] failed searches: {', '.join(failed_companies)}")
 
-	if not output_file:
-		sys.exit(1)
-	if len(failed_companies) == len(searches):
-		print("[ERROR] All LinkedIn searches failed.")
-		sys.exit(1)
+		report.finish(output_file, None if output_file else "Failed to write the CSV")
+		if not output_file:
+			sys.exit(1)
+		if len(failed_companies) == len(searches):
+			print("[ERROR] All LinkedIn searches failed.")
+			report.message = "All LinkedIn searches failed"
+			sys.exit(1)
 
 
 if __name__ == "__main__":

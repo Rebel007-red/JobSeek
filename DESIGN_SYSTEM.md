@@ -40,6 +40,7 @@ Never hard-code colours in components; add a token instead. Base font size is 14
 | `.segmented`, `.tab-group` | Two-state toggles and tabs on a `--surface-2` track (`.settings-tabs` shares the `.tab-group` styles) |
 | `.eyebrow` | Small all-caps section label (also used for drawer and shortcut-help headings) |
 | `.pill-toggle`, `.filter-chip` | Quick filters (toggle) and removable active filters |
+| `.data-freshness` (`.stale`) | "Updated 2 h ago" at the end of the chip row (last pipeline publish; `--warning` after 12 h, absolute time in `title`) |
 | `JobRow` (`.job-row`) | List item: fit score, title, company · location, role/exp/skills/age, actions |
 | `JobCard` (`.job-card`) | Card item: fit ring, skills, fit bars, footer with exp/age/actions |
 | `FitScore` / `FitRing` / `FitBreakdown` | Fit bands: strong ≥ 70 (success), good ≥ 50 (warning), low (orange), none (muted) |

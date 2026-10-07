@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { authLinkError, supabase } from '../lib/supabase'
 import { AuthLayout, NewPasswordFields } from '../components/layout/AuthLayout'
 import { passwordProblem } from '../utils/password'
@@ -7,9 +7,18 @@ import { passwordProblem } from '../utils/password'
 // Supabase sends a 6-10 digit code (length is a project setting)
 const CODE_RE = /^\d{6,10}$/
 
+// Where to go after signing in: the page that sent you here (location.state.from, e.g. a shared /?job=<key> link),
+// when it is a path inside this app, else the jobs page
+function returnPath(from) {
+  const path = typeof from === 'string' ? from : ''
+  return path.startsWith('/') && !path.startsWith('//') && !/^\/(login|set-password)\b/.test(path) ? path : '/'
+}
+
 // mode: 'signin' | 'reset' (ask for a code) | 'code' (enter code + new password)
 export function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const returnTo = returnPath(location.state?.from)
   const [mode, setMode] = useState('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -32,7 +41,7 @@ export function LoginPage() {
     setLoading(true)
     const { error: authError } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
     setLoading(false)
-    if (!authError) return navigate('/', { replace: true })
+    if (!authError) return navigate(returnTo, { replace: true })
     // Invited users whose password was never saved land here too; the reset flow sets it.
     setError(authError.code === 'invalid_credentials'
       ? 'Wrong email or password. New here, or never finished setting a password? Use "Forgot password?" below.'
@@ -66,7 +75,7 @@ export function LoginPage() {
     const { error: updateError } = await supabase.auth.updateUser({ password: newPassword })
     setLoading(false)
     if (updateError) return setError(updateError.message)
-    navigate('/', { replace: true })
+    navigate(returnTo, { replace: true })
   }
 
   const emailField = (

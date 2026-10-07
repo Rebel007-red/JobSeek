@@ -6,12 +6,18 @@ const MAX_NEAREST = 3
 // resolve(text) -> { value } for a known entry (stored in the list's spelling), { blocked: message } for a refused one,
 // or null when unknown. Unknown entries need confirming ("add as my own") and must pass validate(text) -> '' | problem.
 // noteFor(value) -> optional short status shown on the chip (e.g. for entries the user added themselves).
-export function ChipInput({ label, values, onChange, suggestions = [], resolve, validate, noteFor, placeholder, help, maxItems = 50, numbered = false }) {
+// Without resolve, every entry is added as typed (after validate) and suggestions only autocomplete.
+export function ChipInput({ label, values, onChange, suggestions = [], resolve, validate, noteFor, placeholder, help, maxItems = 50, numbered = false, disabled = false }) {
   const [input, setInput] = useState('')
   const [error, setError] = useState('')
   const [pending, setPending] = useState(null) // { text, nearest }
-  const listId = useId()
+  const baseId = useId()
+  const listId = `${baseId}-list`
+  const inputId = `${baseId}-input`
+  const helpId = `${baseId}-help`
+  const errorId = `${baseId}-error`
   const full = values.length >= maxItems
+  const describedBy = [error && errorId, help && helpId].filter(Boolean).join(' ') || undefined
 
   const push = (value) => {
     setPending(null)
@@ -24,7 +30,12 @@ export function ChipInput({ label, values, onChange, suggestions = [], resolve, 
     setError('')
     setPending(null)
     if (!text || full) return
-    const known = resolve ? resolve(text) : { value: suggestions.find(item => item.toLowerCase() === text.toLowerCase()) || text }
+    if (!resolve) {
+      const problem = validate ? validate(text) : ''
+      if (problem) return setError(problem)
+      return push(suggestions.find(item => item.toLowerCase() === text.toLowerCase()) || text)
+    }
+    const known = resolve(text)
     if (known?.blocked) return setError(known.blocked)
     if (known?.value) return push(known.value)
     const problem = validate ? validate(text) : ''
@@ -34,12 +45,25 @@ export function ChipInput({ label, values, onChange, suggestions = [], resolve, 
     setPending({ text, nearest })
   }
 
+  // A "Did you mean" suggestion goes through resolve too, so a refused entry (e.g. a skill in the other list) stays out
+  const pick = (item) => {
+    const known = resolve ? resolve(item) : null
+    if (known?.blocked) {
+      setPending(null)
+      return setError(known.blocked)
+    }
+    push(known?.value || item)
+  }
+
   return (
     <div className="settings-field settings-field-full">
-      <label>{label}</label>
+      <label htmlFor={inputId}>{label}</label>
       <div className="settings-input-row">
         <input
+          id={inputId}
           type="text"
+          aria-describedby={describedBy}
+          aria-invalid={error ? true : undefined}
           value={input}
           list={suggestions.length ? listId : undefined}
           onChange={e => {
@@ -56,10 +80,10 @@ export function ChipInput({ label, values, onChange, suggestions = [], resolve, 
             }
           }}
           placeholder={full ? `Limit of ${maxItems} reached` : placeholder}
-          disabled={full}
+          disabled={full || disabled}
           className="settings-input"
         />
-        <button type="button" onClick={() => add(input)} className="secondary-button compact-button" disabled={full || !input.trim()}>Add</button>
+        <button type="button" onClick={() => add(input)} className="secondary-button compact-button" disabled={full || disabled || !input.trim()}>Add</button>
       </div>
       {suggestions.length > 0 && (
         <datalist id={listId}>
@@ -73,15 +97,15 @@ export function ChipInput({ label, values, onChange, suggestions = [], resolve, 
             {pending.nearest.length > 0 && ' Did you mean:'}
           </span>
           {pending.nearest.map(item => (
-            <button key={item} type="button" className="pill-toggle" onClick={() => push(item)}>{item}</button>
+            <button key={item} type="button" className="pill-toggle" onClick={() => pick(item)}>{item}</button>
           ))}
           <button type="button" className="secondary-button compact-button" onClick={() => push(pending.text)}>
             Add &ldquo;{pending.text}&rdquo; as my own
           </button>
         </div>
       )}
-      {error && <p className="settings-inline-error">{error}</p>}
-      {help && <small>{help}</small>}
+      {error && <p id={errorId} className="settings-inline-error">{error}</p>}
+      {help && <small id={helpId}>{help}</small>}
       {values.length > 0 && (
         <div className="settings-skill-list">
           {values.map((value, index) => {
@@ -91,7 +115,7 @@ export function ChipInput({ label, values, onChange, suggestions = [], resolve, 
                 {numbered && <b>{index + 1}</b>}
                 <span className="skill-chip-label">{value}</span>
                 {note && <em>{note}</em>}
-                <button type="button" onClick={() => onChange(values.filter(item => item !== value))} aria-label={`Remove ${value}`}>
+                <button type="button" onClick={() => onChange(values.filter(item => item !== value))} aria-label={`Remove ${value}`} disabled={disabled}>
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                   </svg>

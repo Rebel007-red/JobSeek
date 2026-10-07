@@ -2,14 +2,17 @@ import { useRef } from 'react'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
 import { CloseIcon } from './icons'
 
+// Every key the jobs page handles (JobsPage useHotkeys)
 const GROUPS = [
   {
     title: 'Navigate',
     keys: [
       [['j'], 'Next job'],
       [['k'], 'Previous job'],
+      [['g'], 'First job'],
+      [['G'], 'Last loaded job'],
       [['Enter'], 'Open details'],
-      [['Esc'], 'Close / leave search'],
+      [['Esc'], 'Close / clear selection / leave search'],
     ],
   },
   {
@@ -17,19 +20,32 @@ const GROUPS = [
     keys: [
       [['o'], 'Open posting in new tab'],
       [['a'], 'Toggle applied'],
+      [['s'], 'Save for later / remove'],
+      [['t'], 'Change status'],
       [['x'], 'Hide job'],
-      [['u'], 'Undo last action'],
+      [['u'], 'Undo (up to 5 steps)'],
+    ],
+  },
+  {
+    title: 'Select several',
+    keys: [
+      [['Space'], 'Select / unselect job'],
+      [['J'], 'Extend selection down'],
+      [['K'], 'Extend selection up'],
+      [['s', 'a', 'x'], 'Save, apply or hide the selection'],
     ],
   },
   {
     title: 'View',
     keys: [
       [['/'], 'Search'],
-      [['1'], 'All jobs'],
-      [['2'], 'To apply'],
+      [['f'], 'Filters'],
+      [['1'], 'To apply'],
+      [['2'], 'Saved'],
       [['3'], 'Applied'],
+      [['4'], 'All jobs'],
       [['v'], 'Toggle list / grid'],
-      [['r'], 'Refresh data from Databricks'],
+      [['r'], 'Refresh data'],
       [['?'], 'This help'],
     ],
   },

@@ -1,13 +1,15 @@
 """Helpers shared by the Databricks scrapers (workday.py, greenhouse.py, linkedin.py).
 
 The scrapers read their company list from Supabase and write one CSV per run to databricks/output,
-which upload_to_volume.py then copies to the Databricks landing volume.
+which upload_to_volume.py then copies to the Databricks landing volume. Each run also writes
+output/<source>_report.json (scrape_report below), which jobs/record_scrape_report.py sends to Supabase.
 """
 import asyncio
 import json
 import os
 import re
-from datetime import date, datetime, timedelta
+from contextlib import contextmanager
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import aiohttp
@@ -338,3 +340,128 @@ async def write_recent_jobs(jobs, label, prefix, read_description, skip_ids=froz
     recent_jobs = await fetch_descriptions(recent.to_dict(orient="records"), label, read_description, skip_ids)
     dataframe = jobs_to_dataframe(recent_jobs)
     return dataframe, write_flat_jobs_csv(dataframe, prefix)
+
+
+# --- Scrape report (format jobseeker.scrape_report.v1, recorded by jobs/record_scrape_report.py) ---
+
+REPORT_FORMAT = "jobseeker.scrape_report.v1"
+TOTAL_KEYS = ("companies", "failed", "jobs_scraped", "jobs_written", "missing_descriptions", "already_seen")
+
+
+class ScrapeFailed(Exception):
+    """One company or search could not be scraped; str() is the short reason the report records (e.g. "HTTP 404")."""
+
+
+def short_error(exc, limit=200):
+    """First line of an exception message (Playwright errors carry a long call log), cut to limit characters."""
+    text = str(exc).strip().splitlines()
+    return (text[0] if text else type(exc).__name__)[:limit]
+
+
+def utc_now_iso():
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def report_path(source, output_dir=OUTPUT_DIR):
+    return Path(output_dir) / f"{source}_report.json"
+
+
+def github_run():
+    """The GitHub Actions run fields of a report (None outside Actions)."""
+    attempt = os.getenv("GITHUB_RUN_ATTEMPT") or ""
+    return {
+        "github_run_id": os.getenv("GITHUB_RUN_ID") or None,
+        "github_run_attempt": int(attempt) if attempt.isdigit() else None,
+        "workflow": os.getenv("GITHUB_WORKFLOW") or None,
+    }
+
+
+def report_status(companies, output_file):
+    """ok = nothing failed, partial = some failed, failed = every company failed (or none ran) or no CSV was written."""
+    failed = sum(1 for company in companies if not company["ok"])
+    if not output_file or not companies or failed == len(companies):
+        return "failed"
+    return "partial" if failed else "ok"
+
+
+def build_report(source, *, status, totals, companies, linkedin=None, message=None, started_at, finished_at=None):
+    """The report document; totals missing a key get None, and failed defaults to the failed companies."""
+    totals = {key: totals.get(key) for key in TOTAL_KEYS}
+    if totals["failed"] is None:
+        totals["failed"] = sum(1 for company in companies if not company["ok"])
+    return {
+        "format": REPORT_FORMAT,
+        "source": source,
+        "run": {**github_run(), "started_at": started_at, "finished_at": finished_at or utc_now_iso(),
+                "status": status, "message": message},
+        "totals": totals,
+        "linkedin": linkedin,
+        "companies": companies,
+    }
+
+
+def write_report(source, *, status, totals, companies, linkedin=None, message=None, started_at, output_dir=OUTPUT_DIR):
+    """Write output/<source>_report.json; returns its path (None when writing failed, which never fails the scrape)."""
+    report = build_report(source, status=status, totals=totals, companies=companies, linkedin=linkedin,
+                          message=message, started_at=started_at)
+    path = report_path(source, output_dir)
+    try:
+        os.makedirs(path.parent, exist_ok=True)
+        path.write_text(json.dumps(report, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+        print(f"[REPORT] {path}")
+        return path
+    except Exception as exc:
+        print(f"[WARN] Failed to write the scrape report: {exc}")
+        return None
+
+
+class ScrapeReport:
+    """What one scraper run reports: an outcome per company or search, the totals, and how the run ended."""
+
+    def __init__(self, source):
+        self.source = source
+        self.started_at = utc_now_iso()
+        self.companies = []
+        self.totals = {}
+        self.linkedin = None
+        self.status = None
+        self.message = None
+
+    def outcome(self, name, ok, jobs_found=None, error=None):
+        self.companies.append({
+            "name": name,
+            "ok": bool(ok),
+            "jobs_found": jobs_found if ok else None,
+            "error": None if ok else (error or "failed"),
+        })
+
+    @property
+    def failed_names(self):
+        return [company["name"] for company in self.companies if not company["ok"]]
+
+    def finish(self, output_file, message=None):
+        """Sets the status from the outcomes and whether the CSV was written."""
+        self.status = report_status(self.companies, output_file)
+        self.message = message
+        return self.status
+
+
+@contextmanager
+def scrape_report(source):
+    """with scrape_report("workday") as report: ... writes the report on every exit path.
+
+    An exception (other than the scrapers' own sys.exit) marks the run crashed with its message; a body that ends without
+    report.finish() (e.g. sys.exit before the CSV) reports failed with report.message.
+    """
+    report = ScrapeReport(source)
+    try:
+        yield report
+    except SystemExit:
+        raise
+    except BaseException as exc:
+        report.status = "crashed"
+        report.message = f"{type(exc).__name__}: {short_error(exc, 900)}"
+        raise
+    finally:
+        write_report(source, status=report.status or "failed", totals=report.totals, companies=report.companies,
+                     linkedin=report.linkedin, message=report.message, started_at=report.started_at)

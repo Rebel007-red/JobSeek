@@ -29,7 +29,8 @@ export function FitScore({ score }) {
 }
 
 // Component bars (role / skills / experience), each 0-1, with their fixed share of the score.
-export function FitBreakdown({ job, compact = false }) {
+// reasons (optional, not in compact mode): { [part key]: text | [text, ...] } shown under each bar (fit.js fitReasons).
+export function FitBreakdown({ job, compact = false, reasons }) {
   const hasAny = FIT_PARTS.some(part => job[part.key] !== null && job[part.key] !== undefined)
   if (!hasAny) return null
 
@@ -37,6 +38,7 @@ export function FitBreakdown({ job, compact = false }) {
     <div className={`fit-breakdown ${compact ? 'compact' : ''}`}>
       {FIT_PARTS.map(part => {
         const value = Math.round(Math.max(0, Math.min(1, Number(job[part.key]) || 0)) * 100)
+        const lines = compact ? [] : [reasons?.[part.key]].flat().filter(Boolean)
         return (
           <div key={part.key} className="fit-part" title={`${part.label}: ${value}%`}>
             {!compact && (
@@ -49,6 +51,7 @@ export function FitBreakdown({ job, compact = false }) {
               <i style={{ width: `${value}%` }} className={fitTone(value)} />
             </div>
             {compact && <small>{part.short}</small>}
+            {lines.map(line => <p key={line} className="fit-reason">{line}</p>)}
           </div>
         )
       })}

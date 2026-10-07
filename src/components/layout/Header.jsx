@@ -1,10 +1,11 @@
 import { useNavigate } from 'react-router-dom'
-import { signOut } from '../../lib/api'
-import { GridIcon, KeyboardIcon, ListIcon, SearchIcon, SettingsIcon, SignOutIcon } from '../common/icons'
+import { CheckSquareIcon, GearIcon, GridIcon, KeyboardIcon, ListIcon, SearchIcon } from '../common/icons'
 
 // metrics: node shown in the bar (on mobile only its trend bars stay visible, see CSS).
 // onSearch: mobile-only toggle for the collapsed search box. The list/grid switch lives in Settings on mobile.
-export function Header({ metrics = null, onSearch, searchOpen = false, view, onViewChange, onHelp }) {
+// onSelectMode: turns bulk selection on and off (phones have no hover checkboxes or Space key). Sign out lives in
+// Settings.
+export function Header({ metrics = null, onSearch, searchOpen = false, view, onViewChange, onHelp, onSelectMode, selectMode = false }) {
   const navigate = useNavigate()
 
   return (
@@ -30,12 +31,24 @@ export function Header({ metrics = null, onSearch, searchOpen = false, view, onV
               <SearchIcon />
             </button>
           )}
+          {onSelectMode && (
+            <button
+              type="button"
+              onClick={onSelectMode}
+              className={`icon-btn ${selectMode ? 'is-on' : ''}`}
+              title={selectMode ? 'Stop selecting' : 'Select jobs (Space)'}
+              aria-label="Select jobs"
+              aria-pressed={selectMode}
+            >
+              <CheckSquareIcon />
+            </button>
+          )}
           {onViewChange && (
             <div className="segmented hide-mobile" role="group" aria-label="Layout">
-              <button type="button" className={view === 'list' ? 'active' : ''} onClick={() => onViewChange('list')} aria-pressed={view === 'list'} title="List view (v)">
+              <button type="button" className={view === 'list' ? 'active' : ''} onClick={() => onViewChange('list')} aria-pressed={view === 'list'} title="List view (v)" aria-label="List view">
                 <ListIcon />
               </button>
-              <button type="button" className={view === 'grid' ? 'active' : ''} onClick={() => onViewChange('grid')} aria-pressed={view === 'grid'} title="Grid view (v)">
+              <button type="button" className={view === 'grid' ? 'active' : ''} onClick={() => onViewChange('grid')} aria-pressed={view === 'grid'} title="Grid view (v)" aria-label="Grid view">
                 <GridIcon />
               </button>
             </div>
@@ -46,10 +59,7 @@ export function Header({ metrics = null, onSearch, searchOpen = false, view, onV
             </button>
           )}
           <button type="button" onClick={() => navigate('/settings')} className="icon-btn" title="Settings" aria-label="Settings">
-            <SettingsIcon />
-          </button>
-          <button type="button" onClick={signOut} className="icon-btn" title="Sign out" aria-label="Sign out">
-            <SignOutIcon />
+            <GearIcon />
           </button>
         </div>
       </div>

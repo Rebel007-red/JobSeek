@@ -1,7 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { FIT_PARTS, FIT_WEIGHTS, STRONG_FIT, buildTrend, experienceLabel, fitTone, formatDescription, skillBuckets } from './gold.js'
+import {
+  APPLICATION_STATUSES, APPLIED_STATUSES, EXPERIENCE_LEVELS, FIT_PARTS, FIT_WEIGHTS, HIDE_REASONS, LEVEL_YEARS, STATUS_OPTIONS, STRONG_FIT,
+  buildTrend, companyKey, experienceLabel, fitTone, formatDescription, isApplied, isTracked, jobUrl, profileSkillList, skillBuckets,
+} from './gold.js'
 
 test('fitTone bands scores', () => {
   assert.equal(fitTone(85), 'strong')
@@ -52,4 +55,58 @@ test('fit weights add up to 1 and every part has one', () => {
   const total = Object.values(FIT_WEIGHTS).reduce((sum, weight) => sum + weight, 0)
   assert.ok(Math.abs(total - 1) < 1e-9)
   assert.deepEqual(FIT_PARTS.map(part => part.weight), Object.values(FIT_WEIGHTS))
+})
+
+test('statuses: applied ones are a subset, every status has a label', () => {
+  assert.deepEqual(STATUS_OPTIONS.map(option => option.value), APPLICATION_STATUSES)
+  assert.deepEqual(STATUS_OPTIONS.map(option => option.label), ['Not applied', 'Saved', 'Applied', 'Interviewing', 'Offer', 'Rejected', 'Withdrawn'])
+  assert.ok(APPLIED_STATUSES.every(status => APPLICATION_STATUSES.includes(status)))
+  assert.deepEqual(HIDE_REASONS.map(reason => reason.value), ['too_senior', 'wrong_role', 'company', 'location', 'duplicate', 'other'])
+  assert.deepEqual(EXPERIENCE_LEVELS, Object.keys(LEVEL_YEARS))
+  assert.equal(LEVEL_YEARS.Senior, 5)
+})
+
+test('isTracked: applied (any stage) or saved', () => {
+  assert.equal(isTracked({ is_applied: true }), true)
+  assert.equal(isTracked({ application_status: 'saved' }), true)
+  assert.equal(isTracked({ application_status: 'offer', is_applied: true }), true)
+  assert.equal(isTracked({ application_status: 'not_applied', is_applied: false }), false)
+  assert.equal(isTracked({}), false)
+  assert.equal(isTracked(null), false)
+  assert.equal(isApplied({ application_status: 'saved' }), false)
+  assert.equal(isApplied({ application_status: 'rejected' }), true)
+})
+
+test('profileSkillList: core skills then also-know, no repeats', () => {
+  assert.deepEqual(profileSkillList({ skills: ['Python', 'SQL'], also_skills: ['sql', 'Kafka', ' Kafka '] }), ['Python', 'SQL', 'Kafka'])
+  assert.deepEqual(profileSkillList(null), [])
+})
+
+test('companyKey matches app.company_key', () => {
+  const cases = {
+    Barclays: 'barclay',
+    Barclay: 'barclay',
+    'PwC India': 'pwc',
+    PWC: 'pwc',
+    'WSP in India': 'wsp',
+    'Hewlett Packard Enterprise': 'hpe',
+    HPE: 'hpe',
+    'Centotech Services Private Limited': 'centotech service',
+    India: '',
+    'Ernst & Young': 'ey',
+    PricewaterhouseCoopers: 'pwc',
+    'Tata Consultancy Services': 'tcs',
+    'Access': 'access',
+  }
+  for (const [name, key] of Object.entries(cases)) assert.equal(companyKey(name), key, name)
+  assert.equal(companyKey(null), '')
+})
+
+test('jobUrl allows only http(s) links', () => {
+  assert.equal(jobUrl({ job_url: 'https://x.test/jobs/1' }), 'https://x.test/jobs/1')
+  assert.equal(jobUrl({ job_url: ' http://x.test ' }), 'http://x.test')
+  for (const job_url of ['#', '', null, 'javascript:alert(1)', 'data:text/html,x', '//x.test', 'ftp://x.test']) {
+    assert.equal(jobUrl({ job_url }), null, String(job_url))
+  }
+  assert.equal(jobUrl(null), null)
 })

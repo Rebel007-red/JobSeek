@@ -1,0 +1,60 @@
+name: Publish to Supabase
+
+# Catch-up for the publish step of the LinkedIn workflow: publishes the newest complete pipeline output
+# (/Volumes/jobseeker/ops/pipeline/publish/<run_id>/) to Supabase. A no-op in seconds when it is already published,
+# e.g. after a run that outlasted the LinkedIn workflow's wait or a publish that failed. The hourly call also keeps the
+# free Supabase project from pausing.
+on:
+  schedule:
+    - cron: '50 * * * *'
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Databricks run id to publish (empty = the newest complete one)
+        required: false
+        default: ''
+        type: string
+      force:
+        description: Publish even when already published, older than the published snapshot or shrinking app.jobs a lot
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: supabase-publish
+      cancel-in-progress: false
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+          cache-dependency-path: databricks/jobs/requirements.txt
+
+      - name: Install Python dependencies
+        run: pip install -r databricks/jobs/requirements.txt
+
+      # Inputs reach the script as environment variables (never pasted into the shell script); the script validates them
+      - name: Publish the pipeline results to Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          PUBLISH_RUN_ID: ${{ inputs.run_id }}
+          PUBLISH_FORCE: ${{ inputs.force }}
+        run: |
+          args=()
+          if [ -n "$PUBLISH_RUN_ID" ]; then args+=(--run-id "$PUBLISH_RUN_ID"); fi
+          if [ "$PUBLISH_FORCE" = "true" ]; then args+=(--force); fi
+          python databricks/jobs/publish_to_supabase.py "${args[@]}"

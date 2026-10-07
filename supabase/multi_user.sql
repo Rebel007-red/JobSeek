@@ -1,4 +1,6 @@
--- Multi-user setup. Supabase is used for login only; profiles and job state live in Databricks.
+-- Multi-user setup: login, admin role, account cap, scraper company list.
+-- The app's data (jobs, profiles, applied/hidden state) lives in schema app, created by app_schema.sql / app_api.sql
+-- (python supabase/apply.py); it uses public.is_admin() from this file for admin-only actions and the allow-list bypass.
 -- Run once in the Supabase SQL editor. Safe to re-run.
 --
 -- What it does:

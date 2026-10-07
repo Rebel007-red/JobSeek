@@ -1,19 +1,22 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { authLinkType, supabase } from '../lib/supabase'
 import { clearApiCache } from '../lib/api'
 import { setSessionUser } from '../lib/session'
 
 // Renders the page only with a Supabase session (no API calls while signed out); sends you to /login otherwise.
-// An invite / recovery link signs you in first, so it is sent on to /set-password.
+// An invite / recovery link signs you in first, so it is sent on to /set-password. The page you asked for (a shared
+// /?job=<key> link) goes along as state.from, so LoginPage can return to it after sign-in.
 export function ProtectedRoute({ children }) {
   const navigate = useNavigate()
+  const location = useLocation()
+  const fromRef = useRef(location.pathname + location.search)
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) {
-        navigate('/login', { replace: true })
+        navigate('/login', { replace: true, state: { from: fromRef.current } })
         return
       }
       setSessionUser(session.user)
