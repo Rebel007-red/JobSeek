@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { api } from '../../lib/api'
 import { ChipInput } from '../common/ChipInput'
 import { EXPERIENCE_HIDE_GAP, FIT_PARTS, MATCH_MIN_FIT } from '../../utils/gold'
@@ -7,7 +7,12 @@ import { PROFILE_LIMITS, alsoSkillProblem, entryProblem } from '../../utils/entr
 // Same limits as the API
 const { roles: MAX_ROLES, skills: MAX_SKILLS, cities: MAX_CITIES, alsoSkills: MAX_ALSO_SKILLS } = PROFILE_LIMITS
 const NOT_SUPPORTED = 'is outside the supported roles (data, full stack / backend, DevOps and cloud)'
-const CHECK_PENDING = 'custom · checked on the next pipeline run'
+const CHECK_PENDING = 'custom · checked with the next update (every ~4 hours)'
+// The fields a link can open (/settings?tab=profile#roles): the hide toast's "Edit my roles" / "Set My cities", the
+// drawer's "Edit roles" / "Add a skill" / "Edit experience"
+const PROFILE_ANCHORS = ['roles', 'skills', 'also-skills', 'experience', 'cities']
+// "role up to 40 points, skills up to 45, experience up to 15" (the parts add up to the fit score)
+const POINTS = FIT_PARTS.map((part, index) => `${part.label.toLowerCase()} up to ${Math.round(part.weight * 100)}${index === 0 ? ' points' : ''}`).join(', ')
 
 // Lookups from api.refs(): lower-case text -> the list's spelling, plus what users added themselves (with its status).
 function buildLookups(refs) {
@@ -48,8 +53,18 @@ function toForm(profile) {
   }
 }
 
-// onboarding: first visit without a profile (shows a welcome note; the parent leaves the page after saving)
-export function ProfileEditor({ profile, onSave, onboarding = false }) {
+// Scrolls to a field of the form and focuses its first control (its input, or a chip's remove button when it is full)
+function focusField(form, anchor) {
+  const field = anchor && form?.querySelector(`#${anchor}`)
+  if (!field) return false
+  field.scrollIntoView({ block: 'center' })
+  field.querySelector('input, button, select, textarea')?.focus({ preventScroll: true })
+  return true
+}
+
+// onboarding: first visit without a profile, or welcome=1 (a short intro, one-line help, the scoring rules folded away;
+// the parent leaves the page after saving). anchor: one of PROFILE_ANCHORS to scroll to and focus once.
+export function ProfileEditor({ profile, onSave, onboarding = false, anchor = '' }) {
   const [form, setForm] = useState(() => toForm(profile))
   const [refs, setRefs] = useState(null) // null until the lists load: no "custom" notes yet (they'd be wrong, then jump)
   const [saving, setSaving] = useState(false)
@@ -57,6 +72,15 @@ export function ProfileEditor({ profile, onSave, onboarding = false }) {
   const [dirty, setDirty] = useState(false)
   const minYearsId = useId()
   const maxYearsId = useId()
+  const formRef = useRef(null)
+  const anchorDone = useRef(false)
+
+  // The field a link points at (#roles, #skills, …), once the form is on screen
+  useEffect(() => {
+    if (anchorDone.current || !PROFILE_ANCHORS.includes(anchor)) return
+    anchorDone.current = true
+    requestAnimationFrame(() => focusField(formRef.current, anchor))
+  }, [anchor])
 
   useEffect(() => {
     api.refs().then(setRefs).catch(err => console.error('Failed to load role/skill lists:', err))
@@ -88,7 +112,7 @@ export function ProfileEditor({ profile, onSave, onboarding = false }) {
     if (lookups.roles.has(key)) return ''
     const custom = lookups.customRoles.get(key)
     if (!custom || custom.status === 'pending') return CHECK_PENDING
-    return { active: 'custom', mapped: `matched as ${custom.duplicateOf}`, rejected: 'not supported' }[custom.status] || ''
+    return { active: 'custom', mapped: `counted as ${custom.duplicateOf}`, rejected: 'not supported' }[custom.status] || ''
   }
   const resolveSkill = (text) => {
     const value = lookups.skills.get(text.toLowerCase())
@@ -146,25 +170,37 @@ export function ProfileEditor({ profile, onSave, onboarding = false }) {
     }
   }
 
-  const weights = FIT_PARTS.map(part => `${part.label.toLowerCase()} ${Math.round(part.weight * 100)}%`).join(', ')
+  const scoring = (
+    <p className="settings-copy">
+      Every job gets a fit score from 0 to 100, in points that add up to it: {POINTS}. <strong>For you</strong> shows
+      jobs in your roles or roles close to them with fit {MATCH_MIN_FIT}+, leaving out jobs that ask for over{' '}
+      {EXPERIENCE_HIDE_GAP} years more than your maximum (stated, or implied by a level such as Lead/Manager).{' '}
+      <strong>Everything</strong> lists every job, best fit first. Core skills count fully and Also know skills half as
+      much, so they lift a job&rsquo;s score without outweighing your core skills.
+    </p>
+  )
+  // One line of help per field while you set up your profile, the full text afterwards
+  const help = (short, full) => (onboarding ? short : full)
 
   return (
-    <form onSubmit={save} className="settings-card profile-form">
+    <form ref={formRef} onSubmit={save} className="settings-card profile-form">
       <div className="settings-card-header">
         <h3>{onboarding ? 'Welcome! Set up your profile' : 'Your profile'}</h3>
-        {profile?.updated_at && <small className="muted-text">Last saved {new Date(profile.updated_at).toLocaleString()}</small>}
+        {!onboarding && profile?.updated_at && <small className="muted-text">Last saved {new Date(profile.updated_at).toLocaleString()}</small>}
       </div>
-      <p className="settings-copy">
-        {onboarding && 'Pick what you are looking for to see your jobs. '}
-        Jobs are matched to your roles and scored 0–100 ({weights}). <strong>For you</strong> shows jobs in your roles
-        (or closely related ones) with fit {MATCH_MIN_FIT}+, leaving out jobs that ask for over {EXPERIENCE_HIDE_GAP} years
-        more than your maximum (stated, or implied by a level such as Lead/Manager); <strong>Show all</strong> lists
-        every job by fit. Core skills count fully and Also know skills half as much, so they lift a job's score without
-        outweighing your core skills.
-      </p>
+      {onboarding ? (
+        <>
+          <p className="settings-copy">We&rsquo;ll score every new job 0-100 against this.</p>
+          <details className="profile-scoring">
+            <summary>How scores work</summary>
+            {scoring}
+          </details>
+        </>
+      ) : scoring}
 
       <div className="settings-form-grid">
         <ChipInput
+          id="roles"
           label={`Roles (1–${MAX_ROLES}, most important first)`}
           values={form.target_roles}
           onChange={value => update('target_roles', value)}
@@ -173,13 +209,17 @@ export function ProfileEditor({ profile, onSave, onboarding = false }) {
           validate={entryProblem}
           noteFor={roleNote}
           placeholder="e.g. Data Engineer"
-          help="Data, full stack / backend, DevOps and cloud roles. Not in the list? Type it and add it as your own: it is checked on the next pipeline run (a few hours) and until then jobs with it in the title count as matches. LinkedIn is also searched for these roles."
+          help={help(
+            'Data, full stack / backend, DevOps and cloud roles. LinkedIn is searched for them.',
+            'Data, full stack / backend, DevOps and cloud roles. Not in the list? Type it and add it as your own: it is checked with the next update (every ~4 hours), and until then jobs with it in the title count as your role. LinkedIn is also searched for these roles.',
+          )}
           maxItems={MAX_ROLES}
           numbered
         />
 
         <ChipInput
-          label={`Core skills (1–${MAX_SKILLS}, full weight)`}
+          id="skills"
+          label={`Core skills (1–${MAX_SKILLS}, count fully)`}
           values={form.skills}
           onChange={value => update('skills', value)}
           suggestions={skillOptions}
@@ -187,12 +227,16 @@ export function ProfileEditor({ profile, onSave, onboarding = false }) {
           validate={entryProblem}
           noteFor={skillNote}
           placeholder="e.g. PySpark, Azure, SQL"
-          help="Skill groups (e.g. Cloud) match any skill in the group. Skills you add yourself are looked for in job descriptions from the next pipeline run."
+          help={help(
+            'The skills you would lead on.',
+            'The skills you would lead on. Skill groups (e.g. Cloud) cover any skill in the group. Skills you add yourself are looked for in job descriptions from the next update (every ~4 hours).',
+          )}
           maxItems={MAX_SKILLS}
         />
 
         <ChipInput
-          label={`Also know (up to ${MAX_ALSO_SKILLS}, half weight)`}
+          id="also-skills"
+          label={`Also know (up to ${MAX_ALSO_SKILLS}, count half)`}
           values={form.also_skills}
           onChange={value => update('also_skills', value)}
           suggestions={skillOptions}
@@ -200,11 +244,14 @@ export function ProfileEditor({ profile, onSave, onboarding = false }) {
           validate={text => alsoSkillProblem(text, form.skills)}
           noteFor={skillNote}
           placeholder="e.g. Kafka, Docker"
-          help="Skills you can work with but would not lead on. A job asking for them scores higher, by half as much as a core skill, and they show as skills you have instead of missing ones."
+          help={help(
+            'Skills you can work with but would not lead on.',
+            'Skills you can work with but would not lead on. A job asking for them scores higher, by half as much as a core skill, and they show under In your profile instead of Not in your profile.',
+          )}
           maxItems={MAX_ALSO_SKILLS}
         />
 
-        <div className="settings-field">
+        <div id="experience" className="settings-field">
           <label htmlFor={minYearsId}>Experience from (years)</label>
           <input id={minYearsId} type="number" min="0" max="40" value={form.min_years} onChange={e => update('min_years', e.target.value)} className="settings-input" />
         </div>
@@ -214,13 +261,17 @@ export function ProfileEditor({ profile, onSave, onboarding = false }) {
         </div>
 
         <ChipInput
+          id="cities"
           label={`Preferred cities (optional, up to ${MAX_CITIES})`}
           values={form.preferred_cities}
           onChange={value => update('preferred_cities', value)}
           suggestions={cityOptions}
           resolve={resolveCity}
           placeholder="e.g. Bengaluru"
-          help="Widens the LinkedIn search: your roles are also searched in each city, within a few hours of saving. Leave empty to search all of India. Your job list is not limited to these cities."
+          help={help(
+            'Optional: LinkedIn is also searched in these cities.',
+            'Widens the LinkedIn search: your roles are also searched in each city, from the next update (every ~4 hours). Leave empty to search all of India. Your job list is not limited to these cities.',
+          )}
           maxItems={MAX_CITIES}
         />
       </div>

@@ -35,25 +35,35 @@ the Databricks volume, carried by GitHub Actions (which holds both sets of secre
 
 ## Features
 
-- **Fresh jobs only**: the list opens on "To apply" (the last 24 hours by default); the pipeline deletes jobs posted
-  more than 2 days ago that you did not save or apply to, and the list says when a job is about to expire.
+- **Inbox · Saved · Applied**: the list opens on the Inbox, the jobs you haven't saved, applied to or hidden (For
+  you, last 24 hours by default; one scope menu switches to any date or to Everything). The three tabs never count a
+  job twice. Jobs you haven't saved or applied to disappear 2 days after posting, at the first update after midnight
+  UTC; the "Expiring tonight" strip above the Inbox lists the ones for you that go tonight, and rows say "Disappears
+  in ~9h". Applications to postings over 2 days old stay under "Older postings" (they may still be open).
+- **New since your last visit**: jobs found since you last opened the app (at least 30 minutes ago) get a dot, and
+  the header says "N new since 9:51 AM". An empty Inbox says you're caught up and when the next jobs should arrive.
 - **Tracking**: save jobs for later, follow an application through its stages (applied, interviewing, offer,
   rejected, withdrawn) with a note and a follow-up date, and export the Applied tab as CSV.
 - **Less noise**: reposts of the same job are shown once ("+2 more · Pune, Chennai"), mute rules hide companies,
   title words or levels, and hiding a job asks why.
 - **Fit score (0-100)** per job from your target roles (related roles score partly), skills (rare skills count more)
-  and experience, with a breakdown. "For you" hides jobs that ask for more than ~2 years above your maximum.
+  and experience, shown as points that add up to it ("49 = 40 role + 7 skills + 2 experience"), with the skills a
+  job asks for that are not in your profile ("+ I know this" adds one). "For you" hides jobs that ask for more than ~2 years above your maximum.
 - **Preferred cities (optional, up to 3)**: each adds LinkedIn searches for your roles in that city; without any, the
   LinkedIn search covers all of India.
-- **Fast triage**: list or card view, swipe right = applied, swipe left = hide (with Undo, up to 5 steps), bulk
-  selection, keyboard shortcuts (`j`/`k`, `o`, `a`, `s`, `t`, `x`, `u`, `/`, `f`, `1`-`4`, `?` for the full list),
+- **Fast triage**: list or card view, swipe right = save, swipe left = hide (Settings → Account "Swipe right marks
+  applied" restores the old swipe; touches that start at the screen edge are ignored), with Undo up to 5 steps, bulk
+  selection, keyboard shortcuts (`j`/`k`, `o`, `a`, `s`, `t`, `x`, `u`, `/`, `f`, `1`-`3`, `?` for the full list),
   detail drawer with next/previous. The list state is in the URL, so Back and shared links work.
-- **Admin**: Settings → System shows the pipeline runs, each scraper's last result, dropped LinkedIn searches and the
-  database size; Settings → Access manages who may use the app.
+- **Admin**: Settings → System shows a Metrics card (strong-fit applications per active user per week, coverage,
+  return and outcome capture; counters only, no job links or searches stored), the pipeline runs, each scraper's last
+  result, dropped LinkedIn searches and the database size; Settings → Access manages who may use the app (with each
+  user's last activity and applications in the last 7 days).
 - **Fast loads**: the last results show instantly from the browser cache and refresh in the background. The page
-  says when the job data was last published ("Updated 2 h ago", amber after 12 hours) and reloads by itself when a
-  new pipeline run is published.
-- **Mobile first**: bottom tab bar, bottom-sheet filters, full-screen details, pull to refresh, installable (PWA).
+  says when the job data was last published ("Updated 2 h ago"); after 6 hours it turns amber and a banner says
+  the job updates are delayed. It reloads by itself when a new update is published.
+- **Mobile first**: fixed bottom bar (Inbox / Saved / Applied / Search / Filters), also in phone landscape and on
+  tablets up to 960px, bottom-sheet filters, full-screen details, pull to refresh, installable (PWA).
 - **Light / dark** theme follows the device.
 - **Free-tier friendly**: no serverless function or warehouse in the request path; Netlify only deploys on frontend
   changes.

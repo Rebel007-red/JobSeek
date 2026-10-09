@@ -18,6 +18,7 @@ function Svg({ children }) {
 }
 
 export const CheckIcon = () => <Svg><path d="M5 12.5l4.5 4.5L19 7.5" /></Svg>
+// Older "not applied" mark; rows and the drawer use CheckCircleIcon
 export const CircleIcon = () => <Svg><circle cx="12" cy="12" r="7.5" /></Svg>
 export const CloseIcon = () => <Svg><path d="M6 6l12 12M18 6L6 18" /></Svg>
 export const ExternalLinkIcon = () => <Svg><path d="M14 4h6v6M20 4l-8.5 8.5M18 14v4a2 2 0 01-2 2H6a2 2 0 01-2-2V8a2 2 0 012-2h4" /></Svg>
@@ -49,11 +50,26 @@ export const BookmarkIcon = ({ filled = false }) => <Svg><path d="M6.5 4h11v16l-
 export const ShareIcon = () => <Svg><circle cx="18" cy="5" r="2.5" /><circle cx="6" cy="12" r="2.5" /><circle cx="18" cy="19" r="2.5" /><path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4" /></Svg>
 export const NoteIcon = () => <Svg><path d="M5 4h10l4 4v12H5zM15 4v4h4M8.5 12.5h7M8.5 16h5" /></Svg>
 export const DownloadIcon = () => <Svg><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14" /></Svg>
-// Eye with a slash: muted by a rule
-export const MuteIcon = () => (
+// Eye with a slash: Hide (the eye-off of the Icons table in DESIGN_SYSTEM.md). The x (CloseIcon) only closes, dismisses or
+// removes.
+export const EyeOffIcon = () => (
   <Svg>
     <path d="M10.6 6.1A9.8 9.8 0 0112 6c5 0 8.5 4.5 9.5 6a17 17 0 01-2.6 3.2M6.5 7.6A16.6 16.6 0 002.5 12c1 1.5 4.5 6 9.5 6a9 9 0 004.4-1.2" />
     <path d="M9.9 9.9a3 3 0 004.2 4.2M3 3l18 18" />
+  </Svg>
+)
+// Speaker with a slash: muted by a rule (Unmute in the muted view), so it never reads as Hide
+export const MuteIcon = () => (
+  <Svg>
+    <path d="M11 5L6.5 9H3.5v6h3l4.5 4z" />
+    <path d="M16 9.5l5 5M21 9.5l-5 5" />
+  </Svg>
+)
+// Mark applied: an outlined check in a circle; filled (green, from CSS currentColor) once applied
+export const CheckCircleIcon = ({ filled = false }) => (
+  <Svg>
+    <circle cx="12" cy="12" r="8.5" fill={filled ? 'currentColor' : 'none'} />
+    <path d="M8.3 12.3l2.6 2.6 4.9-5.2" stroke={filled ? 'var(--surface, #fff)' : 'currentColor'} />
   </Svg>
 )
 export const CheckSquareIcon = () => <Svg><rect x="4" y="4" width="16" height="16" rx="3" /><path d="M8 12.5l3 3 5-6" /></Svg>

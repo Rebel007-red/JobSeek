@@ -8,7 +8,7 @@ export function AuthLayout({ title, subtitle, children }) {
         <div className="auth-brand">
           <span className="brand-mark" aria-hidden="true"><img src="favicon.svg" alt="JobSeeker logo" /></span>
           <h1>{title}</h1>
-          <p>{subtitle}</p>
+          {subtitle && <p>{subtitle}</p>}
         </div>
         {children}
       </div>

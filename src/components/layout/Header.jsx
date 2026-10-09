@@ -1,11 +1,11 @@
 import { useNavigate } from 'react-router-dom'
-import { CheckSquareIcon, GearIcon, GridIcon, KeyboardIcon, ListIcon, SearchIcon } from '../common/icons'
+import { CheckSquareIcon, GearIcon, GridIcon, KeyboardIcon, ListIcon } from '../common/icons'
 
 // metrics: node shown in the bar (on mobile only its trend bars stay visible, see CSS).
-// onSearch: mobile-only toggle for the collapsed search box. The list/grid switch lives in Settings on mobile.
+// Search lives in the bottom bar on phones (JobsPage). The List / Cards switch lives in Settings on mobile.
 // onSelectMode: turns bulk selection on and off (phones have no hover checkboxes or Space key). Sign out lives in
 // Settings.
-export function Header({ metrics = null, onSearch, searchOpen = false, view, onViewChange, onHelp, onSelectMode, selectMode = false }) {
+export function Header({ metrics = null, view, onViewChange, onHelp, onSelectMode, selectMode = false }) {
   const navigate = useNavigate()
 
   return (
@@ -19,18 +19,6 @@ export function Header({ metrics = null, onSearch, searchOpen = false, view, onV
         <div className="topbar-center">{metrics}</div>
 
         <div className="topbar-actions">
-          {onSearch && (
-            <button
-              type="button"
-              onClick={onSearch}
-              className={`icon-btn hide-desktop ${searchOpen ? 'is-on' : ''}`}
-              title="Search"
-              aria-label="Search"
-              aria-pressed={searchOpen}
-            >
-              <SearchIcon />
-            </button>
-          )}
           {onSelectMode && (
             <button
               type="button"
@@ -48,7 +36,7 @@ export function Header({ metrics = null, onSearch, searchOpen = false, view, onV
               <button type="button" className={view === 'list' ? 'active' : ''} onClick={() => onViewChange('list')} aria-pressed={view === 'list'} title="List view (v)" aria-label="List view">
                 <ListIcon />
               </button>
-              <button type="button" className={view === 'grid' ? 'active' : ''} onClick={() => onViewChange('grid')} aria-pressed={view === 'grid'} title="Grid view (v)" aria-label="Grid view">
+              <button type="button" className={view === 'grid' ? 'active' : ''} onClick={() => onViewChange('grid')} aria-pressed={view === 'grid'} title="Cards view (v)" aria-label="Cards view">
                 <GridIcon />
               </button>
             </div>

@@ -1,8 +1,11 @@
 // The job list's state in the URL: tab, sort, scope, filters, the open job (?job=) and the filter sheet (?sheet=filters).
 // Values equal to what this device would open with anyway are left out, so a plain "/" stays plain; invalid values are
-// dropped. parseListState(listStateToParams(state, remembered), remembered) gives the same state back.
+// dropped. parseListState(listStateToParams(state, remembered), remembered) gives the same state back. Old links keep
+// working: tab=pending (To apply) and tab=all open the Inbox.
 import { APPLIED_STATUSES, EMPLOYMENT_LABELS, WORK_MODE_LABELS } from './gold.js'
-import { DEFAULT_FILTERS, DEFAULT_SCOPE, DEFAULT_TAB, FRESH_HOURS, LIST_TABS, POSTED_OPTIONS, SCOPES, SORT_VALUES, defaultSortFor } from './filters.js'
+import {
+  DEFAULT_FILTERS, DEFAULT_SCOPE, DEFAULT_TAB, FRESH_HOURS, POSTED_OPTIONS, SCOPES, defaultSortFor, normalizeTab, sortAllowed,
+} from './filters.js'
 
 const JOB_KEY_RE = /^[0-9a-f]{64}$/
 // Text filters and their longest accepted value (the server cuts at the same lengths)
@@ -21,15 +24,18 @@ const SHEETS = ['filters']
 
 export const isJobKey = (value) => typeof value === 'string' && JOB_KEY_RE.test(value)
 
-// remembered: { tab, scope, sortFor(tab) } from viewPref (all optional); what a value left out of the URL means
+// remembered: { tab, scope, postedWithin, sortFor(tab) } from viewPref (all optional); what a value left out of the URL
+// means
 function fallbacks(remembered = {}) {
-  const tab = LIST_TABS.includes(remembered.tab) ? remembered.tab : DEFAULT_TAB
+  const tab = normalizeTab(remembered.tab) ?? DEFAULT_TAB
   const scope = SCOPES.includes(remembered.scope) ? remembered.scope : DEFAULT_SCOPE
+  const span = String(remembered.postedWithin ?? FRESH_HOURS)
+  const postedWithin = span === '' || POSTED_VALUES.has(span) ? span : FRESH_HOURS
   const sortFor = (forTab) => {
     const sort = remembered.sortFor?.(forTab)
-    return SORT_VALUES.includes(sort) ? sort : defaultSortFor(forTab)
+    return sortAllowed(sort, forTab) ? sort : defaultSortFor(forTab)
   }
-  return { tab, scope, sortFor }
+  return { tab, scope, postedWithin, sortFor }
 }
 
 function toParams(searchParams) {
@@ -48,8 +54,8 @@ function rangeValue(key, raw) {
 export function parseListState(searchParams, remembered) {
   const params = toParams(searchParams)
   const base = fallbacks(remembered)
-  const tab = LIST_TABS.includes(params.get('tab')) ? params.get('tab') : base.tab
-  const sort = SORT_VALUES.includes(params.get('sort')) ? params.get('sort') : base.sortFor(tab)
+  const tab = normalizeTab(params.get('tab')) ?? base.tab
+  const sort = sortAllowed(params.get('sort'), tab) ? params.get('sort') : base.sortFor(tab)
   const scope = SCOPES.includes(params.get('scope')) ? params.get('scope') : base.scope
 
   const filters = { ...DEFAULT_FILTERS }
@@ -62,7 +68,7 @@ export function parseListState(searchParams, remembered) {
   }
   for (const key of Object.keys(RANGES)) filters[key] = rangeValue(key, params.get(key))
   const posted = params.get('posted')
-  filters.postedWithin = posted === 'any' ? '' : POSTED_VALUES.has(posted) ? posted : FRESH_HOURS
+  filters.postedWithin = posted === 'any' ? '' : POSTED_VALUES.has(posted) ? posted : base.postedWithin
   for (const [key, param] of Object.entries(FLAGS)) filters[key] = params.get(param) === '1'
   filters.muteView = params.get('muted') === 'only' ? 'only' : ''
 
@@ -76,9 +82,9 @@ export function listStateToParams(state, remembered) {
   const base = fallbacks(remembered)
   const params = new URLSearchParams()
   const filters = { ...DEFAULT_FILTERS, ...state?.filters }
-  const tab = LIST_TABS.includes(state?.tab) ? state.tab : base.tab
+  const tab = normalizeTab(state?.tab) ?? base.tab
   if (tab !== base.tab) params.set('tab', tab)
-  if (SORT_VALUES.includes(state?.sort) && state.sort !== base.sortFor(tab)) params.set('sort', state.sort)
+  if (sortAllowed(state?.sort, tab) && state.sort !== base.sortFor(tab)) params.set('sort', state.sort)
   if (SCOPES.includes(state?.scope) && state.scope !== base.scope) params.set('scope', state.scope)
 
   // Same order as the panel: text, choices, ranges
@@ -93,8 +99,7 @@ export function listStateToParams(state, remembered) {
     if (value) params.set(key, value)
   }
   const posted = String(filters.postedWithin ?? '')
-  if (!posted) params.set('posted', 'any')
-  else if (posted !== FRESH_HOURS && POSTED_VALUES.has(posted)) params.set('posted', posted)
+  if (posted !== base.postedWithin && (!posted || POSTED_VALUES.has(posted))) params.set('posted', posted || 'any')
   for (const [key, param] of Object.entries(FLAGS)) if (filters[key] === true) params.set(param, '1')
   if (filters.muteView === 'only') params.set('muted', 'only')
 

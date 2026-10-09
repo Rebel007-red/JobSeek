@@ -1,4 +1,5 @@
 import { FIT_PARTS, fitLabel, fitTone } from '../../utils/gold'
+import { FIT_POINTS_MAX, fitBars, fitPoints } from '../../utils/fit'
 
 export function FitRing({ score, size = 'md' }) {
   const tone = fitTone(score)
@@ -28,33 +29,54 @@ export function FitScore({ score }) {
   )
 }
 
-// Component bars (role / skills / experience), each 0-1, with their fixed share of the score.
-// reasons (optional, not in compact mode): { [part key]: text | [text, ...] } shown under each bar (fit.js fitReasons).
-export function FitBreakdown({ job, compact = false, reasons }) {
+// fitPoints() names the parts role / skills / experience
+const POINT_NAMES = { fit_role: 'role', fit_skills: 'skills', fit_experience: 'experience' }
+
+// The bar's colour: the share of the part's points, toned like a score
+const barTone = (share) => fitTone(Math.round(share * 100))
+
+// The fit score as three bars of points that add up to it (fit.js fitPoints): "Role 40/40 · Matches your #1 role, …".
+// compact (cards): bars and short labels only. Otherwise profile gives the reasons, and slots ({ [part key]: node })
+// renders extra content right under a bar (the drawer puts the skills gap under the skills bar).
+export function FitBreakdown({ job, compact = false, profile, slots }) {
   const hasAny = FIT_PARTS.some(part => job[part.key] !== null && job[part.key] !== undefined)
   if (!hasAny) return null
 
-  return (
-    <div className={`fit-breakdown ${compact ? 'compact' : ''}`}>
-      {FIT_PARTS.map(part => {
-        const value = Math.round(Math.max(0, Math.min(1, Number(job[part.key]) || 0)) * 100)
-        const lines = compact ? [] : [reasons?.[part.key]].flat().filter(Boolean)
-        return (
-          <div key={part.key} className="fit-part" title={`${part.label}: ${value}%`}>
-            {!compact && (
-              <div className="fit-part-label">
-                <span>{part.label}</span>
-                <em>{value}% · weight {Math.round(part.weight * 100)}%</em>
+  if (compact) {
+    const points = fitPoints(job)
+    return (
+      <div className="fit-breakdown compact">
+        {FIT_PARTS.map(part => {
+          const max = FIT_POINTS_MAX[part.key]
+          const value = points ? points[POINT_NAMES[part.key]] : Math.round(Math.max(0, Math.min(1, Number(job[part.key]) || 0)) * max)
+          const share = max ? value / max : 0
+          return (
+            <div key={part.key} className="fit-part" title={`${part.label} ${value}/${max} points`}>
+              <div className="fit-bar" aria-hidden="true">
+                <i style={{ width: `${Math.round(share * 100)}%` }} className={barTone(share)} />
               </div>
-            )}
-            <div className="fit-bar" aria-hidden={compact ? 'true' : undefined}>
-              <i style={{ width: `${value}%` }} className={fitTone(value)} />
+              <small>{part.short}</small>
             </div>
-            {compact && <small>{part.short}</small>}
-            {lines.map(line => <p key={line} className="fit-reason">{line}</p>)}
+          )
+        })}
+      </div>
+    )
+  }
+
+  return (
+    <div className="fit-breakdown">
+      {fitBars(job, profile).map(bar => (
+        <div key={bar.key} className="fit-part">
+          <p className="fit-part-text">
+            <strong>{bar.label}{bar.points !== null && ` ${bar.points}/${bar.max}`}</strong>
+            {bar.reason && <span> · {bar.reason}</span>}
+          </p>
+          <div className="fit-bar" role="presentation">
+            <i style={{ width: `${Math.round(bar.share * 100)}%` }} className={barTone(bar.share)} />
           </div>
-        )
-      })}
+          {slots?.[bar.key]}
+        </div>
+      ))}
     </div>
   )
 }

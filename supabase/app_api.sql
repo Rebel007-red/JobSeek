@@ -3,10 +3,19 @@
 --
 --   public.app_read(action, params)    signed-in users: jobs, summary, trend, facets, job, jobRow, jobGroup, jobNote,
 --                                      trackedJobs, hiddenJobs, profile, refs, status; admins also allowedEmails,
---                                      companyHealth, systemStatus
+--                                      companyHealth, systemStatus, metrics
 --   public.app_write(action, params)   signed-in users: setApplied, setStatus, setHidden, setNote, restoreHidden,
---                                      saveProfile, saveMuteRules; admins also setAllowedEmail
+--                                      saveProfile, saveMuteRules, ping; admins also setAllowedEmail
 --   public.pipeline_*                  service role only (GitHub Actions)
+-- Trust release additions (every older action, parameter and returned key keeps its meaning):
+--   jobs     tab 'inbox' (untracked jobs only; 'pending' and 'all' still work), expiring: true (the Expiring tonight
+--            list: untracked For-you jobs on their last day, at most c_expiring_max() rows), sort 'expiring'
+--   summary  since (ISO timestamp) and the keys inbox, inbox_strong, new_since, expiring, expiring_strong, triaged_today
+--   setNote  a key left out of params (note, nextActionAt) keeps the stored value; an explicit null still clears it
+--   ping     {opened?, promptYes?, promptNo?, promptSaved?}: last_list_seen_at and today's activity counters
+--   metrics  admin: aggregates of app.user_activity_day and app.user_job_state (8 ISO weeks and guardrails)
+-- The triage writes (setApplied, setStatus, setHidden, setNote, restoreHidden) also keep app.user_activity_day and
+-- user_job_state.fit_at_action current (app.record_triage).
 -- Every call returns {"rows": [...]}. Errors are raised with a readable message (PostgREST error.message):
 -- 28000 sign in required, 42501 not allowed / admins only / service role only, 22023 invalid input.
 --
@@ -108,6 +117,17 @@ CREATE OR REPLACE FUNCTION app.c_max_muted_title_words() RETURNS int LANGUAGE sq
 CREATE OR REPLACE FUNCTION app.c_mute_word_re() RETURNS text LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT '^[A-Za-z0-9][A-Za-z0-9 .+#&/-]*$'::text $$;
 -- keep in sync: most jobs per bulk write (src/lib/api.js sends larger selections in chunks of this size)
 CREATE OR REPLACE FUNCTION app.c_max_bulk_keys() RETURNS int LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT 100 $$;
+-- keep in sync: src/utils/job.js JOB_DELETE_AFTER_DAYS (an untracked job is deleted at the first publish on or after UTC
+-- midnight of its job date + this + 1 days, so from job date + this days on it is "expiring")
+CREATE OR REPLACE FUNCTION app.c_job_delete_after_days() RETURNS int LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT 2 $$;
+-- keep in sync: most rows of the expiring list (the Expiring tonight strip; pinned in src/utils/sql_constants.test.js)
+CREATE OR REPLACE FUNCTION app.c_expiring_max() RETURNS int LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT 10 $$;
+-- keep in sync: src/hooks/useVisit.js VISIT_GAP_MS (a ping after this many minutes without activity is a new visit)
+CREATE OR REPLACE FUNCTION app.c_visit_gap_minutes() RETURNS int LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT 30 $$;
+-- keep in sync: days of app.user_activity_day kept (pinned in src/utils/sql_constants.test.js)
+CREATE OR REPLACE FUNCTION app.c_activity_keep_days() RETURNS int LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT 180 $$;
+-- keep in sync: largest counter one ping may add (pinned in src/utils/sql_constants.test.js)
+CREATE OR REPLACE FUNCTION app.c_max_ping_count() RETURNS int LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT 500 $$;
 
 -- =====================================================================================================================
 -- Small helpers
@@ -948,8 +968,12 @@ $$;
 -- p_mode 'list' (the jobs list) also applies, in this order:
 --   time    fresh, or a tracked job on the Saved / Applied tab (those tabs list their jobs whatever their date)
 --   mute    muteView 'only' lists the muted jobs, anything else leaves them out
---   tab     applied = applied (any stage), pending = not applied (saved included), saved = status saved
+--   tab     inbox = untracked (not saved, applied or staged), applied = applied (any stage), pending = not applied
+--           (saved included), saved = status saved
 --   closed / followUp / stage
+-- or, with expiring: true, instead of all of these: untracked, For you, not muted and on its last day before the
+-- publish deletes it (job date <= today - c_job_delete_after_days(), UTC; the rule of src/utils/job.js expiryHint).
+-- The text and panel filters still apply; scope does not matter (For you only).
 -- p_mode 'summary' (summary, facets) applies none of these; they count with fresh and muted_by themselves.
 -- q: words starting with '-' (2+ characters) must not occur; the other words, joined by single spaces, must.
 CREATE OR REPLACE FUNCTION app.filtered_jobs(p_uid uuid, p jsonb, p_mode text) RETURNS SETOF app.filtered_job
@@ -982,7 +1006,9 @@ WITH f AS MATERIALIZED (
     coalesce(jsonb_typeof(p -> 'muteView') = 'string' AND (p ->> 'muteView') = 'only', false) AS mute_only,
     CASE WHEN app.js_text(p -> 'closed', 10) IN ('only', 'hide') THEN app.js_text(p -> 'closed', 10) ELSE '' END AS closed,
     coalesce(p -> 'followUp' = 'true'::jsonb, false) AS follow_up,
-    CASE WHEN app.js_text(p -> 'stage', 20) = ANY (app.c_applied_statuses()) THEN app.js_text(p -> 'stage', 20) ELSE '' END AS stage
+    CASE WHEN app.js_text(p -> 'stage', 20) = ANY (app.c_applied_statuses()) THEN app.js_text(p -> 'stage', 20) ELSE '' END AS stage,
+    coalesce(p_mode = 'list' AND p -> 'expiring' = 'true'::jsonb, false) AS expiring,
+    current_date - app.c_job_delete_after_days() AS expiring_on
   FROM (SELECT lower(app.js_text(p -> 'q', 100)) AS q) raw
   CROSS JOIN LATERAL (
     SELECT coalesce(string_agg(w.word, ' ' ORDER BY w.ord) FILTER (WHERE w.word NOT LIKE '-_%'), '') AS positive,
@@ -1021,16 +1047,19 @@ WHERE NOT u.is_hidden AND (coalesce(u.is_active, true) OR u.is_tracked)
   AND (f.max_years IS NULL OR coalesce(u.experience_min_years, 0) <= f.max_years)
   AND (f.min_fit IS NULL OR coalesce(u.fit_score, 0) >= f.min_fit)
   AND (NOT f.matched_only OR coalesce(cardinality(u.fit_matched_skills), 0) > 0)
-  AND (NOT f.list_mode OR (
+  AND (NOT f.list_mode OR CASE WHEN f.expiring THEN
+    NOT u.is_tracked AND u.in_for_you AND u.muted_by IS NULL
+    AND coalesce(coalesce(u.posted_date, (u.first_seen_at AT TIME ZONE 'UTC')::date) <= f.expiring_on, false)
+  ELSE (
     (t.fresh OR (u.is_tracked AND coalesce(f.tab IN ('applied', 'saved'), false)))
     AND CASE WHEN f.mute_only THEN u.muted_by IS NOT NULL ELSE u.muted_by IS NULL END
-    AND (f.tab IS NULL OR f.tab NOT IN ('applied', 'pending', 'saved')
+    AND (f.tab IS NULL OR f.tab NOT IN ('applied', 'pending', 'saved', 'inbox')
          OR (f.tab = 'applied' AND u.is_applied) OR (f.tab = 'pending' AND NOT u.is_applied)
-         OR (f.tab = 'saved' AND u.application_status = 'saved'))
+         OR (f.tab = 'saved' AND u.application_status = 'saved') OR (f.tab = 'inbox' AND NOT u.is_tracked))
     AND (f.closed = '' OR (f.closed = 'only') = NOT coalesce(u.is_active, true))
     AND (NOT f.follow_up OR u.follow_up)
     AND (f.stage = '' OR u.application_status = f.stage)
-  ))
+  ) END)
 $$;
 
 -- =====================================================================================================================
@@ -1041,16 +1070,18 @@ $$;
 CREATE OR REPLACE FUNCTION app.list_row(p_row jsonb) RETURNS jsonb
 LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
   SELECT p_row - ARRAY['is_hidden', 'hidden_at', 'is_tracked', 'fresh', 'gk', 'rn', 'job_date',
-                       'k1', 'k2', 'k3', 'k4', 'k5', 'k6']
+                       'k0', 'k1', 'k2', 'k3', 'k4', 'k5', 'k6']
 $$;
 
 CREATE OR REPLACE FUNCTION app.read_jobs(p_uid uuid, p jsonb) RETURNS jsonb
 LANGUAGE plpgsql STABLE AS $$
 DECLARE
-  v_sort text := CASE WHEN jsonb_typeof(p -> 'sort') = 'string' AND (p ->> 'sort') IN ('recent', 'found', 'applied')
+  v_sort text := CASE WHEN jsonb_typeof(p -> 'sort') = 'string' AND (p ->> 'sort') IN ('recent', 'found', 'applied', 'expiring')
                       THEN p ->> 'sort' ELSE 'fit' END;
   v_collapse boolean := p -> 'collapse' IS DISTINCT FROM 'false'::jsonb;
-  v_limit int := coalesce(app.js_int(p -> 'limit', 1, app.c_max_page_size()), app.c_default_page_size());
+  v_limit int := CASE WHEN p -> 'expiring' = 'true'::jsonb
+                      THEN least(coalesce(app.js_int(p -> 'limit', 1, app.c_max_page_size()), app.c_expiring_max()), app.c_expiring_max())
+                      ELSE coalesce(app.js_int(p -> 'limit', 1, app.c_max_page_size()), app.c_default_page_size()) END;
   v_offset int := coalesce(app.js_int(p -> 'offset', 0, 100000), 0);
   v_page jsonb;
   v_rows jsonb;
@@ -1060,8 +1091,10 @@ BEGIN
   --    (then newest); dup_count / dup_keys / dup_locations describe the others. Only these representatives are sorted
   --    and paged, and total_count counts them.
   --    Sorts (then job_key): fit = fit_score, job date, first_seen_at, role_score; recent = job date, fit_score;
-  --    found = first_seen_at, fit_score; applied = applied_at, status_updated_at. k1..k6 hold the sort keys of the
-  --    chosen sort (NULL where unused) so ORDER BY ... LIMIT can use a top-N sort.
+  --    found = first_seen_at, fit_score; applied = applied_at, status_updated_at; expiring = job date ascending (soonest
+  --    gone first), fit_score, first_seen_at. k0..k6 hold the sort keys of the chosen sort (NULL where unused; k0 is
+  --    the job date turned around, so every key sorts DESC) so ORDER BY ... LIMIT can use a top-N sort.
+  --    expiring: true (the Expiring tonight list) returns at most c_expiring_max() rows; total_count counts them all.
   WITH x AS MATERIALIZED (
     SELECT f.job_key, app.group_key(f.job_key, f.dup_group, f.is_tracked, v_collapse) AS gk, f.fit_score,
       coalesce(f.posted_date, (f.first_seen_at AT TIME ZONE 'UTC')::date) AS job_date, f.first_seen_at, f.role_score,
@@ -1089,22 +1122,23 @@ BEGIN
   page AS (
     SELECT g.job_key, g.dup_count, g.dup_keys, g.dup_locations,
       count(*) OVER () AS total_count,
-      CASE WHEN v_sort = 'fit' THEN g.fit_score END AS k1,
+      CASE WHEN v_sort = 'expiring' THEN DATE '2000-01-01' - g.job_date END AS k0,
+      CASE WHEN v_sort IN ('fit', 'expiring') THEN g.fit_score END AS k1,
       CASE WHEN v_sort IN ('fit', 'recent') THEN g.job_date END AS k2,
-      CASE WHEN v_sort IN ('fit', 'found') THEN g.first_seen_at WHEN v_sort = 'applied' THEN g.applied_at END AS k3,
+      CASE WHEN v_sort IN ('fit', 'found', 'expiring') THEN g.first_seen_at WHEN v_sort = 'applied' THEN g.applied_at END AS k3,
       CASE WHEN v_sort = 'fit' THEN g.role_score END AS k4,
       CASE WHEN v_sort IN ('recent', 'found') THEN g.fit_score END AS k5,
       CASE WHEN v_sort = 'applied' THEN g.status_updated_at END AS k6
     FROM by_group g
-    ORDER BY k1 DESC NULLS LAST, k2 DESC NULLS LAST, k3 DESC NULLS LAST, k4 DESC NULLS LAST, k5 DESC NULLS LAST,
-             k6 DESC NULLS LAST, g.job_key COLLATE "C"
+    ORDER BY k0 DESC NULLS LAST, k1 DESC NULLS LAST, k2 DESC NULLS LAST, k3 DESC NULLS LAST, k4 DESC NULLS LAST,
+             k5 DESC NULLS LAST, k6 DESC NULLS LAST, g.job_key COLLATE "C"
     LIMIT v_limit OFFSET v_offset
   )
   SELECT coalesce(jsonb_agg(jsonb_build_object('job_key', pg.job_key, 'dup_count', pg.dup_count,
              'dup_keys', coalesce(pg.dup_keys, '{}'::text[]), 'dup_locations', coalesce(pg.dup_locations, '{}'::text[]),
              'total_count', pg.total_count)
-           ORDER BY pg.k1 DESC NULLS LAST, pg.k2 DESC NULLS LAST, pg.k3 DESC NULLS LAST, pg.k4 DESC NULLS LAST,
-                    pg.k5 DESC NULLS LAST, pg.k6 DESC NULLS LAST, pg.job_key COLLATE "C"), '[]'::jsonb)
+           ORDER BY pg.k0 DESC NULLS LAST, pg.k1 DESC NULLS LAST, pg.k2 DESC NULLS LAST, pg.k3 DESC NULLS LAST,
+                    pg.k4 DESC NULLS LAST, pg.k5 DESC NULLS LAST, pg.k6 DESC NULLS LAST, pg.job_key COLLATE "C"), '[]'::jsonb)
   INTO v_page
   FROM page pg;
 
@@ -1122,14 +1156,23 @@ $$;
 -- postedWithin and collapse apply). total / pending / new_48h / strong_fit count list rows (groups when collapsed)
 -- inside the time window and not muted; applied / saved / stages / follow_up / closed count tracked jobs whatever their
 -- date; muted = the muted jobs inside the time window.
+-- One definition per number for the tabs (Inbox, Saved and Applied are disjoint; listed = fresh and not muted):
+--   inbox            listed and untracked (= the Inbox tab's total_count)
+--   inbox_strong     inbox with fit >= c_strong_fit() (= the Inbox tab filtered to minFit 70)
+--   new_since        inbox found after params.since (an ISO timestamp); null without since
+--   expiring         untracked, For you, not muted, on its last day (as the expiring: true list); the time window and
+--                    the scope do not apply. expiring_strong: of these, fit >= c_strong_fit()
+--   triaged_today    saved + applied + hidden of today's app.user_activity_day row (net of same-day undos)
+-- strong_fit keeps its old meaning (tracked jobs included): parity.py and older clients compare it.
 CREATE OR REPLACE FUNCTION app.read_summary(p_uid uuid, p jsonb) RETURNS jsonb
 LANGUAGE sql STABLE AS $$
   WITH x AS MATERIALIZED (
     SELECT f.job_key, f.is_applied, f.application_status, f.is_tracked, f.is_active, f.follow_up, f.first_seen_at,
-      f.fit_score, f.muted_by, f.fresh,
+      f.fit_score, f.muted_by, f.fresh, f.posted_date, f.in_for_you,
       app.group_key(f.job_key, f.dup_group, f.is_tracked, p -> 'collapse' IS DISTINCT FROM 'false'::jsonb) AS gk
     FROM app.filtered_jobs(p_uid, p, 'summary') f
   ),
+  since AS (SELECT app.js_timestamp(p -> 'since') AS at),
   stages AS (
     SELECT jsonb_object_agg(s.status, coalesce(c.n, 0)) AS counts
     FROM unnest(app.c_applied_statuses()) AS s(status)
@@ -1140,13 +1183,31 @@ LANGUAGE sql STABLE AS $$
   by_group AS (
     SELECT bool_or(x.listed) AS listed, bool_or(x.listed AND NOT x.is_applied) AS pending,
       bool_or(x.listed AND x.first_seen_at >= now() - interval '48 hours') AS new_48h,
-      bool_or(x.listed AND coalesce(x.fit_score, 0) >= app.c_strong_fit()) AS strong_fit
-    FROM (SELECT x.*, x.fresh AND x.muted_by IS NULL AS listed FROM x) x
+      bool_or(x.listed AND coalesce(x.fit_score, 0) >= app.c_strong_fit()) AS strong_fit,
+      bool_or(x.inbox) AS inbox,
+      bool_or(x.inbox AND coalesce(x.fit_score, 0) >= app.c_strong_fit()) AS inbox_strong,
+      bool_or(x.inbox AND x.first_seen_at > s.at) AS new_since,
+      bool_or(x.expiring) AS expiring,
+      bool_or(x.expiring AND coalesce(x.fit_score, 0) >= app.c_strong_fit()) AS expiring_strong
+    FROM (
+      SELECT x.*, x.fresh AND x.muted_by IS NULL AS listed,
+        x.fresh AND x.muted_by IS NULL AND NOT x.is_tracked AS inbox,
+        NOT x.is_tracked AND x.in_for_you AND x.muted_by IS NULL
+          AND coalesce(coalesce(x.posted_date, (x.first_seen_at AT TIME ZONE 'UTC')::date)
+                       <= current_date - app.c_job_delete_after_days(), false) AS expiring
+      FROM x
+    ) x
+    CROSS JOIN since s
     GROUP BY x.gk
   )
   SELECT jsonb_build_object('rows', jsonb_build_array((
     SELECT jsonb_build_object('total', count(*) FILTER (WHERE gr.listed), 'pending', count(*) FILTER (WHERE gr.pending),
-      'new_48h', count(*) FILTER (WHERE gr.new_48h), 'strong_fit', count(*) FILTER (WHERE gr.strong_fit))
+      'new_48h', count(*) FILTER (WHERE gr.new_48h), 'strong_fit', count(*) FILTER (WHERE gr.strong_fit),
+      'inbox', count(*) FILTER (WHERE gr.inbox), 'inbox_strong', count(*) FILTER (WHERE gr.inbox_strong),
+      'new_since', CASE WHEN (SELECT s.at FROM since s) IS NOT NULL THEN count(*) FILTER (WHERE gr.new_since) END,
+      'expiring', count(*) FILTER (WHERE gr.expiring), 'expiring_strong', count(*) FILTER (WHERE gr.expiring_strong),
+      'triaged_today', (SELECT coalesce(sum(d.saved + d.applied + d.hidden), 0) FROM app.user_activity_day d
+                        WHERE d.user_id = p_uid AND d.day = current_date))
     FROM by_group gr
   ) || jsonb_build_object(
     'applied', count(*) FILTER (WHERE x.is_applied),
@@ -1355,10 +1416,139 @@ LANGUAGE sql STABLE AS $$
   LEFT JOIN app.pipeline_status ps ON ps.id = 1
 $$;
 
+-- The allow-list with, per email (its auth.users account, matched case-insensitively): last_active_at = the latest
+-- ping or write (app.user_activity_day.last_at; null if none) and applied_7d = jobs applied to in the last 7 days.
+-- If the function owner may not read auth.users, the list still comes back (the two extras null), so the Access tab
+-- of a client that predates them keeps working.
 CREATE OR REPLACE FUNCTION app.read_allowed_emails() RETURNS jsonb
+LANGUAGE plpgsql STABLE AS $$
+BEGIN
+  RETURN (
+    SELECT jsonb_build_object('rows', coalesce(jsonb_agg(jsonb_build_object('email', a.email, 'added_at', a.added_at,
+             'last_active_at', x.last_active_at, 'applied_7d', x.applied_7d) ORDER BY a.email COLLATE "C"), '[]'::jsonb))
+    FROM app.allowed_emails a
+    CROSS JOIN LATERAL (
+      SELECT
+        (SELECT max(d.last_at) FROM app.user_activity_day d
+         WHERE d.user_id IN (SELECT u.id FROM auth.users u WHERE lower(u.email) = a.email)) AS last_active_at,
+        (SELECT count(*) FROM app.user_job_state s
+         WHERE s.user_id IN (SELECT u.id FROM auth.users u WHERE lower(u.email) = a.email)
+           AND s.is_applied AND s.applied_at >= now() - interval '7 days') AS applied_7d
+    ) x
+  );
+EXCEPTION WHEN insufficient_privilege THEN
+  RETURN (
+    SELECT jsonb_build_object('rows', coalesce(jsonb_agg(jsonb_build_object('email', a.email, 'added_at', a.added_at,
+             'last_active_at', NULL, 'applied_7d', NULL) ORDER BY a.email COLLATE "C"), '[]'::jsonb))
+    FROM app.allowed_emails a
+  );
+END
+$$;
+
+-- Admin Metrics card: aggregates only (no job keys, URLs or search text). Days and ISO weeks (Monday) are UTC; active =
+-- a day with visits > 0.
+--   weeks            the last 8 ISO weeks, newest first: active_users, strong_applications (applied_at in the week and
+--                    fit_at_action >= STRONG_FIT), north_star = strong_applications / active_users, the acted_strong /
+--                    missed_strong sums and coverage = acted / (acted + missed)
+--   weekly_return    users active on 1+ / 3+ of the last 7 days
+--   retention        accounts created in the last 60 days, back the next day (d1) and on day 7 (d7), each with the
+--                    accounts old enough to tell
+--   outcome_capture  applications 14+ days old and how many moved past 'applied'
+--   guardrails       last 28 days of applications: duplicates (an earlier application of yours in the same dup_group)
+--                    and the median hours from first seen to applied
+CREATE OR REPLACE FUNCTION app.read_metrics() RETURNS jsonb
 LANGUAGE sql STABLE AS $$
-  SELECT jsonb_build_object('rows', coalesce(jsonb_agg(jsonb_build_object('email', a.email, 'added_at', a.added_at) ORDER BY a.email COLLATE "C"), '[]'::jsonb))
-  FROM app.allowed_emails a
+  WITH weeks AS (
+    SELECT (date_trunc('week', current_date::timestamp) - make_interval(weeks => i))::date AS week
+    FROM generate_series(0, 7) AS i
+  ),
+  active_days AS (
+    SELECT d.user_id, d.day FROM app.user_activity_day d WHERE d.visits > 0
+  ),
+  per_week AS (
+    SELECT w.week,
+      (SELECT count(DISTINCT ad.user_id) FROM active_days ad WHERE ad.day >= w.week AND ad.day < w.week + 7) AS active_users,
+      (SELECT count(*) FROM app.user_job_state s
+       WHERE s.is_applied AND s.fit_at_action >= app.c_strong_fit()
+         AND (s.applied_at AT TIME ZONE 'UTC')::date >= w.week AND (s.applied_at AT TIME ZONE 'UTC')::date < w.week + 7)
+        AS strong_applications,
+      (SELECT coalesce(sum(d.acted_strong), 0) FROM app.user_activity_day d WHERE d.day >= w.week AND d.day < w.week + 7)
+        AS acted_strong,
+      (SELECT coalesce(sum(d.missed_strong), 0) FROM app.user_activity_day d WHERE d.day >= w.week AND d.day < w.week + 7)
+        AS missed_strong
+    FROM weeks w
+  ),
+  last7 AS (
+    SELECT ad.user_id, count(DISTINCT ad.day) AS days
+    FROM active_days ad
+    WHERE ad.day > current_date - 7
+    GROUP BY ad.user_id
+  ),
+  signups AS (
+    SELECT u.id, (u.created_at AT TIME ZONE 'UTC')::date AS day
+    FROM auth.users u
+    WHERE u.created_at >= now() - interval '60 days'
+  ),
+  applications AS (
+    SELECT s.user_id, s.job_key, s.applied_at, s.application_status, j.dup_group, j.first_seen_at
+    FROM app.user_job_state s
+    LEFT JOIN app.jobs j ON j.job_key = s.job_key
+    WHERE s.is_applied AND s.applied_at IS NOT NULL
+  ),
+  recent AS (
+    SELECT a.*, EXISTS (
+        SELECT 1 FROM applications e
+        WHERE e.user_id = a.user_id AND e.dup_group = a.dup_group AND e.job_key <> a.job_key AND e.applied_at < a.applied_at
+      ) AS duplicate
+    FROM applications a
+    WHERE a.applied_at >= now() - interval '28 days'
+  ),
+  r AS (
+    SELECT count(*) AS n, count(*) FILTER (WHERE x.duplicate) AS dup,
+      percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM x.applied_at - x.first_seen_at) / 3600)
+        FILTER (WHERE x.first_seen_at <= x.applied_at) AS median_hours
+    FROM recent x
+  ),
+  outcome AS (
+    SELECT count(*) AS eligible, count(*) FILTER (WHERE a.application_status <> 'applied') AS moved
+    FROM applications a
+    WHERE a.applied_at <= now() - interval '14 days'
+  ),
+  wr AS (
+    SELECT count(*) AS active_7d, count(*) FILTER (WHERE l.days >= 3) AS habitual_7d FROM last7 l
+  ),
+  ret AS (
+    SELECT count(*) AS new_users,
+      count(*) FILTER (WHERE s.day + 1 <= current_date) AS d1_eligible,
+      count(*) FILTER (WHERE s.day + 1 <= current_date
+                         AND EXISTS (SELECT 1 FROM active_days ad WHERE ad.user_id = s.id AND ad.day = s.day + 1)) AS d1,
+      count(*) FILTER (WHERE s.day + 7 <= current_date) AS d7_eligible,
+      count(*) FILTER (WHERE s.day + 7 <= current_date
+                         AND EXISTS (SELECT 1 FROM active_days ad WHERE ad.user_id = s.id AND ad.day = s.day + 7)) AS d7
+    FROM signups s
+  )
+  SELECT jsonb_build_object('rows', jsonb_build_array(jsonb_build_object(
+    'generated_at', now(),
+    'collecting_since', (SELECT min(d.day) FROM app.user_activity_day d),
+    'weeks', (SELECT jsonb_agg(jsonb_build_object(
+                'week', pw.week, 'active_users', pw.active_users, 'strong_applications', pw.strong_applications,
+                'north_star', CASE WHEN pw.active_users > 0 THEN round(pw.strong_applications::numeric / pw.active_users, 2) END,
+                'acted_strong', pw.acted_strong, 'missed_strong', pw.missed_strong,
+                'coverage', CASE WHEN pw.acted_strong + pw.missed_strong > 0
+                                 THEN round(pw.acted_strong::numeric / (pw.acted_strong + pw.missed_strong), 2) END)
+              ORDER BY pw.week DESC) FROM per_week pw),
+    'weekly_return', (SELECT jsonb_build_object('active_7d', wr.active_7d, 'habitual_7d', wr.habitual_7d,
+                        'share', CASE WHEN wr.active_7d > 0 THEN round(wr.habitual_7d::numeric / wr.active_7d, 2) END)
+                      FROM wr),
+    'retention', (SELECT to_jsonb(ret) FROM ret),
+    'outcome_capture', (SELECT jsonb_build_object('eligible', o.eligible, 'moved', o.moved,
+                          'share', CASE WHEN o.eligible > 0 THEN round(o.moved::numeric / o.eligible, 2) END)
+                        FROM outcome o),
+    'guardrails', (SELECT jsonb_build_object('applications_28d', r.n, 'duplicate_applications_28d', r.dup,
+                     'duplicate_rate', CASE WHEN r.n > 0 THEN round(r.dup::numeric / r.n, 2) END,
+                     'median_hours_to_apply', round(r.median_hours::numeric, 1))
+                   FROM r)
+  )))
 $$;
 
 -- Admin company health: newest job per company for the company scrapers (gold source = the company's ATS type:
@@ -1440,6 +1630,115 @@ $$;
 -- Write actions
 -- =====================================================================================================================
 
+-- Today's activity row (UTC day): first_at / last_at and the triage counters, each kept at 0 or more. visits is not
+-- touched (only app.write_ping counts visits).
+CREATE OR REPLACE FUNCTION app.bump_activity(p_uid uuid, p_saved int, p_applied int, p_hidden int, p_acted_strong int)
+RETURNS void
+LANGUAGE sql VOLATILE AS $$
+  INSERT INTO app.user_activity_day AS a (user_id, day, first_at, last_at, saved, applied, hidden, acted_strong)
+  VALUES (p_uid, current_date, now(), now(), greatest(0, coalesce(p_saved, 0)), greatest(0, coalesce(p_applied, 0)),
+          greatest(0, coalesce(p_hidden, 0)), greatest(0, coalesce(p_acted_strong, 0)))
+  ON CONFLICT (user_id, day) DO UPDATE SET
+    first_at = coalesce(a.first_at, now()),
+    last_at = now(),
+    saved = greatest(0, a.saved + coalesce(p_saved, 0)),
+    applied = greatest(0, a.applied + coalesce(p_applied, 0)),
+    hidden = greatest(0, a.hidden + coalesce(p_hidden, 0)),
+    acted_strong = greatest(0, a.acted_strong + coalesce(p_acted_strong, 0))
+$$;
+
+-- The jobs a triage write acts on as they are before it (app.user_jobs rows, a primary-key lookup per key; keys not
+-- in app.jobs are left out). Passed to app.record_triage after the write. plpgsql, so the session keeps the plan (a
+-- SQL function around app.user_jobs is planned again on every call, which costs more than running it).
+CREATE OR REPLACE FUNCTION app.triage_before(p_uid uuid, p_keys text[]) RETURNS app.user_job[]
+LANGUAGE plpgsql STABLE AS $$
+DECLARE
+  v_rows app.user_job[];
+BEGIN
+  SELECT coalesce(array_agg(u), '{}'::app.user_job[]) INTO v_rows FROM app.user_jobs(p_uid) u WHERE u.job_key = ANY (p_keys);
+  RETURN v_rows;
+END
+$$;
+
+-- After a triage write (setApplied, setStatus, setHidden, setNote, restoreHidden): compares each job's state before
+-- (app.triage_before) and now, then
+--   * fit_at_action := the job's fit_score when it went from untracked (no row, or not_applied and not applied) to a
+--     tracked status, or from not applied to applied; left alone otherwise (also when it goes back to not_applied)
+--   * today's activity counters (app.bump_activity), net of same-day undos:
+--       saved     +1 the status became saved with a status_updated_at of today, except the Undo of today's saved ->
+--                 applied (applied_at today, statusUpdatedAt put back to the save: that save was never taken back);
+--                 an Undo that puts back an older day's save is not a new one either; -1 saved ->
+--                 not_applied when the save was today (saved -> applied is progress, not an undo)
+--       applied   +1 is_applied false -> true with applied_at today (an Undo that puts back an older application is
+--                 not a new one); -1 true -> false when applied_at is today
+--       hidden    +1 is_hidden false -> true; -1 true -> false when hidden_at is today (unhide, restore, or a save
+--                 that unhides)
+--       acted_strong  +1 an untouched job (not tracked, not hidden) that is For you, not muted and fit >= STRONG_FIT
+--                 became tracked or hidden and one of the counters above went up; -1 the reverse, back to untouched, when one of the counters above was taken
+--                 back (the state was entered today)
+--     A same-day undo across days (hidden yesterday, restored today) is not taken back, so acted_strong is approximate.
+CREATE OR REPLACE FUNCTION app.record_triage(p_uid uuid, p_before app.user_job[]) RETURNS void
+LANGUAGE plpgsql VOLATILE AS $$
+DECLARE
+  v_saved int;
+  v_applied int;
+  v_hidden int;
+  v_acted int;
+BEGIN
+  IF coalesce(cardinality(p_before), 0) = 0 THEN
+    RETURN; -- nothing written (no such job)
+  END IF;
+  WITH b AS (
+    SELECT * FROM unnest(p_before)
+  ),
+  a AS (
+    SELECT u.* FROM app.user_jobs(p_uid) u WHERE u.job_key = ANY (ARRAY(SELECT b.job_key FROM b))
+  ),
+  c AS (
+    SELECT b.job_key, a.fit_score,
+      (NOT b.is_tracked AND a.is_tracked) OR (NOT b.is_applied AND a.is_applied) AS set_fit,
+      CASE WHEN a.application_status = 'saved' AND b.application_status <> 'saved'
+                AND coalesce((a.status_updated_at AT TIME ZONE 'UTC')::date >= current_date, true)
+                AND NOT (b.is_applied AND coalesce((b.applied_at AT TIME ZONE 'UTC')::date = current_date, false)
+                         AND coalesce(a.status_updated_at < b.status_updated_at, false)) THEN 1
+           WHEN b.application_status = 'saved' AND a.application_status = 'not_applied'
+                AND coalesce((b.status_updated_at AT TIME ZONE 'UTC')::date = current_date, false) THEN -1
+           ELSE 0 END AS saved,
+      CASE WHEN a.is_applied AND NOT b.is_applied AND coalesce((a.applied_at AT TIME ZONE 'UTC')::date >= current_date, true) THEN 1
+           WHEN b.is_applied AND NOT a.is_applied AND coalesce((b.applied_at AT TIME ZONE 'UTC')::date = current_date, false) THEN -1
+           ELSE 0 END AS applied,
+      CASE WHEN a.is_hidden AND NOT b.is_hidden THEN 1
+           WHEN b.is_hidden AND NOT a.is_hidden AND coalesce((b.hidden_at AT TIME ZONE 'UTC')::date = current_date, false) THEN -1
+           ELSE 0 END AS hidden,
+      NOT b.is_tracked AND NOT b.is_hidden AS untouched_before,
+      NOT a.is_tracked AND NOT a.is_hidden AS untouched_after,
+      b.in_for_you AND b.muted_by IS NULL AND coalesce(b.fit_score, 0) >= app.c_strong_fit() AS strong_before,
+      a.in_for_you AND a.muted_by IS NULL AND coalesce(a.fit_score, 0) >= app.c_strong_fit() AS strong_after
+    FROM b
+    JOIN a ON a.job_key = b.job_key
+  ),
+  d AS (
+    SELECT c.*,
+      CASE WHEN c.untouched_before AND NOT c.untouched_after AND c.strong_before
+                AND (c.saved > 0 OR c.applied > 0 OR c.hidden > 0) THEN 1
+           WHEN NOT c.untouched_before AND c.untouched_after AND c.strong_after
+                AND (c.saved < 0 OR c.applied < 0 OR c.hidden < 0) THEN -1
+           ELSE 0 END AS acted
+    FROM c
+  ),
+  fit AS (
+    UPDATE app.user_job_state s SET fit_at_action = greatest(0, least(100, d.fit_score))
+    FROM d
+    WHERE d.set_fit AND d.fit_score IS NOT NULL AND s.user_id = p_uid AND s.job_key = d.job_key
+    RETURNING s.job_key
+  )
+  SELECT coalesce(sum(d.saved), 0), coalesce(sum(d.applied), 0), coalesce(sum(d.hidden), 0), coalesce(sum(d.acted), 0)
+  INTO v_saved, v_applied, v_hidden, v_acted
+  FROM d;
+  PERFORM app.bump_activity(p_uid, v_saved, v_applied, v_hidden, v_acted);
+END
+$$;
+
 -- Per-user flags; a row is only written for a job that exists in app.jobs (else 0 affected rows).
 -- setApplied (kept for older clients): true keeps a stage you already reached (interviewing, offer, ...), else
 -- 'applied'; false = 'not_applied'. status_updated_at moves only when the status changes.
@@ -1448,6 +1747,7 @@ LANGUAGE plpgsql VOLATILE AS $$
 DECLARE
   v_key text := app.req_job_key(p -> 'jobKey');
   v_applied boolean := app.req_bool(p -> 'applied');
+  v_before app.user_job[] := app.triage_before(p_uid, ARRAY[v_key]);
   v_n bigint;
 BEGIN
   INSERT INTO app.user_job_state AS t
@@ -1472,6 +1772,7 @@ BEGIN
     END,
     updated_at = now();
   GET DIAGNOSTICS v_n = ROW_COUNT;
+  PERFORM app.record_triage(p_uid, v_before);
   RETURN jsonb_build_object('rows', jsonb_build_array(jsonb_build_object('num_affected_rows', v_n)));
 END
 $$;
@@ -1489,6 +1790,7 @@ DECLARE
   v_stamp timestamptz := app.js_timestamp(p -> 'statusUpdatedAt');
   v_applied boolean;
   v_tracked boolean;
+  v_before app.user_job[];
   v_n bigint;
 BEGIN
   IF v_status IS NULL OR NOT v_status = ANY (app.c_application_statuses()) THEN
@@ -1503,6 +1805,7 @@ BEGIN
   v_stamp := CASE WHEN v_stamp > now() THEN now() ELSE v_stamp END;
   v_applied := v_status = ANY (app.c_applied_statuses());
   v_tracked := v_status <> 'not_applied';
+  v_before := app.triage_before(p_uid, v_keys);
   INSERT INTO app.user_job_state AS t
     (user_id, job_key, is_applied, applied_at, is_hidden, hidden_at, application_status, status_updated_at, updated_at)
   SELECT p_uid, j.job_key, v_applied, CASE WHEN v_applied THEN coalesce(v_applied_at, now()) END, false, NULL, v_status,
@@ -1520,6 +1823,7 @@ BEGIN
     hide_reason = CASE WHEN v_tracked THEN NULL ELSE t.hide_reason END,
     updated_at = now();
   GET DIAGNOSTICS v_n = ROW_COUNT;
+  PERFORM app.record_triage(p_uid, v_before);
   RETURN jsonb_build_object('rows', jsonb_build_array(jsonb_build_object('num_affected_rows', v_n, 'status', v_status)));
 END
 $$;
@@ -1533,6 +1837,7 @@ DECLARE
   v_hidden boolean := app.req_bool(p -> 'hidden');
   v_reason_value jsonb := nullif(p -> 'reason', 'null'::jsonb);
   v_reason text;
+  v_before app.user_job[];
   v_n bigint;
 BEGIN
   IF v_reason_value IS NOT NULL THEN
@@ -1541,6 +1846,7 @@ BEGIN
       PERFORM app.fail('Invalid hide reason');
     END IF;
   END IF;
+  v_before := app.triage_before(p_uid, v_keys);
   INSERT INTO app.user_job_state AS t
     (user_id, job_key, is_applied, applied_at, is_hidden, hidden_at, hide_reason, application_status, status_updated_at, updated_at)
   SELECT p_uid, j.job_key, false, NULL, v_hidden, CASE WHEN v_hidden THEN now() END, CASE WHEN v_hidden THEN v_reason END,
@@ -1565,13 +1871,16 @@ BEGIN
       reason = EXCLUDED.reason, title = EXCLUDED.title, company_name = EXCLUDED.company_name,
       role_title = EXCLUDED.role_title, experience_level = EXCLUDED.experience_level, created_at = EXCLUDED.created_at;
   END IF;
+  -- last: the activity row is the last lock a write takes (pipeline_publish_finish also takes it last)
+  PERFORM app.record_triage(p_uid, v_before);
   RETURN jsonb_build_object('rows', jsonb_build_array(jsonb_build_object('num_affected_rows', v_n)));
 END
 $$;
 
--- {jobKey, note, nextActionAt}: a private note (trimmed, at most NOTE_MAX_LENGTH characters, '' = none) and a follow-up
--- date within a year of today. A note or a date on a job you have not saved or applied to saves (and unhides) it, so it
--- outlives the posting's expiry.
+-- {jobKey, note?, nextActionAt?}: a private note (trimmed, at most NOTE_MAX_LENGTH characters, '' or null = none) and a
+-- follow-up date within a year of today ('' or null = none). A key left out keeps the stored value (a snooze sends only
+-- nextActionAt). A note or a date on a job you have not saved or applied to (after the merge) saves (and unhides) it,
+-- so it outlives the posting's expiry.
 CREATE OR REPLACE FUNCTION app.write_set_note(p_uid uuid, p jsonb) RETURNS jsonb
 LANGUAGE plpgsql VOLATILE AS $$
 DECLARE
@@ -1582,6 +1891,9 @@ DECLARE
   v_date date;
   v_keep boolean;
   v_status text;
+  v_old_note text;
+  v_old_date date;
+  v_before app.user_job[];
   v_n bigint;
 BEGIN
   IF v_note_value IS NOT NULL AND jsonb_typeof(v_note_value) NOT IN ('string', 'null') THEN
@@ -1605,7 +1917,21 @@ BEGIN
       PERFORM app.fail('Invalid follow-up date');
     END IF;
   END IF;
+  -- left out: the stored value (none without a row; FOR UPDATE: the merge and the write see the same row)
+  IF v_note_value IS NULL OR v_date_value IS NULL THEN
+    SELECT st.note, st.next_action_at INTO v_old_note, v_old_date
+    FROM app.user_job_state st
+    WHERE st.user_id = p_uid AND st.job_key = v_key
+    FOR UPDATE;
+    IF v_note_value IS NULL THEN
+      v_note := v_old_note;
+    END IF;
+    IF v_date_value IS NULL THEN
+      v_date := v_old_date;
+    END IF;
+  END IF;
   v_keep := v_note IS NOT NULL OR v_date IS NOT NULL;
+  v_before := app.triage_before(p_uid, ARRAY[v_key]);
 
   INSERT INTO app.user_job_state AS t
     (user_id, job_key, note, next_action_at, application_status, status_updated_at, updated_at)
@@ -1626,6 +1952,7 @@ BEGIN
     updated_at = now()
   RETURNING t.application_status INTO v_status;
   GET DIAGNOSTICS v_n = ROW_COUNT;
+  PERFORM app.record_triage(p_uid, v_before);
   RETURN jsonb_build_object('rows', jsonb_build_array(jsonb_build_object('num_affected_rows', v_n, 'application_status', v_status)));
 END
 $$;
@@ -1633,6 +1960,8 @@ $$;
 CREATE OR REPLACE FUNCTION app.write_restore_hidden(p_uid uuid) RETURNS jsonb
 LANGUAGE plpgsql VOLATILE AS $$
 DECLARE
+  v_before app.user_job[] := app.triage_before(p_uid, ARRAY(
+    SELECT st.job_key FROM app.user_job_state st WHERE st.user_id = p_uid AND st.is_hidden));
   v_n bigint;
 BEGIN
   -- As setHidden false, the restored jobs' feedback goes too
@@ -1644,6 +1973,7 @@ BEGIN
     DELETE FROM app.job_feedback f WHERE f.user_id = p_uid AND f.job_key IN (SELECT r.job_key FROM restored r)
   )
   SELECT count(*) INTO v_n FROM restored;
+  PERFORM app.record_triage(p_uid, v_before);
   RETURN jsonb_build_object('rows', jsonb_build_array(jsonb_build_object('num_affected_rows', v_n)));
 END
 $$;
@@ -1828,6 +2158,59 @@ BEGIN
 END
 $$;
 
+-- {opened?, promptYes?, promptNo?, promptSaved?}: the client's throttled "I am looking at the list" (src/hooks/useVisit.js).
+-- Each count is an integer from 0 to c_max_ping_count() (left out or null = 0). Moves last_list_seen_at to now (an
+-- existing profile only: no profile row is ever created here, onboarding relies on profile returning none) and adds to
+-- today's activity row: a visit when the row is new or has none yet, or after c_visit_gap_minutes() without a ping or
+-- write; the counts. Returns the previous last_list_seen_at ("new since your last visit").
+CREATE OR REPLACE FUNCTION app.write_ping(p_uid uuid, p jsonb) RETURNS jsonb
+LANGUAGE plpgsql VOLATILE AS $$
+DECLARE
+  v_name text;
+  v_value jsonb;
+  v_counts int[] := '{}';
+  v_prev timestamptz;
+  v_has_profile boolean;
+BEGIN
+  FOREACH v_name IN ARRAY ARRAY['opened', 'promptYes', 'promptNo', 'promptSaved'] LOOP
+    v_value := nullif(p -> v_name, 'null'::jsonb);
+    IF v_value IS NULL THEN
+      v_counts := v_counts || 0;
+      CONTINUE;
+    END IF;
+    -- two steps: the cast runs only on a checked string (OR does not promise an evaluation order)
+    IF jsonb_typeof(v_value) <> 'number' OR (v_value #>> '{}') !~ '^[0-9]{1,9}$' THEN
+      PERFORM app.fail('Invalid count');
+    END IF;
+    IF (v_value #>> '{}')::int > app.c_max_ping_count() THEN
+      PERFORM app.fail('Invalid count');
+    END IF;
+    v_counts := v_counts || (v_value #>> '{}')::int;
+  END LOOP;
+
+  SELECT up.last_list_seen_at INTO v_prev FROM app.user_profile up WHERE up.profile_id = p_uid FOR UPDATE;
+  v_has_profile := FOUND;
+  IF v_has_profile THEN
+    UPDATE app.user_profile up SET last_list_seen_at = now() WHERE up.profile_id = p_uid;
+  END IF;
+
+  INSERT INTO app.user_activity_day AS a (user_id, day, first_at, last_at, visits, opened, prompt_yes, prompt_no, prompt_saved)
+  VALUES (p_uid, current_date, now(), now(), 1, v_counts[1], v_counts[2], v_counts[3], v_counts[4])
+  ON CONFLICT (user_id, day) DO UPDATE SET
+    first_at = coalesce(a.first_at, now()),
+    visits = a.visits + CASE WHEN a.visits = 0 OR a.last_at IS NULL
+                               OR now() - a.last_at >= make_interval(mins => app.c_visit_gap_minutes()) THEN 1 ELSE 0 END,
+    last_at = now(),
+    opened = a.opened + EXCLUDED.opened,
+    prompt_yes = a.prompt_yes + EXCLUDED.prompt_yes,
+    prompt_no = a.prompt_no + EXCLUDED.prompt_no,
+    prompt_saved = a.prompt_saved + EXCLUDED.prompt_saved;
+
+  RETURN jsonb_build_object('rows', jsonb_build_array(jsonb_build_object(
+    'previous_seen_at', v_prev, 'seen_at', now(), 'has_profile', v_has_profile)));
+END
+$$;
+
 CREATE OR REPLACE FUNCTION app.write_set_allowed_email(p_uid uuid, p jsonb) RETURNS jsonb
 LANGUAGE plpgsql VOLATILE AS $$
 DECLARE
@@ -1864,7 +2247,7 @@ DECLARE
   c record;
 BEGIN
   SELECT * INTO c FROM app.require_caller();
-  IF v_action IN ('allowedEmails', 'companyHealth', 'systemStatus') AND NOT c.caller_is_admin THEN
+  IF v_action IN ('allowedEmails', 'companyHealth', 'systemStatus', 'metrics') AND NOT c.caller_is_admin THEN
     RAISE EXCEPTION USING MESSAGE = 'Admins only', ERRCODE = '42501';
   END IF;
   CASE v_action
@@ -1884,6 +2267,7 @@ BEGIN
     WHEN 'allowedEmails' THEN RETURN app.read_allowed_emails();
     WHEN 'companyHealth' THEN RETURN app.read_company_health();
     WHEN 'systemStatus' THEN RETURN app.read_system_status();
+    WHEN 'metrics' THEN RETURN app.read_metrics();
     ELSE
       RAISE EXCEPTION USING MESSAGE = 'Unknown action: ' || left(coalesce(v_action, 'undefined'), 40), ERRCODE = '22023';
   END CASE;
@@ -1913,6 +2297,7 @@ BEGIN
     WHEN 'saveProfile' THEN RETURN app.write_save_profile(c.caller_uid, v_params);
     WHEN 'saveMuteRules' THEN RETURN app.write_save_mute_rules(c.caller_uid, v_params);
     WHEN 'setAllowedEmail' THEN RETURN app.write_set_allowed_email(c.caller_uid, v_params);
+    WHEN 'ping' THEN RETURN app.write_ping(c.caller_uid, v_params);
     ELSE
       RAISE EXCEPTION USING MESSAGE = 'Unknown action: ' || left(coalesce(v_action, 'undefined'), 40), ERRCODE = '22023';
   END CASE;
@@ -2160,6 +2545,8 @@ DECLARE
   v_kept bigint;
   v_upserted bigint;
   v_refreshed bigint;
+  v_missed bigint;
+  v_missed_by_user jsonb;
 BEGIN
   PERFORM app.require_service();
   IF v_run_id IS NULL OR v_run_id !~ '^[A-Za-z0-9_.-]{1,100}$' THEN
@@ -2303,8 +2690,27 @@ BEGIN
   ORDER BY lower(x.skill), x.created_at NULLS LAST
   ON CONFLICT ((lower(skill))) DO NOTHING;
 
-  -- 5) jobs that left the snapshot, unless a user applied to them or gave them a status
+  -- 5) jobs that left the snapshot, unless a user applied to them or gave them a status. First, per user, the strong
+  --    For-you jobs among them that the user never touched (no state row): today's missed_strong (Metrics coverage),
+  --    written in step 8 (activity rows are locked last, as the user writes do, so the two never wait on each other in
+  --    a circle)
   SELECT count(*) INTO v_upserted FROM app.jobs j WHERE j.published_run_id = v_run_id;
+  SELECT coalesce(jsonb_object_agg(x.profile_id, x.n), '{}'::jsonb), coalesce(sum(x.n), 0)
+  INTO v_missed_by_user, v_missed
+  FROM (
+    SELECT up.profile_id, m.n
+    FROM app.user_profile up
+    CROSS JOIN LATERAL (
+      SELECT count(*)::int AS n
+      FROM app.user_jobs(up.profile_id) u
+      WHERE NOT EXISTS (SELECT 1 FROM app.publish_keys k WHERE k.run_id = v_run_id AND k.job_key = u.job_key)
+        AND NOT EXISTS (SELECT 1 FROM app.user_job_state s
+                        WHERE s.job_key = u.job_key AND (s.is_applied OR s.application_status <> 'not_applied'))
+        AND NOT EXISTS (SELECT 1 FROM app.user_job_state s WHERE s.user_id = up.profile_id AND s.job_key = u.job_key)
+        AND coalesce(u.is_active, true) AND u.in_for_you AND u.muted_by IS NULL AND u.fit_score >= app.c_strong_fit()
+    ) m
+    WHERE m.n > 0
+  ) x;
   DELETE FROM app.jobs j
   WHERE NOT EXISTS (SELECT 1 FROM app.publish_keys k WHERE k.run_id = v_run_id AND k.job_key = j.job_key)
     AND NOT EXISTS (SELECT 1 FROM app.user_job_state s
@@ -2313,8 +2719,9 @@ BEGIN
   SELECT count(*) INTO v_kept
   FROM app.jobs j
   WHERE NOT EXISTS (SELECT 1 FROM app.publish_keys k WHERE k.run_id = v_run_id AND k.job_key = j.job_key);
-  -- A kept job left gold, so the posting expired: show it as closed. The hash changes too, so if the job comes back
-  -- in a later snapshot its row is sent and rewritten instead of being taken for unchanged.
+  -- A kept job left the snapshot (gold no longer lists it) and stays only because someone tracks it: is_active = false
+  -- (the app shows how long ago it was posted; it may still be open). The hash changes too, so if the job comes back in
+  -- a later snapshot its row is sent and rewritten instead of being taken for unchanged.
   UPDATE app.jobs j SET is_active = false, row_hash = j.row_hash || ':expired'
   WHERE j.is_active IS DISTINCT FROM false
     AND NOT EXISTS (SELECT 1 FROM app.publish_keys k WHERE k.run_id = v_run_id AND k.job_key = j.job_key);
@@ -2340,8 +2747,13 @@ BEGIN
     pruned_state = EXCLUDED.pruned_state;
   DELETE FROM app.publish_history h
   WHERE h.run_id NOT IN (SELECT k.run_id FROM app.publish_history k ORDER BY k.published_at DESC, k.run_id DESC LIMIT 50);
-  -- 8) hide feedback is kept for later calibration, but not forever
+  -- 8) hide feedback is kept for later calibration, but not forever; so are the activity counters. Then today's
+  --    missed_strong from step 5
   DELETE FROM app.job_feedback f WHERE f.created_at < now() - interval '180 days';
+  DELETE FROM app.user_activity_day d WHERE d.day < current_date - app.c_activity_keep_days();
+  INSERT INTO app.user_activity_day AS a (user_id, day, missed_strong)
+  SELECT e.key::uuid, current_date, e.value::int FROM jsonb_each_text(v_missed_by_user) e
+  ON CONFLICT (user_id, day) DO UPDATE SET missed_strong = a.missed_strong + EXCLUDED.missed_strong;
 
   RETURN jsonb_build_object(
     'run_id', v_run_id,
@@ -2350,6 +2762,7 @@ BEGIN
     'kept_tracked_not_in_snapshot', v_kept,
     'pruned_state', v_pruned,
     'derivations_refreshed', v_refreshed,
+    'missed_strong', v_missed,
     'counts', v_counts
   );
 END

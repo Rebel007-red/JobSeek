@@ -2,7 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { api } from '../../lib/api'
 import { NOTE_MAX_LENGTH } from '../../utils/entries'
 import { isTracked } from '../../utils/gold'
-import { JOB_DELETE_AFTER_DAYS, formatDate, localDay } from '../../utils/job'
+import { formatDate, localDay } from '../../utils/job'
 import { StatusPicker } from './StatusPicker'
 
 const NOTE_WARN_AT = NOTE_MAX_LENGTH - 200 // the counter turns to the warning tone from here
@@ -53,8 +53,8 @@ export function ApplicationPanel({ job, status, onStatus, onNoteSaved, notify, s
       if (mountedRef.current) setPhase({ state: 'saving', error: '' })
       try {
         const row = await api.setNote(jobKey, next.note || null, next.date || null)
-        // 0 rows: a publish just removed the job (expired posting), so nothing was saved
-        if (Number(row?.num_affected_rows) === 0) throw new Error('This job was just removed (the posting expired), so the note was not saved')
+        // 0 rows: the last update deleted the job (it was over 2 days old and untracked), so nothing was saved
+        if (Number(row?.num_affected_rows) === 0) throw new Error('This job disappeared with the last update, so the note was not saved')
         savedRef.current = next
         if (mountedRef.current) setSaved(next)
         callbacksRef.current.onNoteSaved?.({
@@ -89,6 +89,20 @@ export function ApplicationPanel({ job, status, onStatus, onNoteSaved, notify, s
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, []) // once per job (the panel is keyed by job_key)
+
+  // The follow-up date changed outside the panel (the AgeNotice's "No reply yet", or its Undo): take it as the saved date,
+  // unless you are editing the date here, so a later note save does not send the old date back
+  const outsideDate = job.next_action_at ? String(job.next_action_at).slice(0, 10) : ''
+  useEffect(() => {
+    if (outsideDate === savedRef.current.date) return
+    const editing = valuesRef.current.date !== savedRef.current.date
+    savedRef.current = { ...savedRef.current, date: outsideDate }
+    setSaved(savedRef.current)
+    if (!editing) {
+      valuesRef.current = { ...valuesRef.current, date: outsideDate }
+      setValues(valuesRef.current)
+    }
+  }, [outsideDate])
 
   // Unsaved text is saved when the drawer moves to another job or closes (set again on mount: StrictMode remounts)
   useEffect(() => {
@@ -161,7 +175,7 @@ export function ApplicationPanel({ job, status, onStatus, onNoteSaved, notify, s
       </div>
 
       {promotes && (
-        <p id={ids.help} className="drawer-note">A note or a follow-up date saves this job, so it is kept past the {JOB_DELETE_AFTER_DAYS}-day expiry.</p>
+        <p id={ids.help} className="drawer-note">A note or a follow-up date saves this job, so it doesn't disappear.</p>
       )}
       {(loadError || phase.state === 'error') && <p className="form-error">{loadError || phase.error}</p>}
     </section>

@@ -1,6 +1,6 @@
 import { companyKey } from '../../utils/gold'
 
-// "Not right for you?" under the fit: hide with a reason (kept as feedback for calibration) or mute the company.
+// "Not right for you?" under the fit: hide with a reason (saved as feedback) or mute the company.
 // onHide(reason) hides the job; onMuteCompany() adds a company mute rule. muted: the company is muted already.
 export function FitFeedback({ job, onHide, onMuteCompany, muted }) {
   const company = String(job.company_name || '').trim()
@@ -8,10 +8,10 @@ export function FitFeedback({ job, onHide, onMuteCompany, muted }) {
   return (
     <div className="fit-feedback" role="group" aria-label="Not right for you?">
       <span>Not right for you?</span>
-      <button type="button" className="btn sm" onClick={() => onHide('wrong_role')} title="Hide it and note that the role is wrong">
-        Wrong role
+      <button type="button" className="btn sm" onClick={() => onHide('wrong_role')} title="Hide it, with the feedback: not my role">
+        Not my role
       </button>
-      <button type="button" className="btn sm" onClick={() => onHide('too_senior')} title="Hide it and note that it is too senior">
+      <button type="button" className="btn sm" onClick={() => onHide('too_senior')} title="Hide it, with the feedback: too senior">
         Too senior
       </button>
       {canMute && (

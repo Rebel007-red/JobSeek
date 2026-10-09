@@ -7,6 +7,7 @@ import fs from 'node:fs'
 // Namespace imports: a constant missing from gold.js / entries.js fails its own test, not the whole file
 import * as entries from './entries.js'
 import * as gold from './gold.js'
+import * as job from './job.js'
 
 const { ENTRY_MAX_LENGTH, PROFILE_LIMITS, entryProblem } = entries
 const { FIT_WEIGHTS, MATCH_MIN_FIT, STRONG_FIT } = gold
@@ -14,6 +15,15 @@ const { FIT_WEIGHTS, MATCH_MIN_FIT, STRONG_FIT } = gold
 const SQL = fs.readFileSync(new URL('../../supabase/app_api.sql', import.meta.url), 'utf8')
 const SCHEMA = fs.readFileSync(new URL('../../supabase/app_schema.sql', import.meta.url), 'utf8')
 const ENTRIES = fs.readFileSync(new URL('./entries.js', import.meta.url), 'utf8')
+
+// Client files that cannot be imported here (they load the Supabase client or React): read as text, '' when missing
+function source(path) {
+  try {
+    return fs.readFileSync(new URL(path, import.meta.url), 'utf8')
+  } catch {
+    return ''
+  }
+}
 
 // app.c_<name>() bodies: "... AS $$ SELECT <value> $$;"
 function constants() {
@@ -154,5 +164,29 @@ test('the scoring uses the constants, not copies of them', () => {
   }
   for (const literal of ['0.45', '0.86', '0.75', '0.11']) {
     assert.ok(!new RegExp(`(?<![\\d.])${literal.replace('.', '\\.')}(?!\\d)`).test(body), `app.user_jobs repeats ${literal}`)
+  }
+})
+
+test('trust release constants: expiry, the expiring list, visits, activity retention, ping counts', () => {
+  assert.equal(number('job_delete_after_days'), exported(job, 'JOB_DELETE_AFTER_DAYS'))
+  // pinned; the client copies are compared when they exist under these names
+  assert.equal(number('expiring_max'), 10)
+  assert.equal(number('visit_gap_minutes'), 30)
+  assert.equal(number('activity_keep_days'), 180)
+  assert.equal(number('max_ping_count'), 500)
+  const api = source('../lib/api.js')
+  const expiringMax = /export const EXPIRING_MAX = (\d+)/.exec(api)
+  if (expiringMax) assert.equal(Number(expiringMax[1]), number('expiring_max'), 'src/lib/api.js EXPIRING_MAX')
+  const pingMax = /export const PING_COUNT_MAX = (\d+)/.exec(api)
+  if (pingMax) assert.equal(Number(pingMax[1]), number('max_ping_count'), 'src/lib/api.js PING_COUNT_MAX')
+  const gap = /export const VISIT_GAP_MS = (\d+) \* 60_000/.exec(source('../hooks/useVisit.js'))
+  if (gap) assert.equal(Number(gap[1]), number('visit_gap_minutes'), 'src/hooks/useVisit.js VISIT_GAP_MS')
+  // the strong-fit counts (inbox_strong, expiring_strong, acted / missed strong, north star) use STRONG_FIT
+  for (const name of ['read_summary', 'record_triage', 'read_metrics']) {
+    const start = SQL.indexOf(`CREATE OR REPLACE FUNCTION app.${name}(`)
+    assert.ok(start >= 0, `app.${name} missing`)
+    const body = SQL.slice(start, SQL.indexOf('$$;', start))
+    assert.ok(body.includes('app.c_strong_fit()'), `app.${name} does not use app.c_strong_fit()`)
+    assert.ok(!/>= 70\b/.test(body), `app.${name} repeats 70`)
   }
 })

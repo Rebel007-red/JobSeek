@@ -96,7 +96,7 @@ export function LoginPage() {
   )
 
   return (
-    <AuthLayout title="JobSeeker" subtitle={mode === 'signin' ? 'Sign in to your job inbox' : 'Reset your password'}>
+    <AuthLayout title="JobSeeker" subtitle={mode === 'signin' ? 'Invite only · Sign in to your job inbox' : 'Reset your password'}>
       {mode === 'signin' && (
         <form onSubmit={handleSignIn} className="auth-card">
           {emailField}

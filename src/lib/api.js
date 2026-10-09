@@ -9,7 +9,7 @@ const STORE_PREFIX = 'jobseeker:api:v4:'
 const STORE_INDEX = `${STORE_PREFIX}index`
 const STORE_MAX_ENTRIES = 25
 const WRITE_ACTIONS = new Set(['setApplied', 'setStatus', 'setHidden', 'setNote', 'restoreHidden', 'saveProfile',
-  'saveMuteRules', 'setAllowedEmail'])
+  'saveMuteRules', 'setAllowedEmail', 'ping'])
 
 // v1 cached one shared result per action (single-user era), v2 held results from the old Databricks API, v3 rows lack
 // the status, duplicate and mute fields: drop them.
@@ -105,6 +105,35 @@ export function signOut() {
 
 // ---- transport ----
 
+// The signed-in user is not on the allow list (app.require_allowed, SQLSTATE 42501). "Admins only" uses the same code
+// but is not this.
+export const isAccessDenied = (err) => err?.code === '42501' && /not allowed to use the job data/i.test(err?.message || '')
+
+const accessDeniedListeners = new Set()
+
+// listener(err) runs once per failing call that isAccessDenied; returns the unsubscribe function (ProtectedRoute shows
+// the "No access yet" page)
+export function onAccessDenied(listener) {
+  accessDeniedListeners.add(listener)
+  return () => accessDeniedListeners.delete(listener)
+}
+
+// An Error with the message shown to the user and the Postgres / PostgREST code (err.code, e.g. '42501') when there is one
+function apiError(message, code) {
+  const err = new Error(message)
+  if (code) err.code = code
+  if (isAccessDenied(err)) {
+    for (const listener of accessDeniedListeners) {
+      try {
+        listener(err)
+      } catch (listenerError) {
+        console.error(listenerError)
+      }
+    }
+  }
+  return err
+}
+
 // The request never got an answer (supabase-js reports fetch failures as an error without a Postgres code)
 function isNetworkError(error) {
   return !error?.code && /fetch|network|load failed/i.test(String(error?.message || error || ''))
@@ -133,10 +162,10 @@ async function callApi(action, params = {}) {
     }
   } catch (err) {
     if (err?.message === 'Sign in required') throw err
-    throw new Error(isNetworkError(err) ? offlineMessage() : (err?.message || 'Request failed'))
+    throw isNetworkError(err) ? apiError(offlineMessage()) : apiError(err?.message || 'Request failed', err?.code)
   }
   const { data, error } = result
-  if (error) throw new Error(isNetworkError(error) ? offlineMessage() : (error.message || 'Request failed'))
+  if (error) throw isNetworkError(error) ? apiError(offlineMessage()) : apiError(error.message || 'Request failed', error.code)
   return data || { rows: [] }
 }
 
@@ -182,8 +211,13 @@ const PUBLISHED_VIEWS = [...JOB_VIEWS, 'facets', 'refs', 'job']
 // The profile and mute rules change scores and lists, and the facets (they leave muted jobs out)
 const PROFILE_VIEWS = ['profile', ...JOB_VIEWS, 'facets']
 const NOTE_VIEWS = ['jobNote', 'jobs', 'jobRow', 'jobGroup', 'trackedJobs', 'summary']
+// Most rows of the Expiring strip (app.c_expiring_max())
+export const EXPIRING_MAX = 10
+// The server ignores these for the expiring list, so they stay out of its cache key
+const EXPIRING_IGNORED = ['tab', 'scope', 'postedWithin', 'offset', 'closed', 'followUp', 'stage', 'muteView']
 const MUTE_FIELDS = { companies: 'muted_companies', titleWords: 'muted_title_words', levels: 'muted_levels' }
-const EXPIRED_MESSAGE = 'this job was just removed (the posting expired). Refresh to see the current list.'
+// Glossary words: a job "disappears" from the list; the posting itself may still be open
+const EXPIRED_MESSAGE = "this job just disappeared (jobs you haven't saved or applied to disappear 2 days after posting). Refresh to see the current list."
 
 async function write(action, params, stale) {
   const payload = await callApi(action, params)
@@ -251,6 +285,9 @@ function first(action, params, { onCached, ...options } = {}) {
   return query(action, params, { ...options, onCached: onCached && (rows => onCached(unwrap(rows))) }).then(unwrap)
 }
 
+// Largest counter one ping may carry (app.c_max_ping_count())
+export const PING_COUNT_MAX = 500
+
 // The last published pipeline run this device has seen, per user
 const runKey = () => `${STORE_PREFIX}run:${userId()}`
 const seenRuns = new Map() // memory fallback when storage is unavailable
@@ -277,7 +314,28 @@ function rememberRun(runId) {
 // scope: 'match' ("For you": your roles, fit 60+) or 'all'
 export const api = {
   jobs: (params, options) => query('jobs', params, { maxAge: SYNC_MS, ...options }),
+  // The counts of the filters + scope + time window. With since (ISO time of your last visit, useVisit) it also has
+  // new_since. Keys: inbox, inbox_strong, saved, applied, new_since, expiring, expiring_strong, triaged_today, stages,
+  // follow_up, closed, muted (and the older total, pending, new_48h, strong_fit); see app.read_summary.
   summary: (filters, options) => first('summary', filters, { maxAge: SYNC_MS, ...options }).then(row => row || {}),
+  // The Expiring strip: untouched For-you jobs that disappear tonight, soonest first (at most EXPIRING_MAX rows; total_count
+  // on each row = all of them). params = the page's filters; the time window, tab and scope do not apply to this list.
+  expiringJobs: (params = {}, options) => {
+    const filters = Object.fromEntries(Object.entries(params).filter(([key]) => !EXPIRING_IGNORED.includes(key)))
+    return query('jobs', { ...filters, sort: 'expiring', expiring: true, limit: EXPIRING_MAX }, { maxAge: SYNC_MS, ...options })
+  },
+  // "Since your last visit": records this look at the list and sends the counters collected since the last ping
+  // ({ opened, promptYes, promptNo, promptSaved }, whole numbers). Resolves to { previous_seen_at, seen_at, has_profile }
+  // (null without a row). Not cached and invalidates nothing; useVisit throttles it.
+  ping: async (counts = {}) => {
+    const params = {}
+    for (const key of ['opened', 'promptYes', 'promptNo', 'promptSaved']) {
+      const value = Math.trunc(Number(counts[key]) || 0)
+      if (value > 0) params[key] = Math.min(value, PING_COUNT_MAX)
+    }
+    const payload = await callApi('ping', params)
+    return payload.rows?.[0] || null
+  },
   trend: (params, options) => query('trend', params, { maxAge: SYNC_MS, ...options }),
   facets: (params, options) => query('facets', params, { maxAge: SYNC_MS, ...options }),
   job: (jobKey) => first('job', { jobKey }, { maxAge: 60 * MINUTE, persist: false }),
@@ -333,6 +391,12 @@ export const api = {
     const rows = await write('setNote', { jobKey, note: note ?? null, nextActionAt: nextActionAt || null }, NOTE_VIEWS)
     return rows[0] || null
   },
+  // "No reply yet": moves the follow-up date of an applied job (nextActionAt 'YYYY-MM-DD'); the note is kept (no note key
+  // is sent). Resolves to the result row, as setNote does.
+  snoozeFollowUp: async (jobKey, nextActionAt) => {
+    const rows = await write('setNote', { jobKey, nextActionAt: nextActionAt || null }, NOTE_VIEWS)
+    return rows[0] || null
+  },
   restoreHidden: () => write('restoreHidden', {}, JOB_VIEWS),
   // Fit and "For you" are computed from the profile at query time, so every job view changes with it
   saveProfile: (profile) => write('saveProfile', profile, PROFILE_VIEWS),
@@ -353,4 +417,7 @@ export const api = {
   companyHealth: () => query('companyHealth', {}, { maxAge: SYNC_MS, persist: false }),
   // Admin only: database size, counts, last publish, pipeline runs and scrape results (the System tab)
   systemStatus: () => first('systemStatus', {}, { persist: false }),
+  // Admin only: the north star and the other usage aggregates of the last 8 ISO weeks (the Metrics card; see
+  // app.read_metrics for the shape). null before the SQL has it.
+  metrics: () => first('metrics', {}, { persist: false }),
 }

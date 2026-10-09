@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from 'react'
 import { api } from '../../lib/api'
 import { sessionUser } from '../../lib/session'
-import { formatDate } from '../../utils/job'
+import { dataFreshness, formatDate } from '../../utils/job'
 
 // keep in sync: app.write_set_allowed_email() in supabase/app_api.sql (lower-cased, at most 320 characters)
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
@@ -16,10 +16,14 @@ function emailProblem(email, list) {
 
 const byEmail = (a, b) => (a.email < b.email ? -1 : a.email > b.email ? 1 : 0)
 
+// "2 h ago" (the latest ping or write of that email's account), '–' without one
+const lastActive = (value) => dataFreshness(value)?.label.replace(/^Updated /, '') || '–'
+const countText = (value) => (value === null || value === undefined ? '–' : Number(value).toLocaleString())
+
 // Admin only (the server checks): who may use the job data (app.allowed_emails). An empty list lets every signed-in
 // user in; admins always can. Edits show at once and go back (with the reason) when the server refuses.
 export function AccessPanel() {
-  const [emails, setEmails] = useState([]) // [{ email, added_at }]
+  const [emails, setEmails] = useState([]) // [{ email, added_at, last_active_at, applied_7d }]
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [input, setInput] = useState('')
@@ -89,7 +93,7 @@ export function AccessPanel() {
         </p>
 
         <form onSubmit={add} className="settings-field" noValidate>
-          <label htmlFor={`${ids}-email`}>Add an email</label>
+          <label htmlFor={`${ids}-email`}>Give access to</label>
           <div className="settings-input-row">
             <input
               id={`${ids}-email`}
@@ -103,7 +107,7 @@ export function AccessPanel() {
               aria-describedby={formError ? `${ids}-email-error` : undefined}
               className="settings-input"
             />
-            <button type="submit" className="primary-button compact-button" disabled={!input.trim() || loading}>Add</button>
+            <button type="submit" className="primary-button compact-button" disabled={!input.trim() || loading}>Allow</button>
           </div>
           {formError && <p id={`${ids}-email-error`} className="settings-inline-error" role="alert">{formError}</p>}
         </form>
@@ -134,6 +138,16 @@ export function AccessPanel() {
                   </div>
                   {row.added_at && <div className="settings-company-meta"><span>added {formatDate(row.added_at)}</span></div>}
                 </div>
+                <dl className="access-stats">
+                  <div title={row.last_active_at ? new Date(row.last_active_at).toLocaleString() : 'No visit recorded yet'}>
+                    <dt>Last active</dt>
+                    <dd>{lastActive(row.last_active_at)}</dd>
+                  </div>
+                  <div title="Jobs marked applied in the last 7 days">
+                    <dt>Applied (7 d)</dt>
+                    <dd>{countText(row.applied_7d)}</dd>
+                  </div>
+                </dl>
                 <div className="settings-row-actions">
                   {confirming === row.email ? (
                     <div className="inline-confirm" role="group" aria-label={`Remove ${row.email}?`}>

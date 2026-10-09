@@ -183,7 +183,9 @@ class ReadTest(DbTestCase):
     def summary_row(**counts):
         row = {"total": 0, "pending": 0, "new_48h": 0, "strong_fit": 0, "applied": 0, "saved": 0, "follow_up": 0,
                "closed": 0, "muted": 0,
-               "stages": {"applied": 0, "interviewing": 0, "offer": 0, "rejected": 0, "withdrawn": 0}}
+               "stages": {"applied": 0, "interviewing": 0, "offer": 0, "rejected": 0, "withdrawn": 0},
+               # added with the trust release (test_trust.py covers them in depth)
+               "inbox": 0, "inbox_strong": 0, "new_since": None, "expiring": 0, "expiring_strong": 0, "triaged_today": 0}
         row.update(counts)
         return row
 
@@ -198,11 +200,16 @@ class ReadTest(DbTestCase):
             pending=sum(1 for n in names if not ref[KEY[n]]["is_applied"]),
             closed=1,  # inactive_applied
             stages={"applied": 2, "interviewing": 0, "offer": 0, "rejected": 0, "withdrawn": 0},
+            inbox=sum(1 for n in names if not ref[KEY[n]]["is_applied"]),  # nothing saved: untracked = not applied
+            inbox_strong=sum(1 for n in names if not ref[KEY[n]]["is_applied"] and ref[KEY[n]]["fit_score"] >= 70),
+            expiring=1,  # old: posted 10 days ago, untracked, For you
+            expiring_strong=int(ref[KEY["old"]]["fit_score"] >= 70),
         )
         self.assertEqual(self.read("summary"), [expected])
         self.assertEqual(self.read("summary", {"tab": "applied"}), [expected])  # the tab is ignored
         filtered = self.read("summary", {"scope": "all", "company": OTHER_COMPANY})
-        self.assertEqual(filtered, [self.summary_row(total=1, new_48h=1, pending=1)])
+        self.assertEqual(filtered, [self.summary_row(total=1, new_48h=1, pending=1, inbox=1,
+                                                     inbox_strong=int(ref[KEY["other_company"]]["fit_score"] >= 70))])
         self.assertEqual(self.read("summary", uid=U_NOPROFILE), [self.summary_row()])
         # postedWithin: total / pending count only the jobs inside the window; applied counts every applied job
         recent = self.read("summary", {"postedWithin": 24})[0]

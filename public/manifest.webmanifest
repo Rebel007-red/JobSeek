@@ -1,12 +1,11 @@
 {
   "name": "JobSeeker",
   "short_name": "JobSeeker",
-  "description": "Fresh jobs ranked by how well they fit you",
+  "description": "Jobs ranked by how well they fit you",
   "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "orientation": "portrait",
   "background_color": "#f5f6f8",
   "theme_color": "#ffffff",
   "icons": [

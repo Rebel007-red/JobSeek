@@ -49,10 +49,10 @@ export const STATUS_OPTIONS = APPLICATION_STATUSES.map(value => ({ value, label:
 // Why a job was hidden (app.c_hide_reasons), for the toast actions and the Hidden list
 export const HIDE_REASONS = [
   { value: 'too_senior', label: 'Too senior' },
-  { value: 'wrong_role', label: 'Wrong role' },
-  { value: 'company', label: 'Company' },
-  { value: 'location', label: 'Location' },
-  { value: 'duplicate', label: 'Duplicate' },
+  { value: 'wrong_role', label: 'Not my role' },
+  { value: 'company', label: 'Not this company' },
+  { value: 'location', label: 'Wrong city' },
+  { value: 'duplicate', label: 'Seen it' },
   { value: 'other', label: 'Other' },
 ]
 

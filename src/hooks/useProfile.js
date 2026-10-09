@@ -30,7 +30,8 @@ export function useProfile() {
     reload()
   }, [reload])
 
-  // next: { target_roles, skills, also_skills, min_years, max_years, preferred_cities }; a list left out keeps the saved one
+  // next: { target_roles, skills, also_skills, min_years, max_years, preferred_cities }, all of them: only also_skills and
+  // preferred_cities left out keep the saved ones (roles, skills and years are replaced)
   const save = useCallback(async (next) => {
     await api.saveProfile(next)
     setProfile(prev => ({ ...prev, ...next, updated_at: new Date().toISOString() }))

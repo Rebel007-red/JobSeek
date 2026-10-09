@@ -1,8 +1,10 @@
 import { isApplied, jobUrl } from '../../utils/gold'
-import { BookmarkIcon, CheckIcon, CheckSquareIcon, CircleIcon, CloseIcon, ExternalLinkIcon, MuteIcon, SquareIcon } from './icons'
+import { BookmarkIcon, CheckCircleIcon, CheckSquareIcon, ExternalLinkIcon, EyeOffIcon, MuteIcon, SquareIcon } from './icons'
 
-// Select / save / applied / open posting / hide, shared by list rows and cards. In the muted view (muted_by set) an
-// Unmute button replaces save. actions: the page's stable handlers (see JobItem).
+// [select] · save · applied · open the posting · (gap) · hide, shared by list rows and cards. Applied jobs have no
+// bookmark (they are kept anyway); a saved one keeps the filled bookmark, which unsaves it. In the muted view (muted_by
+// set) an Unmute button takes the bookmark's place. A toggle's aria-label names the action it will take.
+// actions: the page's stable handlers (see JobItem).
 export function JobActions({ job, actions, selected = false, selecting = false }) {
   const applied = isApplied(job)
   const saved = job.application_status === 'saved'
@@ -30,19 +32,18 @@ export function JobActions({ job, actions, selected = false, selecting = false }
           type="button"
           onClick={stop(() => actions.unmute(job))}
           className="icon-btn"
-          title={`Unmute: stop hiding jobs by "${job.muted_value}"`}
+          title={`Unmute ${job.muted_value}: show its jobs again`}
           aria-label={`Unmute ${job.muted_value}`}
         >
           <MuteIcon />
         </button>
-      ) : (
+      ) : !applied && (
         <button
           type="button"
           onClick={stop(() => actions.save(job))}
-          className={`icon-btn save-btn ${saved ? 'is-saved' : ''} ${applied ? 'is-dim' : ''}`}
-          title={applied ? 'Already applied' : saved ? 'Saved. Click to remove (s)' : 'Save for later (s)'}
-          aria-label="Save for later"
-          aria-pressed={saved}
+          className={`icon-btn save-btn ${saved ? 'is-saved' : ''}`}
+          title={saved ? 'Unsave (s)' : 'Save (s)'}
+          aria-label={saved ? 'Unsave' : 'Save'}
         >
           <BookmarkIcon filled={saved} />
         </button>
@@ -50,21 +51,20 @@ export function JobActions({ job, actions, selected = false, selecting = false }
       <button
         type="button"
         onClick={stop(() => actions.applied(job, !applied))}
-        className={`icon-btn ${applied ? 'is-on' : ''}`}
-        title={applied ? 'Applied. Click to undo (a)' : 'Mark as applied (a)'}
-        aria-label="Applied"
-        aria-pressed={applied}
+        className={`icon-btn applied-btn ${applied ? 'is-on' : ''}`}
+        title={applied ? 'Undo applied (a)' : 'Mark applied (a)'}
+        aria-label={applied ? 'Undo applied' : 'Mark applied'}
       >
-        {applied ? <CheckIcon /> : <CircleIcon />}
+        <CheckCircleIcon filled={applied} />
       </button>
       {url ? (
         <a
           href={url}
           target="_blank"
           rel="noopener noreferrer"
-          className="icon-btn"
-          title="Open posting (o)"
-          aria-label="Open job posting"
+          className="icon-btn open-btn"
+          title="Open the posting (o)"
+          aria-label="Open the posting"
           onClick={(e) => {
             e.stopPropagation()
             actions.opened(job)
@@ -73,18 +73,18 @@ export function JobActions({ job, actions, selected = false, selecting = false }
           <ExternalLinkIcon />
         </a>
       ) : (
-        <button type="button" className="icon-btn" disabled title="No link for this job" aria-label="No link for this job">
+        <button type="button" className="icon-btn open-btn" disabled title="No link for this job" aria-label="No link for this job">
           <ExternalLinkIcon />
         </button>
       )}
       <button
         type="button"
         onClick={stop(() => actions.hide(job))}
-        className="icon-btn danger"
-        title={Number(job.dup_count) > 0 ? `Hide this job and its ${job.dup_count} similar postings (x)` : 'Hide (x)'}
-        aria-label="Hide this job"
+        className="icon-btn danger hide-btn"
+        title={Number(job.dup_count) > 0 ? `Hide this job and its ${job.dup_count} similar ${Number(job.dup_count) === 1 ? 'posting' : 'postings'} (x)` : 'Hide (x)'}
+        aria-label="Hide"
       >
-        <CloseIcon />
+        <EyeOffIcon />
       </button>
     </div>
   )

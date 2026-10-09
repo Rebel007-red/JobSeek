@@ -161,10 +161,12 @@ kbd {
   transition: background-color 0.12s, border-color 0.12s;
 }
 
-.btn:hover:not(:disabled),
-.secondary-button:hover:not(:disabled) {
-  background: var(--surface-2);
-  border-color: var(--border-strong);
+@media (hover: hover) {
+  .btn:hover:not(:disabled),
+  .secondary-button:hover:not(:disabled) {
+    background: var(--surface-2);
+    border-color: var(--border-strong);
+  }
 }
 
 .btn.primary,
@@ -174,10 +176,12 @@ kbd {
   color: var(--on-primary);
 }
 
-.btn.primary:hover:not(:disabled),
-.primary-button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--primary) 86%, var(--text));
-  border-color: transparent;
+@media (hover: hover) {
+  .btn.primary:hover:not(:disabled),
+  .primary-button:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--primary) 86%, var(--text));
+    border-color: transparent;
+  }
 }
 
 .btn.success {
@@ -190,9 +194,11 @@ kbd {
   color: var(--danger);
 }
 
-.btn.danger:hover:not(:disabled) {
-  background: var(--danger-soft);
-  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+@media (hover: hover) {
+  .btn.danger:hover:not(:disabled) {
+    background: var(--danger-soft);
+    border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  }
 }
 
 .btn.sm,
@@ -226,8 +232,10 @@ kbd {
   font-weight: 600;
 }
 
-.text-button:hover {
-  text-decoration: underline;
+@media (hover: hover) {
+  .text-button:hover {
+    text-decoration: underline;
+  }
 }
 
 .icon-btn {
@@ -244,9 +252,11 @@ kbd {
   transition: background-color 0.12s, color 0.12s;
 }
 
-.icon-btn:hover:not(:disabled) {
-  background: var(--surface-2);
-  color: var(--text);
+@media (hover: hover) {
+  .icon-btn:hover:not(:disabled) {
+    background: var(--surface-2);
+    color: var(--text);
+  }
 }
 
 .icon-btn.is-on {
@@ -254,9 +264,11 @@ kbd {
   color: var(--success);
 }
 
-.icon-btn.danger:hover:not(:disabled) {
-  background: var(--danger-soft);
-  color: var(--danger);
+@media (hover: hover) {
+  .icon-btn.danger:hover:not(:disabled) {
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
 }
 
 .input,
@@ -362,8 +374,10 @@ kbd {
   color: var(--muted);
 }
 
-.segmented button:not(.active):hover {
-  color: var(--text);
+@media (hover: hover) {
+  .segmented button:not(.active):hover {
+    color: var(--text);
+  }
 }
 
 .segmented button.active {
@@ -427,6 +441,11 @@ kbd {
   font-weight: 800;
 }
 
+/* A heading focused after a route change (tabIndex -1) shows no ring */
+h1[tabindex="-1"]:focus {
+  outline: none;
+}
+
 .brand-name {
   font-size: 15px;
   font-weight: 700;
@@ -467,8 +486,10 @@ kbd {
   white-space: nowrap;
 }
 
-button.metric:hover {
-  background: var(--surface-2);
+@media (hover: hover) {
+  button.metric:hover {
+    background: var(--surface-2);
+  }
 }
 
 .metric strong {
@@ -649,9 +670,11 @@ button.metric:hover {
   gap: 6px;
 }
 
-.filter-trigger:hover,
-.sort-select:hover {
-  border-color: var(--border-strong);
+@media (hover: hover) {
+  .filter-trigger:hover,
+  .sort-select:hover {
+    border-color: var(--border-strong);
+  }
 }
 
 .sort-select {
@@ -703,9 +726,11 @@ button.metric:hover {
   white-space: nowrap;
 }
 
-.tab-button:hover,
-.settings-tab:hover {
-  color: var(--text);
+@media (hover: hover) {
+  .tab-button:hover,
+  .settings-tab:hover {
+    color: var(--text);
+  }
 }
 
 .tab-button.active,
@@ -815,9 +840,11 @@ button.metric:hover {
   font-weight: 500;
 }
 
-.pill-toggle:hover:not(:disabled) {
-  border-color: var(--border-strong);
-  color: var(--text);
+@media (hover: hover) {
+  .pill-toggle:hover:not(:disabled) {
+    border-color: var(--border-strong);
+    color: var(--text);
+  }
 }
 
 .pill-toggle.active {
@@ -876,6 +903,7 @@ button.metric:hover {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  overscroll-behavior-x: none; /* a sideways swipe on a row never scrolls or navigates the page */
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
@@ -906,8 +934,10 @@ button.metric:hover {
   border-bottom: 0;
 }
 
-.job-row:hover {
-  background: var(--surface-2);
+@media (hover: hover) {
+  .job-row:hover {
+    background: var(--surface-2);
+  }
 }
 
 .job-row:focus-visible {
@@ -1115,9 +1145,11 @@ button.metric:hover {
   transition: border-color 0.15s, box-shadow 0.15s, opacity 0.18s, transform 0.18s;
 }
 
-.job-card:hover {
-  border-color: var(--border-strong);
-  box-shadow: var(--shadow-sm);
+@media (hover: hover) {
+  .job-card:hover {
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-sm);
+  }
 }
 
 .job-card:focus-visible {
@@ -1227,24 +1259,40 @@ button.metric:hover {
   font-weight: 700;
 }
 
-.swipe-wrap.to-right .swipe-hint {
+/* The hint names the action of that side in its toast's colour: is-right = what a right swipe does (shown on the left) */
+.swipe-hint.is-right {
   justify-content: flex-start;
+}
+
+.swipe-hint.is-left {
+  justify-content: flex-end;
+}
+
+.swipe-hint.tone-success {
   background: var(--success-soft);
   color: var(--success);
 }
 
-.swipe-wrap.to-left .swipe-hint {
-  justify-content: flex-end;
+.swipe-hint.tone-primary {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.swipe-hint.tone-danger {
   background: var(--danger-soft);
   color: var(--danger);
 }
 
-/* Armed = the same tinted colours as the toast for that action */
-.swipe-wrap.armed.to-right .swipe-hint {
+/* Armed = let go now and it happens: a stronger tint */
+.swipe-wrap.armed .swipe-hint.tone-success {
   background: color-mix(in srgb, var(--success) 26%, var(--surface));
 }
 
-.swipe-wrap.armed.to-left .swipe-hint {
+.swipe-wrap.armed .swipe-hint.tone-primary {
+  background: color-mix(in srgb, var(--primary) 26%, var(--surface));
+}
+
+.swipe-wrap.armed .swipe-hint.tone-danger {
   background: color-mix(in srgb, var(--danger) 26%, var(--surface));
 }
 
@@ -1326,25 +1374,6 @@ button.metric:hover {
   font-size: 10px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-}
-
-.fit-part-label {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 3px;
-  font-size: 12px;
-}
-
-.fit-part-label span {
-  color: var(--text-2);
-  font-weight: 500;
-}
-
-.fit-part-label em {
-  color: var(--muted);
-  font-style: normal;
-  font-variant-numeric: tabular-nums;
 }
 
 .fit-bar {
@@ -1726,8 +1755,10 @@ button.metric:hover {
   font-weight: 600;
 }
 
-.toast button:hover {
-  background: color-mix(in srgb, var(--primary) 20%, transparent);
+@media (hover: hover) {
+  .toast button:hover {
+    background: color-mix(in srgb, var(--primary) 20%, transparent);
+  }
 }
 
 .toast kbd {
@@ -1978,8 +2009,10 @@ button.metric:hover {
   color: inherit;
 }
 
-.skill-chip button:hover {
-  background: var(--primary-soft);
+@media (hover: hover) {
+  .skill-chip button:hover {
+    background: var(--primary-soft);
+  }
 }
 
 .custom-confirm {
@@ -2141,9 +2174,11 @@ button.metric:hover {
   color: var(--muted);
 }
 
-.trash-button:hover {
-  background: var(--danger-soft);
-  color: var(--danger);
+@media (hover: hover) {
+  .trash-button:hover {
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
 }
 
 .settings-empty-state {
@@ -2258,14 +2293,14 @@ button.metric:hover {
 /* =========================================================
    Responsive
    ========================================================= */
-@media (min-width: 721px) {
+@media (min-width: 721px) and (pointer: fine), (min-width: 721px) and (pointer: none), (min-width: 961px) and (min-height: 501px) {
   .hide-desktop {
     display: none !important;
   }
 }
 
 /* Search, filters and tabs stay reachable while scrolling a long list (not on landscape phones: too little height) */
-@media (min-width: 721px) and (min-height: 500px) {
+@media (min-width: 721px) and (pointer: fine) and (min-height: 500px), (min-width: 721px) and (pointer: none) and (min-height: 500px), (min-width: 961px) and (min-height: 501px) {
   .toolbar {
     position: sticky;
     top: var(--header-h);
@@ -2286,8 +2321,52 @@ button.metric:hover {
   }
 }
 
-/* ---------- Mobile (<= 720px): thumb-first layout ---------- */
-@media (max-width: 720px) {
+/* Desktop layout, 721-960 px: the tag line goes under the title (as on phones), so the title never shrinks to nothing */
+@media (min-width: 721px) and (max-width: 960px) and (pointer: fine), (min-width: 721px) and (max-width: 960px) and (pointer: none) {
+  .job-row {
+    grid-template-areas:
+      "fit main actions"
+      "fit side actions";
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    row-gap: 2px;
+  }
+
+  .job-row > .fit-score {
+    grid-area: fit;
+  }
+
+  .job-row-main {
+    grid-area: main;
+  }
+
+  .job-row-side {
+    grid-area: side;
+  }
+
+  .job-row > .job-actions {
+    grid-area: actions;
+  }
+
+  .row-date {
+    min-width: 0;
+    text-align: left;
+  }
+}
+
+/* From 961 px: the tag line takes at most 45% of the row and wraps */
+@media (min-width: 961px) and (pointer: fine), (min-width: 961px) and (pointer: none), (min-width: 961px) and (min-height: 501px) {
+  .job-row {
+    grid-template-columns: auto minmax(0, 1fr) fit-content(45%) auto;
+  }
+
+  .job-row-side {
+    justify-content: flex-end;
+  }
+}
+
+/* ---------- Mobile: thumb-first layout. Phones (<= 720px), phones in landscape (coarse pointer, <= 500px high) and
+   touch tablets up to 960px wide. The DESKTOP query (.hide-desktop) is its exact complement. ---------- */
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px), (pointer: coarse) and (max-width: 960px) {
   :root {
     --gutter-l: max(10px, env(safe-area-inset-left));
     --gutter-r: max(10px, env(safe-area-inset-right));
@@ -2302,9 +2381,20 @@ button.metric:hover {
     gap: 8px;
   }
 
-  /* Counts live in the bottom bar; only the 14-day trend stays in the top bar, next to the logo */
-  .topbar-center .metrics > button.metric {
+  /* Counts live in the bottom bar; the top bar keeps the lead count ("12 new since 9:51 AM", else "4 expire tonight",
+     else strong fit) and the 14-day trend. From 600px wide the strong-fit count shows too. */
+  .topbar-center .metrics > button.metric:not(:first-child) {
     display: none;
+  }
+
+  .topbar-center .metrics > button.metric {
+    padding: 0 6px;
+  }
+
+  @media (min-width: 600px) {
+    .topbar-center .metrics > button.metric:nth-child(2) {
+      display: inline-flex;
+    }
   }
 
   .topbar-center .metric.trend {
@@ -2628,7 +2718,7 @@ button.metric:hover {
 }
 
 /* Landscape phones: the job's action bar uses one line per button so the body keeps more of the height */
-@media (max-width: 720px) and (max-height: 480px) {
+@media (max-width: 720px) and (max-height: 480px), (pointer: coarse) and (max-height: 500px) {
   .drawer-actions .btn {
     flex-direction: row;
     gap: 6px;
@@ -2725,7 +2815,7 @@ button.metric:hover {
   }
 }
 
-@media (pointer: coarse) and (min-width: 721px) {
+@media (pointer: coarse) and (min-width: 961px) {
   .job-row .job-actions .icon-btn {
     width: 44px;
   }
@@ -2747,7 +2837,7 @@ button.metric:hover {
   white-space: nowrap;
 }
 
-/* Row and card state badges: posting closed, expiry, follow-up, duplicate applied, muted, stage, note */
+/* Row and card state badges: expiry, follow-up, duplicate applied, muted, stage, note */
 .job-flags {
   display: inline-flex;
   flex-wrap: wrap;
@@ -2774,11 +2864,6 @@ button.metric:hover {
 .flag.warning {
   background: var(--warning-soft);
   color: var(--warning);
-}
-
-.flag.closed {
-  background: var(--danger-soft);
-  color: var(--danger);
 }
 
 .flag.muted {
@@ -2816,33 +2901,42 @@ button.metric:hover {
   font-weight: 600;
 }
 
-/* "+2 more · Pune, Hyderabad": opens the near-duplicate postings */
-.dup-toggle {
-  padding: 0;
-  border: 0;
-  background: none;
+/* "+6" right after the place: opens the near-duplicate postings (titled with their cities) */
+.dup-pill {
+  display: inline-grid;
+  place-items: center;
+  min-width: 26px;
+  height: 18px;
+  margin-left: 6px;
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, var(--primary) 35%, transparent);
+  border-radius: 999px;
+  background: var(--primary-soft);
   color: var(--primary);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  vertical-align: 1px;
 }
 
-.job-row-meta .dup-toggle::before {
-  content: "·";
-  margin: 0 6px;
-  color: var(--muted);
-  font-weight: 400;
+@media (hover: hover) {
+  .dup-pill:hover {
+    border-color: var(--primary);
+  }
 }
 
-.dup-toggle:hover {
-  text-decoration: underline;
-}
-
-.dup-toggle.open {
+.dup-pill.open {
+  background: var(--surface-2);
   color: var(--text-2);
 }
 
-.job-card > .dup-toggle {
-  align-self: flex-start;
+/* The meta line's "·" separators also run across the pill */
+.job-row-meta .dup-pill + span::before,
+.job-card-meta .dup-pill + span::before {
+  content: "·";
+  margin: 0 6px;
+  opacity: 0.7;
 }
 
 /* Postings of an expanded group sit indented under their row */
@@ -2865,11 +2959,6 @@ button.metric:hover {
   border-style: dashed;
 }
 
-.job-row.is-closed .job-row-title,
-.job-card.is-closed h3 {
-  color: var(--text-2);
-}
-
 .job-row.is-muted,
 .job-card.is-muted {
   opacity: 0.85;
@@ -2889,11 +2978,16 @@ button.metric:hover {
   visibility: hidden;
 }
 
-.job-row:hover .select-box,
-.job-card:hover .select-box,
 .job-actions .select-box:focus-visible,
 .job-actions .select-box.is-visible {
   visibility: visible;
+}
+
+@media (hover: hover) {
+  .job-row:hover .select-box,
+  .job-card:hover .select-box {
+    visibility: visible;
+  }
 }
 
 .job-actions .select-box.is-on {
@@ -2901,14 +2995,331 @@ button.metric:hover {
   color: var(--primary);
 }
 
-/* Save for later */
+/* Save (filled when saved) · Mark applied (a check-circle, filled green when applied) · open · gap · Hide (eye-off) */
 .job-actions .save-btn.is-saved,
 .job-row .icon-btn.save-btn.is-saved {
   color: var(--primary);
 }
 
-.job-actions .save-btn.is-dim {
-  opacity: 0.35;
+.job-actions .applied-btn.is-on,
+.job-row .icon-btn.applied-btn.is-on {
+  color: var(--success);
+}
+
+.job-actions .hide-btn {
+  margin-left: 6px;
+}
+
+/* The skill gap: "lacks Snowflake, Airflow +2" (muted), a check before "All skills", "No skills listed" in muted italic */
+.skill-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+}
+
+.skill-count .icon {
+  flex: none;
+  width: 13px;
+  height: 13px;
+}
+
+.skill-count.tone-complete {
+  color: var(--success);
+}
+
+.skill-count.tone-unknown {
+  font-style: italic;
+}
+
+.job-card > .skill-count {
+  font-size: 12px;
+}
+
+/* "12 new since your last visit" between the new rows and the older ones (Recently found) */
+.new-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--success);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.new-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: color-mix(in srgb, var(--success) 35%, transparent);
+}
+
+.jobs-grid > .new-divider {
+  border: 0;
+  border-radius: var(--radius-sm);
+}
+
+/* Auto-load: an empty marker after the last row */
+.list-sentinel {
+  height: 1px;
+}
+
+/* "expire tonight" in the header */
+.metric.warning strong {
+  color: var(--warning);
+}
+
+/* The Saved toast: a filled bookmark in the primary tint (Hide shows the eye-off, Mark applied the check) */
+.toast.primary .icon {
+  color: var(--primary);
+}
+
+/* Updates are delayed (the last publish is over 6 h old) */
+.hint-banner.stale-banner {
+  margin-bottom: 4px;
+}
+
+/* "You're caught up": the empty Inbox */
+.state-block.caught-up h3 {
+  color: var(--success);
+}
+
+/* A row taken off the list by a write slides out and collapses (160 ms, LEAVE_MS in useJobList) */
+.swipe-wrap.is-leaving {
+  overflow: hidden;
+  pointer-events: none;
+  animation: row-leave 0.16s ease-in forwards;
+}
+
+@keyframes row-leave {
+  from {
+    max-height: 160px;
+    opacity: 1;
+  }
+
+  to {
+    max-height: 0;
+    opacity: 0;
+    transform: translateX(-32px);
+  }
+}
+
+/* The one-time swipe demo on the first row: it slides right, then left, over the two hints */
+.swipe-peek {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-radius: inherit;
+}
+
+.swipe-peek > .swipe-hint {
+  position: relative;
+  inset: auto;
+  padding: 0 14px;
+  font-size: 12px;
+}
+
+.swipe-wrap.is-peeking > .swipe-body {
+  animation: swipe-peek 1.2s ease-in-out;
+}
+
+@keyframes swipe-peek {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(80px); }
+  50% { transform: translateX(0); }
+  75% { transform: translateX(-80px); }
+}
+
+/* "Which jobs": the scope menu at the left end of the chip row */
+.scope-menu-button {
+  flex-shrink: 0;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.scope-menu-button .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.scope-menu {
+  position: fixed;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  min-width: 220px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  animation: toast-in-plain 0.12s ease-out;
+}
+
+@keyframes toast-in-plain {
+  from { opacity: 0; transform: translateY(-4px); }
+}
+
+.scope-menu-title {
+  padding: 4px 8px 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.scope-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px 0 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-2);
+  font-size: 13px;
+  text-align: left;
+}
+
+.scope-menu-item:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+@media (hover: hover) {
+  .scope-menu-item:hover {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+}
+
+.scope-menu-item.is-checked {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.scope-menu-check {
+  width: 16px;
+  text-align: center;
+}
+
+/* The Expiring strip: untouched For-you jobs that disappear tonight, pinned above the Inbox */
+.expiring-strip {
+  margin-bottom: 10px;
+  border: 1px solid color-mix(in srgb, var(--warning) 40%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--warning-soft) 55%, var(--surface));
+}
+
+.expiring-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 12px;
+}
+
+.expiring-heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.expiring-heading h2 {
+  color: var(--warning);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.expiring-heading p {
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.expiring-heading time {
+  font-weight: 600;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+
+.expiring-rows {
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid color-mix(in srgb, var(--warning) 25%, var(--border));
+  list-style: none;
+}
+
+.expiring-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px 4px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.expiring-row:last-child {
+  border-bottom: 0;
+}
+
+.expiring-open {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  text-align: left;
+}
+
+.expiring-open strong,
+.expiring-open span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.expiring-open strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.expiring-open span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (hover: hover) {
+  .expiring-open:hover strong {
+    text-decoration: underline;
+  }
+}
+
+.expiring-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.expiring-actions .icon-btn {
+  color: var(--muted);
+}
+
+.expiring-actions .icon-btn.danger {
+  margin-left: 4px;
+}
+
+/* Stage chips and the freshness line at the top of the Filters sheet (only in phone landscape, see below) */
+.filter-extra {
+  display: none;
 }
 
 /* Applied tab: stage chips and the CSV export */
@@ -2939,7 +3350,7 @@ button.metric:hover {
   margin-left: auto;
 }
 
-/* "N hidden by your rules · Show" */
+/* "N muted · Show" */
 .pill-toggle.muted-peek {
   border-style: dashed;
 }
@@ -2975,7 +3386,8 @@ button.metric:hover {
   bottom: 72px;
 }
 
-/* "Applied to … ?" after coming back from a posting: a banner under the top bar, not modal */
+/* "Did you apply to … ?" after coming back from a posting: a banner under the top bar, not modal (a bottom sheet on
+   phones, below) */
 .return-prompt {
   position: fixed;
   top: calc(var(--header-h) + 8px);
@@ -3008,19 +3420,8 @@ button.metric:hover {
   margin-left: auto;
 }
 
-/* One-time swipe tip on touch devices */
-.swipe-tip {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 10px;
-  padding: 4px 4px 4px 12px;
-  border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
-  border-radius: var(--radius);
-  background: var(--primary-soft);
-  color: var(--text-2);
-  font-size: 13px;
+.return-prompt-grip {
+  display: none;
 }
 
 /* Toast with actions (hide reasons, "Mute <company>") */
@@ -3040,14 +3441,97 @@ button.metric:hover {
   font-weight: 500;
 }
 
-.toast .toast-action:hover {
-  background: var(--border);
+@media (hover: hover) {
+  .toast .toast-action:hover {
+    background: var(--border);
+  }
 }
 
-@media (max-width: 720px) {
-  /* 4 tabs + Filters */
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px), (pointer: coarse) and (max-width: 960px) {
+  /* Inbox · Saved · Applied · Search · Filters */
   .bottom-nav {
     grid-template-columns: repeat(5, 1fr);
+  }
+
+  /* The search bar opens under the top bar and stays there while the list scrolls */
+  .toolbar.search-open {
+    position: sticky;
+    top: var(--header-h);
+    z-index: 20;
+    padding-bottom: 8px;
+  }
+
+  /* "Did you apply?": a bottom sheet above the bottom bar, three full-width buttons in the thumb zone; a swipe down
+     (60 px) answers Not yet */
+  .return-prompt {
+    top: auto;
+    right: 0;
+    bottom: calc(64px + env(safe-area-inset-bottom));
+    left: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    width: auto;
+    max-width: none;
+    padding: 6px max(14px, env(safe-area-inset-right)) 12px max(14px, env(safe-area-inset-left));
+    border-width: 1px 0 0;
+    border-radius: 14px 14px 0 0;
+    font-size: 14px;
+    transform: translateY(var(--drag, 0));
+    animation: sheet-up 0.2s ease-out;
+    touch-action: none;
+  }
+
+  .return-prompt.is-dragging {
+    transition: none;
+  }
+
+  .return-prompt-grip {
+    display: block;
+    align-self: center;
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border-strong);
+  }
+
+  .return-prompt-actions {
+    flex-direction: column;
+    gap: 6px;
+    margin-left: 0;
+  }
+
+  .return-prompt-actions .btn {
+    width: 100%;
+    height: 44px;
+  }
+
+  /* Phone landscape: the three buttons share one row, so the sheet stays low (about 110px) */
+  @media (pointer: coarse) and (max-height: 500px) {
+    .return-prompt {
+      gap: 6px;
+      padding-bottom: 8px;
+    }
+
+    .return-prompt-actions {
+      flex-direction: row;
+    }
+
+    .return-prompt-actions .btn {
+      flex: 1;
+      width: auto;
+    }
+  }
+
+  /* While the sheet is up, toasts show under the top bar instead of covering it */
+  .return-prompt ~ .toast {
+    top: calc(var(--header-h) + 8px);
+    bottom: auto;
+  }
+
+  .expiring-row {
+    gap: 8px;
+    padding-left: 10px;
   }
 
   .page-shell.has-bulk > .toast {
@@ -3087,19 +3571,53 @@ button.metric:hover {
     flex: none;
   }
 
-  .return-prompt {
-    top: calc(var(--header-h) + 6px);
-    width: calc(100vw - 20px);
-  }
-
   .toast.has-actions {
     width: calc(100vw - 20px);
   }
 
   /* Rows keep the title's room for the bookmark: the posting opens from the drawer (cards keep the link) */
-  .job-row .job-actions a.icon-btn,
-  .job-row .job-actions .icon-btn[aria-label="No link for this job"] {
+  .job-row .job-actions .open-btn {
     display: none;
+  }
+
+  .job-actions .hide-btn {
+    margin-left: 2px;
+  }
+
+  .dup-pill {
+    height: 20px;
+  }
+}
+
+/* Landscape phones: the top bar scrolls away, so the open search bar sticks to the top */
+@media (max-height: 480px) {
+  .toolbar.search-open {
+    top: 0;
+  }
+}
+
+/* Phone landscape: no room above the list, so the stage chips and the freshness line move into the Filters sheet */
+@media (pointer: coarse) and (max-height: 500px) {
+  .on-page {
+    display: none;
+  }
+
+  .filter-extra {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .filter-extra .stage-row {
+    margin-bottom: 0;
+  }
+
+  .filter-extra .data-freshness {
+    margin-left: 0;
   }
 }
 
@@ -3129,9 +3647,11 @@ button.metric:hover {
   opacity: 0.5;
 }
 
-.pill-toggle[aria-disabled="true"]:hover {
-  border-color: var(--border);
-  color: var(--text-2);
+@media (hover: hover) {
+  .pill-toggle[aria-disabled="true"]:hover {
+    border-color: var(--border);
+    color: var(--text-2);
+  }
 }
 
 @media (pointer: coarse) {
@@ -3140,6 +3660,36 @@ button.metric:hover {
     min-width: 44px;
     height: 44px;
   }
+
+  /* Finger-sized: the strip's rows and its "Show N more", the scope menu's items; the duplicate pill keeps its look and
+     gets a 44px hit area */
+  .expiring-open,
+  .expiring-more .text-button,
+  .scope-menu-item {
+    min-height: 44px;
+  }
+
+  .dup-pill {
+    position: relative;
+  }
+
+  .dup-pill::after {
+    content: "";
+    position: absolute;
+    inset: -13px -9px;
+  }
+}
+
+/* The strip's "Show N more" / "Show fewer" row */
+.expiring-more {
+  display: flex;
+  justify-content: center;
+  padding: 2px 6px;
+}
+
+.expiring-more .text-button {
+  font-size: 12px;
+  font-weight: 600;
 }
 
 /* ==== END FEATURES: jobs list ==== */
@@ -3211,9 +3761,9 @@ button.metric:hover {
   color: var(--warning);
 }
 
-.drawer-badge.closed {
-  background: var(--danger-soft);
-  color: var(--danger);
+.drawer-badge.new {
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
 .drawer-message {
@@ -3230,7 +3780,7 @@ button.metric:hover {
   color: var(--primary);
 }
 
-/* Notices at the top of the body: duplicate applied, closed posting */
+/* Notices at the top of the body: duplicate applied, "Heard back?" on an older application */
 .drawer-banner {
   display: flex;
   flex-wrap: wrap;
@@ -3257,16 +3807,120 @@ button.metric:hover {
 
 .drawer-banner-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
-/* Fit explanations */
-.fit-reason {
-  margin-top: 3px;
+/* Technical details (admins): role confidence, how the role was matched, scrape counts */
+.drawer-tech {
+  margin-top: 12px;
+}
+
+.drawer-tech summary {
+  width: max-content;
+  max-width: 100%;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.drawer-tech summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.drawer-tech .detail-list {
+  margin-top: 8px;
+}
+
+/* Fit as points: "49 = 40 role + 7 skills + 2 experience", then "Role 40/40 · Matches your #1 role, …" per bar */
+.drawer-fit-head .fit-points-line {
+  margin-top: 1px;
+  color: var(--text-2);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fit-part-text {
+  margin-bottom: 3px;
   color: var(--muted);
   font-size: 12px;
 }
 
+.fit-part-text strong {
+  color: var(--text-2);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Under the skills bar: what the posting also asks for (not scored); under the bars: In / Not in your profile */
+.fit-also-asks {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.fit-skills {
+  margin-top: 14px;
+}
+
+.fit-skills .skill-group .drawer-note {
+  margin-bottom: 4px;
+}
+
+ul.skill-tags {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* "+14 more" / "Show fewer" after the first 5 "Not in your profile" skills */
+.skill-more {
+  display: inline-flex;
+  align-items: center;
+}
+
+.skill-more .text-button {
+  min-height: 24px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.skill-tags.with-actions .skill-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 3px;
+}
+
+.skill-know {
+  padding: 0 5px 0 6px;
+  border: 0;
+  border-left: 1px dashed var(--border-strong);
+  background: none;
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.skill-know:disabled,
+.skill-know[aria-disabled="true"] {
+  color: var(--muted);
+  cursor: default;
+}
+
+.skill-know:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+
+/* "Not in For you: fit 49 (needs 60) · …" with a fix-it button per cause */
 .fit-not-for-you {
   margin-top: 12px;
   padding: 8px 10px;
@@ -3274,6 +3928,13 @@ button.metric:hover {
   background: var(--surface-2);
   color: var(--text-2);
   font-size: 12px;
+}
+
+.fit-fix-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .fit-feedback {
@@ -3360,7 +4021,7 @@ button.metric:hover {
   margin: 8px 0 0;
 }
 
-/* Job skills: you have / to learn */
+/* Job skills: in your profile / not in your profile */
 .skill-groups {
   display: grid;
   gap: 10px;
@@ -3373,7 +4034,7 @@ button.metric:hover {
   font-weight: 600;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px), (pointer: coarse) and (max-width: 960px) {
   /* the title block is display: contents here, so the badges join the header grid */
   .drawer-badges {
     grid-column: 1 / -1;
@@ -3389,6 +4050,43 @@ button.metric:hover {
   .application-panel .note-input,
   .status-picker {
     font-size: 16px;
+  }
+
+  /* "+ I know this" gets a finger-sized target without making every skill pill tall */
+  .skill-tags.with-actions {
+    gap: 6px;
+  }
+
+  .skill-tags.with-actions .skill-tag {
+    min-height: 32px;
+    font-size: 12px;
+  }
+
+  .skill-know {
+    position: relative;
+    align-self: stretch;
+    font-size: 12px;
+  }
+
+  .skill-know::after {
+    content: "";
+    position: absolute;
+    inset: -6px -4px;
+  }
+
+  .skill-more .text-button {
+    min-height: 44px;
+    margin: -6px 0;
+  }
+}
+
+@media (hover: hover) {
+  .skill-know:hover:not(:disabled, [aria-disabled="true"]) {
+    text-decoration: underline;
+  }
+
+  .drawer-tech summary:hover {
+    color: var(--text-2);
   }
 }
 
@@ -3411,6 +4109,30 @@ button.metric:hover {
 
 .settings-tabs::-webkit-scrollbar {
   display: none;
+}
+
+/* Grouped tab bar (admins): "YOU Profile · Mute rules · Hidden · Account ┃ ADMIN Companies · System · Access". The group
+   names are visual only (aria-hidden); the tabs stay one tab list. */
+.settings-tab-group {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  padding: 0 6px 0 8px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.settings-tab-group.admin {
+  margin-left: 4px;
+  border-left: 1px solid var(--border-strong);
+}
+
+.settings-undo-error {
+  margin-bottom: 12px;
 }
 
 .settings-tabpanel:focus-visible {
@@ -3445,9 +4167,11 @@ ol.settings-list {
   color: var(--danger);
 }
 
-.secondary-button.danger-button:hover:not(:disabled) {
-  background: var(--danger-soft);
-  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+@media (hover: hover) {
+  .secondary-button.danger-button:hover:not(:disabled) {
+    background: var(--danger-soft);
+    border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  }
 }
 
 /* Sign out in the top bar: the question opens under the button */
@@ -3568,6 +4292,150 @@ ol.settings-list {
   font-weight: 600;
 }
 
+/* A chip list that is full: the label without an input, and "Remove one to add another" in its place */
+.chip-field-label {
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.chip-field-full {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* Profile anchors (#roles, #skills, …): room above a field scrolled to under the sticky top bar */
+.profile-form .settings-field[id] {
+  scroll-margin-top: calc(var(--header-h) + 12px);
+}
+
+/* Welcome flow: the scoring rules folded under "How scores work" */
+.profile-scoring summary {
+  width: fit-content;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.profile-scoring[open] summary {
+  margin-bottom: 6px;
+}
+
+/* Access list: "Last active" and "Applied (7 d)" columns between the email and Remove */
+.access-list .settings-row-main {
+  flex: 1;
+}
+
+.access-stats {
+  display: flex;
+  flex: none;
+  gap: 16px;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.access-stats > div {
+  min-width: 72px;
+}
+
+.access-stats dt {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.access-stats dd {
+  margin: 0;
+  font-size: 13px;
+}
+
+/* "No access yet" (ProtectedRoute): the account and the two ways out */
+.access-denied p {
+  color: var(--text-2);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.access-denied-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.access-denied-actions .btn {
+  flex: 1;
+  height: max(36px, var(--control-h)); /* 44px on touch screens */
+}
+
+/* Metrics card (System tab, admins) */
+.metrics-lead {
+  font-size: 14px;
+}
+
+.metrics-lead strong {
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.metrics-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.metrics-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.metrics-table th,
+.metrics-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.metrics-table thead th {
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.metrics-table th:first-child {
+  text-align: left;
+}
+
+.metrics-table tbody th {
+  font-weight: 600;
+}
+
+.metrics-table tbody tr:first-child {
+  background: var(--primary-soft);
+}
+
+.metrics-table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+.metrics-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-2);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Checkbox setting: the box, then its label and help */
 .settings-check {
   display: flex;
@@ -3595,6 +4463,7 @@ ol.settings-list {
   color: var(--muted);
   font-size: 12px;
 }
+
 
 /* Mute rules: levels as toggle pills holding a checkbox */
 .mute-levels {
@@ -3849,9 +4718,22 @@ ol.settings-list {
   color: var(--danger);
 }
 
-@media (max-width: 720px) {
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px), (pointer: coarse) and (max-width: 960px) {
   .settings-header > .settings-tabs {
     width: 100%;
+  }
+
+  /* Access rows: the two numbers move under the email */
+  .access-list .settings-row {
+    flex-wrap: wrap;
+  }
+
+  .access-list .settings-row-main {
+    flex-basis: 100%;
+  }
+
+  .access-stats {
+    flex: 1;
   }
 
   .settings-row.system-row {
@@ -3881,7 +4763,13 @@ ol.settings-list {
   }
 
   /* The label is the checkbox's finger-sized target (the layout keeps its height) */
+  .settings-check > div {
+    flex: 1;
+    min-width: 0;
+  }
+
   .settings-check label {
+    min-height: 44px;
     margin: -12px 0;
     padding: 12px 0;
   }

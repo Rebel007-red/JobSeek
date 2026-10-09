@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useNavigationType } from 'react-router-dom'
-import { LIST_TABS, SCOPES, SORT_VALUES } from '../utils/filters'
+import { POSTED_OPTIONS, SCOPES, normalizeTab, sortAllowed } from '../utils/filters'
 import { listStateToParams, parseListState } from '../utils/urlState'
-import { readSort, rememberedListState, saveScope, saveSort, saveTab } from '../utils/viewPref'
+import { readSort, rememberedListState, saveScope, saveScopeWindow, saveSort, saveTab } from '../utils/viewPref'
 
 const listPart = ({ tab, sort, scope, filters }) => ({ tab, sort, scope, filters })
 const searchOf = (location) => location.search.replace(/^\?/, '')
@@ -12,7 +12,8 @@ function buildSearch(list, overlay) {
 }
 
 // The jobs page's state in the URL (#3). tab, sort, scope and filters are written with replace (no history entry per
-// change); tab, scope and the sort of each tab are also remembered on this device, and the URL overrides them on load.
+// change); tab, scope, the time window (set together with the scope by setScopeWindow) and the sort of each tab are
+// also remembered on this device, and the URL overrides them on load.
 // The drawer (?job=) and the filter sheet (?sheet=filters) push one history entry, so Back (browser or Android) closes
 // them instead of leaving the app; closing them yourself goes back over that entry. A deep link that opens the drawer
 // gets the list entry under it, so Back from there also stays in the app.
@@ -84,14 +85,17 @@ export function useUrlState() {
     }
   }, [location, navigationType, go])
 
-  const setTab = useCallback((tab) => {
-    if (!LIST_TABS.includes(tab)) return
+  // An old tab name ('pending', 'all') means the Inbox
+  const setTab = useCallback((value) => {
+    const tab = normalizeTab(value)
+    if (!tab) return
     saveTab(tab)
     setList(prev => (prev.tab === tab ? prev : { ...prev, tab, sort: readSort(tab) }))
   }, [])
 
+  // 'expiring' is an Inbox sort only (sortAllowed)
   const setSort = useCallback((sort) => {
-    if (!SORT_VALUES.includes(sort)) return
+    if (!sortAllowed(sort, listRef.current.tab)) return
     saveSort(listRef.current.tab, sort)
     setList(prev => (prev.sort === sort ? prev : { ...prev, sort }))
   }, [])
@@ -100,6 +104,16 @@ export function useUrlState() {
     if (!SCOPES.includes(scope)) return
     saveScope(scope)
     setList(prev => (prev.scope === scope ? prev : { ...prev, scope }))
+  }, [])
+
+  // The scope menu: scope ('match' | 'all') and time window (filters.postedWithin: '24' | '48' | '' = any date) together
+  const setScopeWindow = useCallback(({ scope, postedWithin }) => {
+    const span = String(postedWithin ?? '')
+    if (!SCOPES.includes(scope) || (span && !POSTED_OPTIONS.some(option => option.value === span))) return
+    saveScopeWindow({ scope, postedWithin: span })
+    setList(prev => (prev.scope === scope && prev.filters.postedWithin === span
+      ? prev
+      : { ...prev, scope, filters: { ...prev.filters, postedWithin: span } }))
   }, [])
 
   // next: filters, or a function of the current ones
@@ -150,6 +164,7 @@ export function useUrlState() {
     setTab,
     setSort,
     setScope,
+    setScopeWindow,
     setFilters,
     jobKey: overlay.jobKey,
     openJob,

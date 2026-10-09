@@ -1,15 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../lib/api'
 import { dataFreshness } from '../../utils/job'
-
-// When the scheduled workflows start (UTC). keep in sync: the `cron` lines of .github/workflows/linkedin-databricks.yml
-// ('0 */4 * * *'), databricks-scrapers.yml ('7 2,14 * * *') and publish-supabase.yml ('50 * * * *')
-const EVERY_HOUR = Array.from({ length: 24 }, (_, hour) => hour)
-const SCHEDULES = [
-  { label: 'LinkedIn scrape, then the pipeline and publish', hours: [0, 4, 8, 12, 16, 20], minute: 0 },
-  { label: 'Workday and Greenhouse scrape', hours: [2, 14], minute: 7 },
-  { label: 'Catch-up publish', hours: EVERY_HOUR, minute: 50 },
-]
+import { SCHEDULES, clockLabel, nextJobsAt, nextStart } from '../../utils/schedule'
 
 const SOURCES = [
   { key: 'linkedin', label: 'LinkedIn' },
@@ -67,17 +59,6 @@ function taskName(key) {
 }
 
 const count = (value) => (value === null || value === undefined ? '–' : Number(value).toLocaleString())
-
-// The next start of a schedule after `now` (today or tomorrow, UTC)
-function nextStart({ hours, minute }, now = new Date()) {
-  for (let day = 0; day <= 1; day += 1) {
-    for (const hour of hours) {
-      const at = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + day, hour, minute))
-      if (at > now) return at
-    }
-  }
-  return null
-}
 
 function Badge({ badge, title }) {
   if (!badge) return null
@@ -165,7 +146,7 @@ export function StatusPanel() {
         )}
         <dl className="system-counts">
           <div><dt>Jobs</dt><dd>{count(counts.jobs)}</dd></div>
-          <div><dt>Open postings</dt><dd>{count(counts.active_jobs)}</dd></div>
+          <div title="Jobs in the latest update; the others are kept because someone saved or applied to them"><dt>In the latest update</dt><dd>{count(counts.active_jobs)}</dd></div>
           <div><dt>Saved or applied</dt><dd>{count(counts.tracked_jobs)}</dd></div>
           <div><dt>Profiles</dt><dd>{count(counts.profiles)}</dd></div>
           <div><dt>Allowed emails</dt><dd>{count(counts.allowed_emails)}</dd></div>
@@ -194,6 +175,10 @@ export function StatusPanel() {
             )
           })}
         </ul>
+        <p className="muted-text">
+          Users see &ldquo;Next jobs around {clockLabel(nextJobsAt(now))}&rdquo; (the next LinkedIn run plus about the time
+          it takes to publish).
+        </p>
       </section>
 
       <section className="settings-card" aria-labelledby="system-scrapers">
@@ -254,7 +239,7 @@ export function StatusPanel() {
 
       <section className="settings-card" aria-labelledby="system-runs">
         <div className="settings-card-header">
-          <h3 id="system-runs">Pipeline runs</h3>
+          <h3 id="system-runs">Databricks runs</h3>
           <small className="muted-text">Last {runs.length}</small>
         </div>
         {runs.length === 0 ? (

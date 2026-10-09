@@ -55,7 +55,8 @@ export const TRACKED_CSV_COLUMNS = [
   { key: 'status_updated_at', label: 'Status changed', format: day },
   { key: 'next_action_at', label: 'Follow up', format: day },
   { key: 'fit_score', label: 'Fit' },
-  { key: 'is_active', label: 'Posting open', format: value => (value === false ? 'No' : 'Yes') },
+  // Yes = a posting over 2 days old that left the job snapshot (kept because you track it); it may still be open
+  { key: 'is_active', label: 'Older posting', format: value => (value === false ? 'Yes' : 'No') },
   { key: 'source', label: 'Source' },
   { key: 'job_url', label: 'Link', format: value => (value && value !== '#' ? value : '') },
   { key: 'note', label: 'Note' },

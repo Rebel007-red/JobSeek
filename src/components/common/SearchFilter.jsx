@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
 import { EMPLOYMENT_LABELS, WORK_MODE_LABELS } from '../../utils/gold'
-import { DEFAULT_FILTERS, PANEL_KEYS, POSTED_OPTIONS } from '../../utils/filters'
+import { DEFAULT_FILTERS, PANEL_KEYS } from '../../utils/filters'
 import { CloseIcon, FilterIcon } from './icons'
 
 // The filter definitions moved to utils/filters.js (the URL state uses them too); re-exported for older imports
@@ -68,7 +68,11 @@ const EMPTY_FACETS = { role: [], category: [], source: [], company: [], city: []
 // the panel (shown on phones only; the toolbar has its own sort select).
 // open / onOpenChange make the panel controlled (the page keeps it in the URL, so Back closes it); without them it
 // opens by itself. panel={false} renders only the trigger, for a second trigger of the same controlled panel.
-export function SearchFilter({ filters, facets = EMPTY_FACETS, onChange, variant = 'toolbar', sorts, sort, onSortChange, open, onOpenChange, panel = true }) {
+// extra: a node shown at the top of the panel (phone landscape moves the stage chips and the freshness line there; CSS
+// shows .filter-extra only in that layout). The time window is not here: it lives in the scope menu.
+export function SearchFilter({
+  filters, facets = EMPTY_FACETS, onChange, variant = 'toolbar', sorts, sort, onSortChange, open, onOpenChange, panel = true, extra = null,
+}) {
   const [ownOpen, setOwnOpen] = useState(false)
   const controlled = open !== undefined
   const isOpen = controlled ? open : ownOpen
@@ -79,7 +83,7 @@ export function SearchFilter({ filters, facets = EMPTY_FACETS, onChange, variant
   const [draft, setDraft] = useState(filters)
   const [draftSort, setDraftSort] = useState(sort)
   const close = useCallback(() => setOpen(false), [setOpen])
-  const ids = { sort: useId(), location: useId(), posted: useId(), years: useId(), fit: useId() }
+  const ids = { sort: useId(), location: useId(), years: useId(), fit: useId() }
 
   // Every opening starts from the filters in use (also when the URL opened the panel)
   const [wasOpen, setWasOpen] = useState(isOpen)
@@ -91,7 +95,6 @@ export function SearchFilter({ filters, facets = EMPTY_FACETS, onChange, variant
     }
   }
 
-  // The default 24h window is not counted as an active filter
   const activeCount = PANEL_KEYS.filter(key => filters[key] && filters[key] !== DEFAULT_FILTERS[key]).length
   const set = (key, value) => setDraft(prev => ({ ...prev, [key]: value }))
   const options = (kind) => facets[kind] || []
@@ -133,6 +136,7 @@ export function SearchFilter({ filters, facets = EMPTY_FACETS, onChange, variant
 
       {panel && isOpen && (
         <FilterDialog onClose={close}>
+          {extra && <div className="filter-extra">{extra}</div>}
           <div className="filter-grid">
             {sorts && (
               <div className="field-group hide-desktop">
@@ -171,14 +175,6 @@ export function SearchFilter({ filters, facets = EMPTY_FACETS, onChange, variant
                 <input id={ids.location} type="text" value={draft.location} onChange={e => set('location', e.target.value)} />
               </div>
             )}
-
-            <div className="field-group">
-              <label htmlFor={ids.posted}>Posted</label>
-              <select id={ids.posted} value={draft.postedWithin} onChange={e => set('postedWithin', e.target.value)}>
-                <option value="">Any time</option>
-                {POSTED_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
-            </div>
 
             <div className="field-group">
               <label htmlFor={ids.years}>Requires at most</label>

@@ -1,13 +1,17 @@
-import { startTransition, useCallback, useEffect, useRef, useState } from 'react'
+import { startTransition, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
 
 const PAGE_SIZE = 48
 const PREFETCH_DISTANCE_PX = 1200 // start loading the next page well before the user reaches the end
+export const LEAVE_MS = 160 // a removed row's slide + collapse (the .is-leaving CSS transition)
 
 // The paged job list for the current filters / scope / sort / tab. The first page reloads whenever they change
 // (showing the cached page right away); later pages are appended near the end of the page or via loadMore().
 // listKey changes only when a different query's rows replace the list (not on a refresh of the same query),
 // so the page can mount the new result set instead of moving the old rows around (avoids layout shift).
+// sentinelRef: put it on an element after the last row; the next page loads when it comes within 1200 px of the
+// viewport (also inside a scrolling container, and when the list is too short to scroll). leaveJob(key) removes a row
+// after its exit animation: `leaving` holds the key for LEAVE_MS (render the row with .is-leaving), then removeJob.
 export function useJobList({ filters, scope, sort, tab }) {
   const [jobs, setJobs] = useState([])
   const [page, setPage] = useState(0)
@@ -20,6 +24,13 @@ export function useJobList({ filters, scope, sort, tab }) {
   const requestRef = useRef(0) // bumped by every first-page load; older responses are ignored
   const busyRef = useRef(false) // a page request is in flight, so loadMore() must not skip ahead
   const shownQueryRef = useRef(null)
+  const jobsRef = useRef(jobs)
+  const [sentinel, setSentinel] = useState(null)
+  const [leaving, setLeaving] = useState(() => new Set())
+
+  useLayoutEffect(() => {
+    jobsRef.current = jobs
+  })
 
   const fetchJobs = useCallback(async (pageToLoad) => {
     // Later pages share the first page's request id: a page response is dropped only when the query changed,
@@ -51,8 +62,13 @@ export function useJobList({ filters, scope, sort, tab }) {
     setError('')
     try {
       const rows = await api.jobs(
-        // The muted view lists every posting (not groups), so it matches the "N hidden by your rules" count
-        { ...filters, scope, sort, tab, limit: PAGE_SIZE, offset, ...(filters.muteView === 'only' ? { collapse: false } : {}) },
+        // The muted view lists every posting (not groups), so it matches the "N muted" count. "Expiring first" lists
+        // whatever the time window (the jobs that disappear tonight are 2 days old, outside "last 24h")
+        {
+          ...filters, scope, sort, tab, limit: PAGE_SIZE, offset,
+          ...(filters.muteView === 'only' ? { collapse: false } : {}),
+          ...(sort === 'expiring' ? { postedWithin: '' } : {}),
+        },
         {
           // Show the last known first page immediately; the fresh result replaces it when it arrives
           onCached: pageToLoad === 0
@@ -126,15 +142,46 @@ export function useJobList({ filters, scope, sort, tab }) {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [loading, hasMore, error, loadMore])
 
+  // Re-created after every page, so a sentinel that is still in range (a short list) loads the next one too
+  useEffect(() => {
+    if (!sentinel || loading || !hasMore || error || typeof IntersectionObserver === 'undefined') return undefined
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some(entry => entry.isIntersecting)) loadMore()
+    }, { rootMargin: `${PREFETCH_DISTANCE_PX}px 0px` })
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [sentinel, loading, hasMore, error, loadMore])
+
   // Optimistic local edits after a write
   const updateJob = useCallback((jobKey, patch) => {
     setJobs(prev => prev.map(job => (job.job_key === jobKey ? { ...job, ...patch } : job)))
   }, [])
 
+  // A key that is not in the list (already removed, or the list was replaced) changes nothing
   const removeJob = useCallback((jobKey) => {
+    if (!jobsRef.current.some(job => job.job_key === jobKey)) return
+    jobsRef.current = jobsRef.current.filter(job => job.job_key !== jobKey)
     setJobs(prev => prev.filter(job => job.job_key !== jobKey))
     setTotalCount(count => Math.max(count - 1, 0))
   }, [])
+
+  // removeJob after the row's exit animation (at once under "reduce motion")
+  const leaveJob = useCallback((jobKey) => {
+    if (globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      removeJob(jobKey)
+      return
+    }
+    setLeaving(prev => new Set(prev).add(jobKey))
+    setTimeout(() => {
+      removeJob(jobKey)
+      setLeaving(prev => {
+        if (!prev.has(jobKey)) return prev
+        const next = new Set(prev)
+        next.delete(jobKey)
+        return next
+      })
+    }, LEAVE_MS)
+  }, [removeJob])
 
   return {
     jobs,
@@ -150,5 +197,8 @@ export function useJobList({ filters, scope, sort, tab }) {
     retry: () => fetchJobs(page),
     updateJob,
     removeJob,
+    leaveJob,
+    leaving,
+    sentinelRef: setSentinel,
   }
 }

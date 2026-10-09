@@ -230,7 +230,7 @@ export function CompaniesPanel({ visible }) {
   }
 
   async function deleteCompany(company) {
-    if (!confirm(`Delete "${company.name}"? It will no longer be scraped; jobs already found stay until they expire.`)) return
+    if (!confirm(`Delete "${company.name}"? It will no longer be scraped; jobs already found stay until they disappear (2 days after posting, unless someone saved or applied to them).`)) return
     setListError('')
     setCompanies(prev => prev.filter(c => c.id !== company.id))
     const { data, error } = await supabase.from('companies').delete().eq('id', company.id).select('id')

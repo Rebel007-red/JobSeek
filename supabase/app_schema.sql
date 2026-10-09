@@ -339,6 +339,42 @@ CREATE TABLE IF NOT EXISTS app.scrape_companies (
 COMMENT ON COLUMN app.scrape_companies.failures IS 'Consecutive failed scrapes (0 after a good one)';
 
 -- ---------------------------------------------------------------------------------------------------------------------
+-- Visits and activity (the "new since your last visit" marker and the admin Metrics card). Never exported.
+-- ---------------------------------------------------------------------------------------------------------------------
+
+-- When the user last looked at the job list (the throttled ping; "new since your last visit"). Never exported.
+ALTER TABLE app.user_profile ADD COLUMN IF NOT EXISTS last_list_seen_at timestamptz;
+
+-- The fit score at the moment a job became tracked (saved / applied), see app.record_triage "fit_at_action". NULL for
+-- rows tracked before this column existed.
+ALTER TABLE app.user_job_state ADD COLUMN IF NOT EXISTS fit_at_action smallint
+  CHECK (fit_at_action IS NULL OR fit_at_action BETWEEN 0 AND 100);
+
+-- Daily activity counters per user (UTC day, the day of the trend chart). Counters only: no job keys, URLs or search
+-- text. Written by app_write (ping and the triage writes) and by pipeline_publish_finish (missed_strong); rows older
+-- than 180 days are deleted by pipeline_publish_finish.
+CREATE TABLE IF NOT EXISTS app.user_activity_day (
+  user_id uuid NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
+  day date NOT NULL,
+  first_at timestamptz,           -- first ping or write of the day (NULL on a row only the publish wrote)
+  last_at timestamptz,            -- last ping or write of the day
+  visits int NOT NULL DEFAULT 0,  -- pings after 30+ minutes without activity (the first ping of a day counts)
+  opened int NOT NULL DEFAULT 0,  -- job details opened (reported by the client with the next ping)
+  saved int NOT NULL DEFAULT 0,   -- net saves this day (a same-day unsave takes one back)
+  applied int NOT NULL DEFAULT 0, -- net applications this day
+  hidden int NOT NULL DEFAULT 0,  -- net hides this day
+  prompt_yes int NOT NULL DEFAULT 0,   -- "Did you apply?" answers (reported with the next ping)
+  prompt_no int NOT NULL DEFAULT 0,
+  prompt_saved int NOT NULL DEFAULT 0,
+  acted_strong int NOT NULL DEFAULT 0,  -- untouched For-you jobs with fit 70+ that were saved, applied or hidden this day
+  missed_strong int NOT NULL DEFAULT 0, -- untouched For-you jobs with fit 70+ deleted by a publish this day
+  PRIMARY KEY (user_id, day),
+  CHECK (visits >= 0 AND opened >= 0 AND saved >= 0 AND applied >= 0 AND hidden >= 0 AND prompt_yes >= 0
+         AND prompt_no >= 0 AND prompt_saved >= 0 AND acted_strong >= 0 AND missed_strong >= 0)
+);
+COMMENT ON TABLE app.user_activity_day IS 'Daily activity counters per user and UTC day (counters only); rows older than 180 days are deleted by pipeline_publish_finish';
+
+-- ---------------------------------------------------------------------------------------------------------------------
 -- Privileges: nothing for client roles. Row level security on everywhere with no policies (defense in depth; the
 -- table owner, which runs the SECURITY DEFINER functions, is not subject to it).
 -- ---------------------------------------------------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Header } from '../components/layout/Header'
 import { JobCard } from '../components/common/JobCard'
 import { JobRow } from '../components/common/JobRow'
@@ -10,14 +10,16 @@ import { Toast } from '../components/common/Toast'
 import { SearchIcon } from '../components/common/icons'
 import { SearchFilter } from '../components/common/SearchFilter'
 import { BulkBar } from '../components/list/BulkBar'
+import { ExpiringStrip } from '../components/list/ExpiringStrip'
 import { ReturnPrompt } from '../components/list/ReturnPrompt'
+import { ScopeMenu } from '../components/list/ScopeMenu'
 import { StageChips } from '../components/list/StageChips'
-import { SwipeHint } from '../components/list/SwipeHint'
 import {
-  APPLIED_TAB_FILTERS, MUTE_KINDS, TOAST_REASONS, addChanges, adjustSummary, bumpAppliedToday, hideKeys, negate, plural,
-  statusChanges, statusFields, statusOf, statusPatch, summaryParams, todayKey,
+  APPLIED_TAB_FILTERS, MUTE_KINDS, PROFILE_ANCHORS, TOAST_REASONS, addChanges, adjustSummary, belongsToTab, bumpAppliedToday,
+  hideChanges, hideKeys, negate, plural, statusChanges, statusFields, statusOf, statusPatch, summaryParams, swipeActions, todayKey,
 } from '../components/list/listState'
-import { api } from '../lib/api'
+import { api, onAccessDenied } from '../lib/api'
+import { sessionUser } from '../lib/session'
 import { useProfile } from '../hooks/useProfile'
 import { useHotkeys } from '../hooks/useHotkeys'
 import { useJobList } from '../hooks/useJobList'
@@ -26,14 +28,21 @@ import { useReturnPrompt } from '../hooks/useReturnPrompt'
 import { useSelection } from '../hooks/useSelection'
 import { useToast } from '../hooks/useToast'
 import { useUrlState } from '../hooks/useUrlState'
+import { useVisit } from '../hooks/useVisit'
 import {
-  APPLIED_STATUSES, EMPLOYMENT_LABELS, HIDE_REASONS, MATCH_MIN_FIT, STRONG_FIT, WORK_MODE_LABELS, buildTrend, facetOptions,
-  companyKey, isApplied, isTracked, jobUrl, statusLabel,
+  APPLIED_STATUSES, EMPLOYMENT_LABELS, MATCH_MIN_FIT, STRONG_FIT, WORK_MODE_LABELS, buildTrend, facetOptions, companyKey, isApplied,
+  isTracked, jobUrl, statusLabel,
 } from '../utils/gold'
-import { dataFreshness } from '../utils/job'
-import { DEFAULT_FILTERS, EMPTY_FILTERS, FRESH_HOURS, PANEL_KEYS, POSTED_OPTIONS, TRACKED_TABS, defaultSortFor } from '../utils/filters'
+import { dataFreshness, formatDate, isNewJob, parseDay, sinceLabel, staleBannerText } from '../utils/job'
+import { DEFAULT_FILTERS, EMPTY_FILTERS, LIST_TABS, PANEL_KEYS, TAB_LABELS, defaultSortFor, sortAllowed } from '../utils/filters'
 import { TRACKED_CSV_COLUMNS, downloadCsv, toCsv, trackedCsvFilename } from '../utils/csv'
-import { readAutoAdvance, readView, recordOpened, saveView } from '../utils/viewPref'
+import { PROFILE_LIMITS } from '../utils/entries'
+import { skillCounts as countSkills } from '../utils/fit'
+import { caughtUpText, endOfListText } from '../utils/schedule'
+import {
+  countOpenWithoutSwipe, readAutoAdvance, readExpiringCollapsed, readSwipePeekDone, readSwipeRightApplies, readSwipeTipShown,
+  readSwipeUsed, readView, recordOpened, saveExpiringCollapsed, saveSwipePeekDone, saveSwipeTipShown, saveView,
+} from '../utils/viewPref'
 
 const TREND_WINDOW_DAYS = 14
 const SEARCH_DEBOUNCE_MS = 350
@@ -41,26 +50,24 @@ const COUNTS_REFRESH_MS = 700 // after writes, the counters are re-read once thi
 const LOAD_AHEAD_ROWS = 5 // keyboard navigation loads the next page this many rows before the end
 const AUTO_SYNC_CHECK_MS = 5 * 60_000 // how often an open, visible page checks for a new pipeline publish
 const AUTO_REFRESH_MS = 60 * 60_000 // an open page also refetches data older than this (e.g. writes from another device)
+const PEEK_MS = 1400 // the one-time swipe demo on the first row (the CSS animation takes about 1.2 s)
+const SWIPE_TIP_OPENS = 5 // drawer opens without a swipe before the one-off swipe tip
 
+// 'expiring' ("Expiring first") is offered on the Inbox only (sortAllowed)
 const SORTS = [
   { value: 'fit', label: 'Best fit' },
   { value: 'recent', label: 'Newest posted' },
   { value: 'found', label: 'Recently found' },
   { value: 'applied', label: 'Applied date' },
+  { value: 'expiring', label: 'Expiring first' },
 ]
+const sortsFor = (tab) => SORTS.filter(option => sortAllowed(option.value, tab))
 
-const TABS = [
-  { value: 'pending', label: 'To apply', key: '1' },
-  { value: 'saved', label: 'Saved', key: '2' },
-  { value: 'applied', label: 'Applied', key: '3' },
-  { value: 'all', label: 'All', key: '4' },
-]
+// Inbox · Saved · Applied (disjoint), keys 1-3
+const TABS = LIST_TABS.map((value, index) => ({ value, label: TAB_LABELS[value], key: String(index + 1) }))
 
-// "For you" (your roles, fit 60+) or "Show all" (every job by fit); remembered per user on this device
-const SCOPES = [
-  { value: 'match', label: 'For you', title: `Jobs in your roles (or the same category) with fit ${MATCH_MIN_FIT}+, plus the ones you saved or applied to` },
-  { value: 'all', label: 'Show all', title: 'Every job, best fit first' },
-]
+const isCoarse = () => typeof window !== 'undefined' && Boolean(window.matchMedia?.('(pointer: coarse)').matches)
+const reducedMotion = () => typeof window !== 'undefined' && Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
 
 const FILTER_LABELS = {
   q: 'Search',
@@ -73,47 +80,79 @@ const FILTER_LABELS = {
   workMode: 'Work mode',
   employment: 'Employment',
   maxYears: 'Max years',
-  postedWithin: 'Posted',
   minFit: 'Fit',
 }
 
 function chipValue(key, value) {
   if (key === 'minFit') return `${value}+`
-  if (key === 'postedWithin') return (POSTED_OPTIONS.find(option => option.value === value)?.label || `last ${value}h`).toLowerCase()
   if (key === 'maxYears') return value === '0' ? 'Fresher' : `≤ ${value} yrs`
   if (key === 'workMode') return WORK_MODE_LABELS[value] || value
   if (key === 'employment') return EMPLOYMENT_LABELS[value] || value
   return value
 }
 
-// [title, text] for an empty list. narrowed: filters are hiding jobs.
-function emptyMessage({ tab, narrowed, scope, onlyFresh, muteOnly }) {
-  if (muteOnly) return ['No muted jobs here', 'Nothing in this view matches your mute rules.']
-  if (!narrowed && tab === 'saved') return ['No saved jobs', 'Press s or tap the bookmark to keep a job past its 2-day expiry.']
-  if (!narrowed && tab === 'applied') return ['No applied jobs yet', 'Press a or tap the check mark on a job you applied to, and track it here.']
-  if (narrowed) return ['No matching jobs', 'Try removing a filter or switching tabs.']
-  if (scope === 'match') {
-    return ['No jobs for your roles yet', `Nothing in your roles with fit ${MATCH_MIN_FIT}+ right now. New jobs arrive after each pipeline run, or see every job.`]
+// { title, text, action } for an empty list (action: 'muted' | 'clear' | 'older' | 'everything' | null). narrowed: filters
+// are hiding jobs. caughtUp: the Inbox had jobs in this scope (or you triaged some today) and none is left.
+function emptyMessage({ tab, narrowed, scope, postedWithin, muteOnly, caughtUp, expiring, rightApplies, triaged, appliedToday }) {
+  if (muteOnly) return { title: 'No muted jobs here', text: 'Nothing in this view matches your mute rules.', action: 'muted' }
+  if (!narrowed && tab === 'saved') {
+    const how = rightApplies ? 'press s or tap the bookmark' : 'swipe right, press s or tap the bookmark'
+    return { title: 'No saved jobs', text: `Save a job (${how}) to keep it after it would disappear.` }
   }
-  if (onlyFresh) return ['Nothing new in the last 24 hours', 'Older jobs are hidden. New ones appear after the next pipeline run.']
-  return ['No jobs yet', 'Jobs appear here after the next pipeline run.']
+  if (!narrowed && tab === 'applied') {
+    return { title: 'No applied jobs yet', text: 'Mark a job applied (press a or tap the check) to track it here.' }
+  }
+  if (narrowed) return { title: 'No matching jobs', text: 'Try removing a filter or switching tabs.', action: 'clear' }
+  if (caughtUp) return { title: "You're caught up", text: caughtUpText({ triaged, applied: appliedToday }), caughtUp: true }
+  if (postedWithin) {
+    const e = Number(expiring) || 0
+    return {
+      title: postedWithin === '48' ? 'Nothing new in the last 2 days' : 'Nothing new in the last 24 hours',
+      text: e > 0 ? `Older jobs are hidden (${e} disappear tonight).` : 'Older jobs are hidden.',
+      action: 'older',
+    }
+  }
+  if (scope === 'match') {
+    return {
+      title: 'No jobs for your roles yet',
+      text: `Nothing in your roles with fit ${MATCH_MIN_FIT}+ right now. New jobs arrive with the next update (every ~4 hours).`,
+      action: 'everything',
+    }
+  }
+  return { title: 'No jobs yet', text: 'Jobs appear here after the next update (every ~4 hours).' }
 }
 
 export function JobsPage() {
   const navigate = useNavigate()
-  const { profile, loading: profileLoading, error: profileError, addMuteRule, removeMuteRule } = useProfile()
+  // Back from Settings ("Back to jobs"): keyboard focus returns to the Settings button instead of <body>
+  const fromSettings = useLocation().state?.from === 'settings'
+  useEffect(() => {
+    if (!fromSettings) return undefined
+    const frame = requestAnimationFrame(() => {
+      if (document.activeElement && document.activeElement !== document.body) return
+      document.querySelector('.topbar button[aria-label="Settings"]')?.focus({ preventScroll: true })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [fromSettings])
+  const { profile, loading: profileLoading, error: profileError, save: saveProfile, addMuteRule, removeMuteRule } = useProfile()
   const {
-    tab, sort, scope, filters, setTab, setSort, setScope, setFilters,
+    tab, sort, scope, filters, setTab, setSort, setScopeWindow, setFilters,
     jobKey: urlJobKey, openJob: pushJobUrl, closeJob: closeJobUrl, sheetOpen, setSheetOpen,
   } = useUrlState()
+  // "No access yet" (ProtectedRoute shows its page); no pings for a user who is not allowed in
+  const [accessDenied, setAccessDenied] = useState(false)
+  useEffect(() => onAccessDenied(() => setAccessDenied(true)), [])
+  // since: your last visit (ISO), undefined until known, null on a first visit; the new dots and "N new since …"
+  const { since, recordOpen, recordPrompt } = useVisit({ enabled: Boolean(profile) && !accessDenied })
   const [searchInput, setSearchInput] = useState(filters.q)
   const [view, setView] = useState(readView)
+  const [rightApplies] = useState(readSwipeRightApplies) // Settings → Account; the page remounts after Settings
   const {
     jobs, page, listKey, totalCount, hasMore, loading, refreshing, error,
-    reload: reloadJobs, loadMore, retry, updateJob, removeJob,
+    reload: reloadJobs, loadMore, retry, updateJob, leaveJob, leaving, sentinelRef,
   } = useJobList({ filters, scope, sort, tab })
   // Start from the cached counters (as the list does), so the header doesn't paint 0s and then widen to the real numbers
-  const [summary, setSummary] = useState(() => api.cachedRows('summary', summaryParams(filters, scope))?.[0] || {})
+  const [summary, setSummary] = useState(() => api.cachedRows('summary', summaryParams(filters, scope, since))?.[0] || {})
   const [trendRows, setTrendRows] = useState(() => api.cachedRows('trend', { scope }))
   const [facetRows, setFacetRows] = useState([])
   // Last pipeline publish ({ run_id, published_at, ... }), for the "Updated X ago" note
@@ -128,6 +167,18 @@ export function JobsPage() {
   const [focusStatus, setFocusStatus] = useState(0) // bumped by t: the drawer focuses its status picker
   // Expanded near-duplicate groups, by the representative's job_key: { status: 'loading' | 'expanded', rows }
   const [groups, setGroups] = useState({})
+  // The Expiring strip's rows (api.expiringJobs) and whether it is folded (per user, for the UTC day)
+  const [expiringRows, setExpiringRows] = useState([])
+  const [stripCollapsed, setStripCollapsed] = useState(() => readExpiringCollapsed())
+  const [peekKey, setPeekKey] = useState(null) // the row showing the one-time swipe demo
+  const expiringRequestRef = useRef(0)
+  const stripRef = useRef(null)
+  const scrollToStripRef = useRef(false)
+  const pendingSortRef = useRef(null) // a sort to apply once the Inbox tab is on (the header's "new" metric)
+  const peekWantedRef = useRef(null)
+  const swipeTipRef = useRef(false) // the swipe tip is due when the drawer closes
+  const peekTimersRef = useRef([])
+  const [scrollTick, setScrollTick] = useState(0) // bumped to bring the Expiring strip into view
   const { toast, showToast, runUndo, undoCount } = useToast()
   const summaryRequestRef = useRef(0)
   const searchRef = useRef(null)
@@ -142,9 +193,10 @@ export function JobsPage() {
     if (!profileLoading && !profileError && !profile) navigate('/settings?tab=profile&welcome=1', { replace: true })
   }, [profileLoading, profileError, profile, navigate])
 
+  const summaryArgs = useMemo(() => summaryParams(filters, scope, since), [filters, scope, since])
   useEffect(() => {
-    filtersRef.current = summaryParams(filters, scope)
-  }, [filters, scope])
+    filtersRef.current = summaryArgs
+  }, [summaryArgs])
 
   // Debounce the search box into filters.q
   useEffect(() => {
@@ -164,7 +216,7 @@ export function JobsPage() {
     setGroups({})
   }, [listKey])
 
-  const summaryKey = JSON.stringify(summaryParams(filters, scope))
+  const summaryKey = JSON.stringify(summaryArgs)
   const fetchSummary = useCallback(async () => {
     const requestId = ++summaryRequestRef.current
     const isCurrent = () => requestId === summaryRequestRef.current
@@ -197,10 +249,33 @@ export function JobsPage() {
     fetchFacets()
   }, [fetchTrend, fetchFacets])
 
-  // After a write: re-read the counters once the burst of writes settles
+  // The Expiring strip: on the Inbox while jobs for you disappear tonight (not in the muted view, nor with the
+  // "Expiring first" sort, where the list itself is that). The server ignores the time window, tab and scope for it.
+  const muteOnly = filters.muteView === 'only'
+  const stripWanted = tab === 'inbox' && !muteOnly && sort !== 'expiring' && Number(summary.expiring) > 0
+  const expiringKey = JSON.stringify(summaryParams(filters, scope))
+  const fetchExpiring = useCallback(async () => {
+    const requestId = ++expiringRequestRef.current
+    const isCurrent = () => requestId === expiringRequestRef.current
+    try {
+      const rows = await api.expiringJobs(JSON.parse(expiringKey), { onCached: cached => { if (isCurrent()) setExpiringRows(cached || []) } })
+      if (isCurrent()) setExpiringRows(rows || [])
+    } catch (err) {
+      console.error('Failed to load the expiring jobs:', err)
+    }
+  }, [expiringKey])
+
+  useEffect(() => {
+    if (stripWanted) fetchExpiring()
+  }, [stripWanted, fetchExpiring])
+
+  // After a write: re-read the counters (and the strip) once the burst of writes settles
   const scheduleCounts = useCallback(() => {
     clearTimeout(countsTimerRef.current)
-    countsTimerRef.current = setTimeout(() => pageRef.current.fetchSummary(), COUNTS_REFRESH_MS)
+    countsTimerRef.current = setTimeout(() => {
+      pageRef.current.fetchSummary()
+      if (pageRef.current.stripWanted) pageRef.current.fetchExpiring()
+    }, COUNTS_REFRESH_MS)
   }, [])
 
   useEffect(() => () => clearTimeout(countsTimerRef.current), [])
@@ -223,6 +298,8 @@ export function JobsPage() {
     return rows
   }, [jobs, groups])
   const displayJobs = useMemo(() => displayRows.map(row => row.job), [displayRows])
+  // How often the listed jobs ask for each skill: the drawer's "Not in your profile" puts the common ones first
+  const skillCounts = useMemo(() => countSkills(jobs), [jobs])
   const order = useMemo(() => displayJobs.map(job => job.job_key), [displayJobs])
   const selection = useSelection(order)
 
@@ -244,6 +321,9 @@ export function JobsPage() {
       return changed ? next : prev
     })
     setSelectedJob(prev => (prev && patches.has(prev.job_key) ? { ...prev, ...patches.get(prev.job_key) } : prev))
+    setExpiringRows(prev => (prev.some(row => patches.has(row.job_key))
+      ? prev.map(row => (patches.has(row.job_key) ? { ...row, ...patches.get(row.job_key) } : row))
+      : prev))
   }, [updateJob])
 
   const patchJob = useCallback((jobKey, patch) => patchJobs(new Map([[jobKey, patch]])), [patchJobs])
@@ -254,11 +334,13 @@ export function JobsPage() {
     if (patch && 'application_status' in patch) scheduleCounts()
   }, [patchJob, scheduleCounts])
 
-  // Rows leave the screen (hidden): list rows, group postings and expanded groups of hidden representatives
+  // Rows leave the screen (hidden, or no longer on this tab): list rows (with the exit animation), group postings,
+  // expanded groups of departing representatives and the strip's rows
   const dropJobs = useCallback((keys) => {
     const drop = new Set(keys)
     const listed = new Set(pageRef.current.jobs.map(job => job.job_key))
-    keys.forEach(key => { if (listed.has(key)) removeJob(key) })
+    keys.forEach(key => { if (listed.has(key)) leaveJob(key) })
+    setExpiringRows(prev => (prev.some(row => drop.has(row.job_key)) ? prev.filter(row => !drop.has(row.job_key)) : prev))
     setGroups(prev => {
       const next = {}
       for (const [key, group] of Object.entries(prev)) {
@@ -267,27 +349,39 @@ export function JobsPage() {
       }
       return next
     })
-  }, [removeJob])
+  }, [leaveJob])
 
   const refreshLists = useCallback(() => {
-    const { reloadJobs: reload, fetchSummary: summaryNow, fetchFacets: facetsNow } = pageRef.current
+    const { reloadJobs: reload, fetchSummary: summaryNow, fetchFacets: facetsNow, fetchExpiring: stripNow, stripWanted: strip } = pageRef.current
     reload()
     summaryNow()
     facetsNow()
+    if (strip) stripNow() // a mute rule or a profile change also changes the Expiring strip
   }, [])
 
   // ---- opening and moving ----
 
+  // A tap (or Enter) opens the details. On touch screens, the fifth open without ever swiping makes the swipe tip due
+  // (shown when the drawer closes, once per device).
   const openJob = useCallback((job) => {
     scrollToActiveRef.current = false
     setActiveKey(job.job_key)
     setSelectedJob(job)
     pushJobUrl(job.job_key)
-  }, [pushJobUrl])
+    recordOpen()
+    if (isCoarse() && !readSwipeTipShown() && countOpenWithoutSwipe() >= SWIPE_TIP_OPENS) swipeTipRef.current = true
+  }, [pushJobUrl, recordOpen])
 
   const closeDrawer = useCallback(() => {
     setSelectedJob(null)
     closeJobUrl()
+    // Not over another toast (its Undo stays on screen): then the tip waits for a later close
+    if (swipeTipRef.current && pageRef.current.tab === 'inbox' && !pageRef.current.toast && !readSwipeTipShown() && !readSwipeUsed()) {
+      swipeTipRef.current = false
+      saveSwipeTipShown()
+      const right = readSwipeRightApplies() ? 'mark it applied' : 'save it'
+      pageRef.current.showToast(`Tip: swipe a job right to ${right}, left to hide it`)
+    }
   }, [closeJobUrl])
 
   // Moves the highlight (and an open drawer) to the row at index; returns that job
@@ -299,6 +393,7 @@ export function JobsPage() {
     scrollToActiveRef.current = true
     setActiveKey(job.job_key)
     if (open) {
+      if (open.job_key !== job.job_key) recordOpen()
       setSelectedJob(job)
       pushJobUrl(job.job_key)
       const ahead = list[next + 1]
@@ -306,7 +401,7 @@ export function JobsPage() {
     }
     if (more && !busy && next >= list.length - LOAD_AHEAD_ROWS) pageRef.current.loadMore()
     return job
-  }, [pushJobUrl])
+  }, [pushJobUrl, recordOpen])
 
   const moveSelection = useCallback((delta) => {
     const { currentIndex: index } = pageRef.current
@@ -332,19 +427,55 @@ export function JobsPage() {
     }
   }, [runUndo, showToast])
 
-  // Sets status on jobs (optimistic), with one undo that puts each job back to its own previous status
+  // The highlight (and an open drawer) moves on to the next job that stays when the rows of `gone` leave the list. A job
+  // opened from a link may not be in the list: then the drawer just closes.
+  const stepOff = useCallback((gone) => {
+    const { displayJobs: shown, currentKey: current } = pageRef.current
+    if (!current || !gone.has(current)) return
+    const index = shown.findIndex(job => job.job_key === current)
+    const neighbour = index < 0 ? null : shown.slice(index + 1).find(job => !gone.has(job.job_key))
+      || shown.slice(0, index).reverse().find(job => !gone.has(job.job_key)) || null
+    scrollToActiveRef.current = true
+    setActiveKey(neighbour?.job_key ?? null)
+    // Keyboard focus on the departing row (or one of its buttons) goes on to the next row, not back to the page top
+    const focusedRow = document.activeElement?.closest?.('[data-job-key]')
+    if (neighbour && focusedRow && gone.has(focusedRow.dataset.jobKey)) {
+      requestAnimationFrame(() => document.querySelector(`[data-job-key="${CSS.escape(neighbour.job_key)}"]`)?.focus({ preventScroll: true }))
+    }
+    if (pageRef.current.selectedJob) {
+      if (neighbour) {
+        setSelectedJob(neighbour)
+        pushJobUrl(neighbour.job_key)
+      } else {
+        closeDrawer()
+      }
+    }
+  }, [closeDrawer, pushJobUrl])
+
+  // Sets status on jobs (optimistic), with one undo that puts each job back to its own previous status. Rows that no
+  // longer belong on this tab (Inbox = untracked, Saved, Applied) leave the list, unless the drawer is open (its job
+  // stays where it is until the list is read again).
   const changeStatus = useCallback(async (list, status, { message, tone } = {}) => {
     const targets = list.filter(job => statusOf(job) !== status)
     if (!targets.length) return false
+    const { since: visitSince, postedWithin, tab: currentTab, jobs: listed, selectedJob: open } = pageRef.current
     const now = new Date().toISOString()
     const before = new Map(targets.map(job => [job.job_key, statusFields(job)]))
-    const changes = targets.reduce((total, job) => addChanges(total, statusChanges(job, status)), {})
+    const changes = targets.reduce((total, job) => addChanges(total, statusChanges(job, status, visitSince, postedWithin)), {})
     const appliedDelta = targets.filter(job => APPLIED_STATUSES.includes(status) !== isApplied(job))
       .reduce((sum, job) => sum + (APPLIED_STATUSES.includes(status) ? 1 : String(job.applied_at || '').slice(0, 10) === todayKey() ? -1 : 0), 0)
     const keys = targets.map(job => job.job_key)
-    patchJobs(new Map(targets.map(job => [job.job_key, statusPatch(job, status, now)])))
+    const patches = new Map(targets.map(job => [job.job_key, statusPatch(job, status, now)]))
+    const onList = new Set(listed.map(job => job.job_key))
+    const left = open ? [] : targets.filter(job => onList.has(job.job_key) && !belongsToTab({ ...job, ...patches.get(job.job_key) }, currentTab))
+      .map(job => job.job_key)
+    patchJobs(patches)
     setSummary(prev => adjustSummary(prev, changes))
     if (appliedDelta) setTrendRows(prev => bumpAppliedToday(prev || [], appliedDelta))
+    if (left.length) {
+      stepOff(new Set(left))
+      dropJobs(left)
+    }
 
     const restore = () => {
       patchJobs(before)
@@ -355,6 +486,7 @@ export function JobsPage() {
       await api.setStatus(keys.length === 1 ? keys[0] : keys, status)
     } catch (err) {
       restore()
+      if (left.length) pageRef.current.reloadJobs() // the rows that left come back from the server
       showToast(`Could not update: ${err.message}`)
       return false
     }
@@ -372,6 +504,9 @@ export function JobsPage() {
           await api.setStatus(previousKeys.length === 1 ? previousKeys[0] : previousKeys, fields.application_status,
             { appliedAt: fields.applied_at, statusUpdatedAt: fields.status_updated_at })
         }
+        // The rows that left the list come back (also the ones that left when the drawer closed)
+        const listedNow = new Set(pageRef.current.jobs.map(job => job.job_key))
+        if (left.length || keys.some(key => onList.has(key) && !listedNow.has(key))) pageRef.current.reloadJobs()
       } catch (err) {
         pageRef.current.reloadJobs() // the rows were put back on screen only: show what the server has
         throw err
@@ -381,12 +516,12 @@ export function JobsPage() {
     }, tone)
     scheduleCounts()
     return true
-  }, [patchJobs, showToast, scheduleCounts])
+  }, [patchJobs, dropJobs, stepOff, showToast, scheduleCounts])
 
   const toggleApplied = useCallback((job, applied) => {
     if (applied) advanceFrom(job)
     return changeStatus([job], applied ? 'applied' : 'not_applied', {
-      message: applied ? 'Marked as applied' : 'Marked as not applied',
+      message: applied ? 'Marked applied' : 'Applied undone',
       tone: applied ? 'success' : undefined,
     })
   }, [advanceFrom, changeStatus])
@@ -397,18 +532,33 @@ export function JobsPage() {
       return
     }
     const saved = statusOf(job) === 'saved'
-    changeStatus([job], saved ? 'not_applied' : 'saved', { message: saved ? 'Removed from saved' : 'Saved' })
+    changeStatus([job], saved ? 'not_applied' : 'saved', saved ? { message: 'Unsaved' } : { message: 'Saved', tone: 'primary' })
   }, [changeStatus, showToast])
 
-  // The status picker (rows, drawer), the drawer's Save button and its closed-posting shortcuts
+  // The status picker (rows, drawer), the drawer's Save button and its AgeNotice stages
   const setJobStatus = useCallback((job, status) => {
     const was = statusOf(job)
     let message
-    if (status === 'saved' && !isApplied(job)) message = 'Saved'
-    else if (status === 'not_applied' && was === 'saved') message = 'Removed from saved'
-    else if (status === 'not_applied') message = 'Marked as not applied'
-    return changeStatus([job], status, { message, tone: status === 'applied' ? 'success' : undefined })
+    let tone
+    if (status === 'saved' && !isApplied(job)) [message, tone] = ['Saved', 'primary']
+    else if (status === 'not_applied' && was === 'saved') message = 'Unsaved'
+    else if (status === 'not_applied') message = 'Applied undone'
+    else if (status === 'applied' && !isApplied(job)) [message, tone] = ['Marked applied', 'success']
+    return changeStatus([job], status, { message, tone })
   }, [changeStatus])
+
+  // A swipe on a row: what it does depends on the tab (listState swipeActions; Settings → Account can make an Inbox
+  // swipe right mark applied instead of saving)
+  const swipeJob = useCallback((job, direction) => {
+    const plan = swipeActions(job, pageRef.current.tab, readSwipeRightApplies())[direction]
+    if (!plan) return
+    swipeTipRef.current = false // you know the swipes: no tip
+    if (plan.action === 'save') changeStatus([job], 'saved', { message: 'Saved', tone: 'primary' })
+    else if (plan.action === 'applied') toggleApplied(job, true)
+    else if (plan.action === 'unsave') changeStatus([job], 'not_applied', { message: 'Unsaved' })
+    else if (plan.action === 'stage') changeStatus([job], plan.status, { message: `Moved to ${statusLabel(plan.status)}`, tone: 'success' })
+    else if (plan.action === 'hide') pageRef.current.hideJob(job)
+  }, [changeStatus, toggleApplied])
 
   // Mute rules (#12): the lists reload, since the server leaves muted jobs out
   const addRule = useCallback(async (kind, value, label) => {
@@ -442,7 +592,7 @@ export function JobsPage() {
       return
     }
     refreshLists()
-    showToast(`Unmuted "${job.muted_value}"`, async () => {
+    showToast(`Unmuted ${job.muted_value}`, async () => {
       await addMuteRule(kind, job.muted_value)
       pageRef.current.refreshLists()
     })
@@ -456,28 +606,15 @@ export function JobsPage() {
   // Without a reason, the toast offers the reasons (kept as feedback) and then a matching mute rule. A reason is feedback
   // on the jobs you judged, so their near-duplicates are hidden without one (one feedback row per judged job).
   const hideJobs = useCallback(async (list, reason) => {
-    const { displayJobs: shown, groups: open, currentKey: current } = pageRef.current
+    const { groups: open } = pageRef.current
     const keys = [...new Set(list.flatMap(job => hideKeys(job, open[job.job_key]?.status === 'expanded')))]
     if (!keys.length) return
     const gone = new Set(keys)
     const reloadAfter = list.some(job => open[job.job_key]?.status === 'expanded') // its group needs a new representative
-    if (current && gone.has(current)) {
-      // A job opened from a link may not be in the list: then the drawer just closes
-      const index = shown.findIndex(job => job.job_key === current)
-      const neighbour = index < 0 ? null : shown.slice(index + 1).find(job => !gone.has(job.job_key))
-        || shown.slice(0, index).reverse().find(job => !gone.has(job.job_key)) || null
-      scrollToActiveRef.current = true
-      setActiveKey(neighbour?.job_key ?? null)
-      if (pageRef.current.selectedJob) {
-        if (neighbour) {
-          setSelectedJob(neighbour)
-          pushJobUrl(neighbour.job_key)
-        } else {
-          closeDrawer()
-        }
-      }
-    }
+    stepOff(gone)
     dropJobs(keys)
+    // The Inbox counters drop at once (a group counts once: its representative is the judged job)
+    setSummary(prev => adjustSummary(prev, hideChanges(list.filter(job => gone.has(job.job_key)), pageRef.current.since, pageRef.current.postedWithin)))
     const target = keys.length === 1 ? keys[0] : keys
     const judged = [...new Set(list.map(job => job.job_key))].filter(key => gone.has(key))
     const judgedTarget = judged.length === 1 ? judged[0] : judged
@@ -493,12 +630,26 @@ export function JobsPage() {
     } catch (err) {
       showToast(`Could not hide: ${err.message}`)
       pageRef.current.reloadJobs()
+      scheduleCounts()
       return
     }
     if (reloadAfter) pageRef.current.reloadJobs()
     scheduleCounts()
 
     const first = list[0]
+    // One lever after a reason, when it fits a single job: a mute rule, or the profile field to fix
+    const leverFor = (value) => {
+      if (list.length !== 1) return null
+      if (value === 'too_senior' && first.experience_level) {
+        return { label: `Mute ${first.experience_level} jobs?`, onClick: () => pageRef.current.addRule('levels', first.experience_level, `${first.experience_level} jobs`) }
+      }
+      if (value === 'company' && first.company_name) {
+        return { label: `Mute ${first.company_name}?`, onClick: () => pageRef.current.addRule('companies', first.company_name, first.company_name) }
+      }
+      if (value === 'wrong_role') return { label: 'Edit my roles', onClick: () => navigate(PROFILE_ANCHORS.roles) }
+      if (value === 'location') return { label: 'Set My cities', onClick: () => navigate(PROFILE_ANCHORS.cities) }
+      return null
+    }
     const giveReason = async (value) => {
       try {
         await api.setHidden(judged.length ? judgedTarget : target, true, value)
@@ -506,17 +657,11 @@ export function JobsPage() {
         showToast(`Could not save the reason: ${err.message}`)
         return
       }
-      const followUps = []
-      if (value === 'company' && first.company_name && list.length === 1) {
-        followUps.push({ label: `Mute ${first.company_name}`, onClick: () => pageRef.current.addRule('companies', first.company_name, first.company_name) })
-      }
-      if (value === 'too_senior' && first.experience_level && list.length === 1) {
-        followUps.push({ label: `Mute ${first.experience_level} jobs`, onClick: () => pageRef.current.addRule('levels', first.experience_level, `${first.experience_level} jobs`) })
-      }
-      const label = HIDE_REASONS.find(item => item.value === value)?.label || value
-      showToast(`Thanks, noted: ${label.toLowerCase()}`, undefined, undefined, followUps, { offerUndo: true })
+      const lever = leverFor(value)
+      showToast('Saved as feedback', undefined, undefined, lever ? [lever] : undefined, { offerUndo: true })
     }
-    const message = keys.length === 1 ? 'Job hidden' : `Hidden ${plural(keys.length, 'posting')}`
+    const several = keys.length === 1 ? '' : ` ${plural(keys.length, 'posting')}`
+    const message = reason ? `Hidden${several}` : `Hidden${several}. Why? (optional)`
     showToast(message, async () => {
       try {
         await api.setHidden(target, false)
@@ -524,7 +669,7 @@ export function JobsPage() {
         pageRef.current.refreshLists()
       }
     }, 'danger', reason ? undefined : TOAST_REASONS.map(item => ({ label: item.label, onClick: () => giveReason(item.value) })))
-  }, [closeDrawer, dropJobs, pushJobUrl, scheduleCounts, showToast])
+  }, [dropJobs, navigate, stepOff, scheduleCounts, showToast])
 
   const hideJob = useCallback((job, reason) => hideJobs([job], reason), [hideJobs])
 
@@ -581,7 +726,7 @@ export function JobsPage() {
       showToast(list.every(isApplied) ? 'Already applied' : 'Already saved')
       return
     }
-    await changeStatus(targets, 'saved', { message: `Saved ${plural(targets.length, 'job')}` })
+    await changeStatus(targets, 'saved', { message: `Saved ${plural(targets.length, 'job')}`, tone: 'primary' })
   }), [runBulk, changeStatus, showToast])
 
   const bulkApplied = useCallback(() => runBulk(async (list) => {
@@ -590,7 +735,7 @@ export function JobsPage() {
       showToast('Already applied')
       return
     }
-    await changeStatus(targets, 'applied', { message: `Marked ${plural(targets.length, 'job')} as applied`, tone: 'success' })
+    await changeStatus(targets, 'applied', { message: `Marked ${plural(targets.length, 'job')} applied`, tone: 'success' })
   }), [runBulk, changeStatus, showToast])
 
   const bulkHide = useCallback(() => runBulk(list => hideJobs(list)), [runBulk, hideJobs])
@@ -608,12 +753,14 @@ export function JobsPage() {
     applied: (job, applied) => pageRef.current.toggleApplied(job, applied),
     save: job => pageRef.current.toggleSaved(job),
     hide: job => pageRef.current.hideJob(job),
+    swipe: (job, direction) => pageRef.current.swipeJob(job, direction),
     status: (job, next) => pageRef.current.setJobStatus(job, next),
     select: (job, options) => pageRef.current.selectJob(job, options),
     toggleGroup: job => pageRef.current.toggleGroup(job),
     unmute: job => pageRef.current.unmute(job),
     opened: job => recordOpened(job),
     focus: job => setActiveKey(job.job_key), // Tab onto a row: s / a / x / t then act on that row
+    peekDone: () => setPeekKey(null),
   }), [])
 
   // ---- apply on return (#8) ----
@@ -624,13 +771,19 @@ export function JobsPage() {
   }, [])
   const { prompt, answer } = useReturnPrompt({ trackedState, enabled: Boolean(profile) })
 
-  const answerPrompt = useCallback((yes) => {
+  // reply: 'yes' (Yes, applied), 'saved' (Save for later) or 'no' (Not yet); each answer is counted with the next ping
+  const answerPrompt = useCallback((reply) => {
     const asked = prompt
     answer()
-    if (!yes || !asked) return
-    const known = pageRef.current.displayJobs.find(job => job.job_key === asked.job_key)
-    toggleApplied(known || { ...asked, application_status: 'not_applied', is_applied: false }, true)
-  }, [prompt, answer, toggleApplied])
+    if (!asked) return
+    recordPrompt(reply)
+    if (reply === 'no') return
+    const { displayJobs: shown, selectedJob: open } = pageRef.current
+    const known = (open?.job_key === asked.job_key ? open : null) || shown.find(job => job.job_key === asked.job_key)
+    const job = known || { ...asked, application_status: 'not_applied', is_applied: false }
+    if (reply === 'yes') toggleApplied(job, true)
+    else changeStatus([job], 'saved', { message: 'Saved', tone: 'primary' })
+  }, [prompt, answer, recordPrompt, toggleApplied, changeStatus])
 
   // Marked applied (or saved) some other way meanwhile, e.g. in the drawer: nothing left to ask
   const promptJob = prompt ? (selectedJob?.job_key === prompt.job_key ? selectedJob : displayJobs.find(job => job.job_key === prompt.job_key)) : null
@@ -651,6 +804,7 @@ export function JobsPage() {
     if (known) {
       setActiveKey(urlJobKey)
       setSelectedJob(known)
+      recordOpen()
       return undefined
     }
     let cancelled = false
@@ -660,8 +814,9 @@ export function JobsPage() {
         if (row) {
           setActiveKey(urlJobKey)
           setSelectedJob(row)
+          recordOpen()
         } else {
-          showToast('This job is no longer available')
+          showToast("This job has disappeared. Jobs you haven't saved disappear 2 days after posting.")
           closeJobUrl()
         }
       })
@@ -671,7 +826,71 @@ export function JobsPage() {
         closeJobUrl()
       })
     return () => { cancelled = true }
-  }, [urlJobKey, closeJobUrl, showToast])
+  }, [urlJobKey, closeJobUrl, showToast, recordOpen])
+
+  // The open job scored again after a profile change (the lists reload on their own). jobRow has no group, so the
+  // list's dup_count / dup_keys / dup_locations are kept
+  const rescoreOpenJob = useCallback(async () => {
+    pageRef.current.refreshLists()
+    const key = pageRef.current.selectedJob?.job_key
+    if (!key) return
+    const row = await api.jobRow(key).catch(() => null)
+    if (!row) return
+    setSelectedJob(prev => (prev?.job_key === row.job_key
+      ? { ...prev, ...row, dup_count: prev.dup_count, dup_keys: prev.dup_keys, dup_locations: prev.dup_locations, total_count: prev.total_count }
+      : prev))
+  }, [])
+
+  // The drawer's "+ I know this": the skill joins Also know (with Undo) and the job is scored again
+  const knowSkill = useCallback(async (skill) => {
+    const current = Array.isArray(profile?.also_skills) ? profile.also_skills : []
+    if (current.length >= PROFILE_LIMITS.alsoSkills) {
+      showToast(`Also know is full (${PROFILE_LIMITS.alsoSkills}). Remove one in Settings → Profile`)
+      return false
+    }
+    if (current.some(item => String(item).toLowerCase() === String(skill).toLowerCase())) return true
+    // saveProfile replaces roles, skills and years (only also_skills / preferred_cities left out are kept): send them all
+    const withAlso = also_skills => ({
+      target_roles: profile?.target_roles || [],
+      skills: profile?.skills || [],
+      also_skills,
+      min_years: profile?.min_years ?? null,
+      max_years: profile?.max_years ?? null,
+      preferred_cities: profile?.preferred_cities || [],
+    })
+    try {
+      await saveProfile(withAlso([...current, skill]))
+    } catch (err) {
+      showToast(`Could not add ${skill}: ${err.message}`)
+      return false
+    }
+    await rescoreOpenJob()
+    showToast(`Added ${skill} to Also know`, async () => {
+      await saveProfile(withAlso(current))
+      await rescoreOpenJob()
+    })
+    return true
+  }, [profile, saveProfile, rescoreOpenJob, showToast])
+
+  // The AgeNotice's "No reply yet": the follow-up date moves (the note is kept), with Undo
+  const snoozeJob = useCallback(async (job, nextActionAt) => {
+    const before = { next_action_at: job.next_action_at ?? null, follow_up: Boolean(job.follow_up) }
+    patchJob(job.job_key, { next_action_at: nextActionAt, follow_up: false })
+    try {
+      const row = await api.snoozeFollowUp(job.job_key, nextActionAt)
+      if (row && 'next_action_at' in row) patchJob(job.job_key, { next_action_at: row.next_action_at })
+    } catch (err) {
+      patchJob(job.job_key, before)
+      showToast(`Could not save the date: ${err.message}`)
+      return
+    }
+    scheduleCounts()
+    showToast(`OK. We'll ask again on ${formatDate(parseDay(nextActionAt)) || nextActionAt}`, async () => {
+      await api.snoozeFollowUp(job.job_key, before.next_action_at)
+      patchJob(job.job_key, before)
+      pageRef.current.scheduleCounts()
+    })
+  }, [patchJob, scheduleCounts, showToast])
 
   const changeView = (next) => {
     setView(next)
@@ -693,6 +912,7 @@ export function JobsPage() {
     api.refreshData()
     reloadJobs()
     fetchSummary()
+    if (stripWanted) fetchExpiring()
     fetchTrend()
     fetchFacets()
     fetchStatus()
@@ -755,11 +975,13 @@ export function JobsPage() {
   }
 
   const searchVisible = searchOpen || Boolean(searchInput)
+  // Opens the search bar (sticky under the top bar on phones) without scrolling the list
   const openSearch = () => {
     setSearchOpen(true)
-    requestAnimationFrame(() => searchRef.current?.focus())
+    requestAnimationFrame(() => searchRef.current?.focus({ preventScroll: true }))
   }
-  const toggleSearch = () => (searchVisible ? setSearchOpen(false) : openSearch())
+  // The bottom bar's Search: opens the bar, closes an empty one; with text in it (the bar stays) it focuses the box
+  const toggleSearch = () => (searchVisible && !searchInput ? setSearchOpen(false) : openSearch())
 
   const facets = useMemo(() => ({
     role: facetOptions(facetRows, 'role'),
@@ -775,11 +997,12 @@ export function JobsPage() {
   const freshness = dataFreshness(status.published_at)
 
   // '–' until the first summary arrives (a "0" that turns into "171" also widens the tabs and shifts the toolbar)
+  // A key the server does not send yet (an older API) also reads '–'
   const summaryReady = summary.total !== undefined && summary.total !== null
-  const count = (key) => (summaryReady ? Number(summary[key] ?? 0) : null)
-  const tabCounts = { pending: count('pending'), saved: count('saved'), applied: count('applied'), all: count('total') }
+  const count = (key) => (summaryReady && summary[key] !== undefined && summary[key] !== null ? Number(summary[key]) : null)
+  const tabCounts = { inbox: count('inbox'), saved: count('saved'), applied: count('applied') }
   const mutedCount = count('muted') || 0
-  const muteOnly = filters.muteView === 'only'
+  const staleText = staleBannerText(freshness)
 
   const toggleFilter = (key, value) => setFilters(prev => ({ ...prev, [key]: prev[key] === value ? EMPTY_FILTERS[key] : value }))
   const setFilterValues = (patch) => setFilters(prev => ({ ...prev, ...patch }))
@@ -787,37 +1010,64 @@ export function JobsPage() {
     if (key === 'q') setSearchInput('')
     setFilters(prev => ({ ...prev, [key]: EMPTY_FILTERS[key] }))
   }
+  // Reset keeps the scope menu's choice (scope and time window are a view, not a filter)
   const clearAll = () => {
     setSearchInput('')
-    setFilters(DEFAULT_FILTERS)
+    setFilters(prev => ({ ...DEFAULT_FILTERS, postedWithin: prev.postedWithin }))
   }
-  const showOlderJobs = () => setFilters(prev => ({ ...prev, postedWithin: '' }))
-  const onlyFreshFilter = filters.postedWithin === FRESH_HOURS
-  const trackedTab = TRACKED_TABS.includes(tab)
+  const scopeValue = { scope, postedWithin: filters.postedWithin }
 
+  // "12 new since 9:51 AM" once your last visit is known; else "4 expire tonight" while some do
   const appliedToday = trendRows ? trend[trend.length - 1]?.applied ?? 0 : null
+  const sinceText = typeof since === 'string' ? sinceLabel(since) : null
+  const newSince = count('new_since')
+  const expiringCount = count('expiring')
+  const leadMetric = sinceText && newSince > 0
+    ? { key: 'new', label: `new since ${sinceText}`, value: newSince, tone: 'success', title: 'Found since your last visit. Tap to sort by Recently found', active: tab === 'inbox' && sort === 'found' }
+    : expiringCount > 0
+      ? { key: 'expiring', label: 'expire tonight', value: expiringCount, tone: 'warning', title: 'Jobs for you that disappear tonight. Tap to see them', active: undefined }
+      : sinceText
+        ? { key: 'new', label: `new since ${sinceText}`, value: newSince, tone: 'success', title: 'Found since your last visit. Tap to sort by Recently found', active: tab === 'inbox' && sort === 'found' }
+        : null
   const metricItems = [
-    { key: 'new', label: 'new', value: count('new_48h'), tone: 'success', title: 'Found in the last 48 hours. Tap to sort by recently found', active: sort === 'found' },
-    { key: 'strong', label: 'strong fit', value: count('strong_fit'), tone: 'accent', title: `Fit score ${STRONG_FIT}+. Tap to filter`, active: filters.minFit === String(STRONG_FIT) },
-    { key: 'appliedToday', label: 'applied today', value: appliedToday, tone: 'info', title: 'Tap to switch between applied jobs and jobs to apply to', active: tab === 'applied' },
+    ...(leadMetric ? [leadMetric] : []),
+    { key: 'strong', label: 'strong fit', value: count('inbox_strong'), tone: 'accent', title: `Fit ${STRONG_FIT}+ in your Inbox. Tap to filter`, active: tab === 'inbox' && filters.minFit === String(STRONG_FIT) },
+    { key: 'appliedToday', label: 'applied today', value: appliedToday, tone: 'info', title: 'Tap to switch between your applied jobs and the Inbox', active: tab === 'applied' },
   ]
   const onMetric = (key) => {
-    if (key === 'new') setSort(sort === 'found' ? defaultSortFor(tab) : 'found')
-    if (key === 'strong') toggleFilter('minFit', String(STRONG_FIT))
-    if (key === 'appliedToday') changeTab(tab === 'applied' ? 'pending' : 'applied')
+    if (key === 'new') {
+      if (tab === 'inbox') setSort(sort === 'found' ? defaultSortFor(tab) : 'found')
+      else {
+        pendingSortRef.current = 'found'
+        changeTab('inbox')
+      }
+    }
+    if (key === 'strong') {
+      if (tab === 'inbox') toggleFilter('minFit', String(STRONG_FIT))
+      else {
+        changeTab('inbox')
+        setFilterValues({ minFit: String(STRONG_FIT) })
+      }
+    }
+    if (key === 'expiring') {
+      if (tab !== 'inbox') changeTab('inbox')
+      if (muteOnly) setFilterValues({ muteView: '' })
+      if (sort === 'expiring') {
+        window.scrollTo({ top: 0, behavior: reducedMotion() ? 'auto' : 'smooth' })
+        return
+      }
+      setStripCollapsed(false)
+      saveExpiringCollapsed(false)
+      scrollToStripRef.current = true
+      setScrollTick(value => value + 1)
+    }
+    if (key === 'appliedToday') changeTab(tab === 'applied' ? 'inbox' : 'applied')
   }
 
   const hasMaxYears = profile?.max_years !== null && profile?.max_years !== undefined
   const cities = profile?.preferred_cities || []
   const coreSkills = profile?.skills || []
   const quickChips = [
-    {
-      key: 'postedWithin',
-      value: FRESH_HOURS,
-      label: 'Last 24h',
-      disabled: trackedTab,
-      reason: 'Saved and applied jobs are listed whatever their date',
-    },
     { key: 'minFit', value: String(STRONG_FIT), label: `Fit ${STRONG_FIT}+` },
     { key: 'matchedOnly', value: true, label: 'Has my skills', disabled: coreSkills.length === 0, reason: 'Add skills to your profile first' },
     {
@@ -852,11 +1102,59 @@ export function JobsPage() {
 
   useLayoutEffect(() => {
     Object.assign(pageRef.current, {
-      jobs, displayJobs, groups, selectedJob, currentKey, currentIndex, hasMore, loading, selectedJobs, selection,
-      loadMore, reloadJobs, fetchSummary, fetchFacets, scheduleCounts, refreshLists,
-      openJob, toggleApplied, toggleSaved, hideJob, setJobStatus, selectJob, toggleGroup, unmute, addRule,
+      jobs, displayJobs, groups, selectedJob, currentKey, currentIndex, hasMore, loading, selectedJobs, selection, tab, since,
+      postedWithin: filters.postedWithin, toast,
+      stripWanted, loadMore, reloadJobs, fetchSummary, fetchFacets, fetchExpiring, scheduleCounts, refreshLists, showToast,
+      openJob, toggleApplied, toggleSaved, hideJob, swipeJob, setJobStatus, selectJob, toggleGroup, unmute, addRule,
     })
   })
+
+  // The header's "new" metric from another tab: the Inbox opens sorted by Recently found
+  useEffect(() => {
+    if (tab !== 'inbox' || !pendingSortRef.current) return
+    const next = pendingSortRef.current
+    pendingSortRef.current = null
+    setSort(next)
+  }, [tab, setSort])
+
+  // The one-time swipe demo: the first Inbox row on a touch screen, once per device (skipped under "reduce motion")
+  useEffect(() => {
+    if (peekWantedRef.current === null) peekWantedRef.current = isCoarse() && !reducedMotion() && !readSwipePeekDone()
+    if (!peekWantedRef.current || tab !== 'inbox' || loading || !jobs.length) return
+    peekWantedRef.current = false
+    saveSwipePeekDone()
+    const key = jobs[0].job_key
+    peekTimersRef.current = [
+      setTimeout(() => setPeekKey(key), 600), // after the list has settled
+      setTimeout(() => setPeekKey(prev => (prev === key ? null : prev)), 600 + PEEK_MS),
+    ]
+  }, [tab, loading, jobs])
+
+  useEffect(() => () => peekTimersRef.current.forEach(clearTimeout), [])
+
+  // Rows changed while the drawer was open stay in place until it closes (stable j / k); then the ones that no longer
+  // belong on this tab (e.g. saved on the Inbox) leave, and the highlight moves on
+  const drawerOpenRef = useRef(false)
+  useEffect(() => {
+    if (selectedJob) {
+      drawerOpenRef.current = true
+      return
+    }
+    if (!drawerOpenRef.current) return
+    drawerOpenRef.current = false
+    const { jobs: listed, tab: current } = pageRef.current
+    const stale = listed.filter(job => !belongsToTab(job, current)).map(job => job.job_key)
+    if (!stale.length) return
+    stepOff(new Set(stale))
+    dropJobs(stale)
+  }, [selectedJob, stepOff, dropJobs])
+
+  // "expire tonight" tapped: the strip comes into view once it is on screen
+  useEffect(() => {
+    if (!scrollToStripRef.current || !stripRef.current) return
+    scrollToStripRef.current = false
+    stripRef.current.scrollIntoView({ block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' })
+  }, [scrollTick, stripWanted, expiringRows])
 
   // Space, J and K act on the row selection only from the page or a row (so buttons and fields keep their keys)
   const onPageOrRow = (e) => e.target === document.body || Boolean(e.target?.dataset?.jobKey)
@@ -883,6 +1181,9 @@ export function JobsPage() {
     return action(currentJob)
   }
 
+  // The "Did you apply?" prompt takes a / s while it is about the job in front of you (or no drawer is open)
+  const promptOpen = Boolean(prompt && !promptAnswered && (!selectedJob || selectedJob.job_key === prompt.job_key))
+
   // The filter sheet is modal and handles its own Esc: no list keys act behind it
   useHotkeys(sheetOpen ? {} : helpOpen
     ? { '?': () => setHelpOpen(false), Escape: () => setHelpOpen(false) }
@@ -903,12 +1204,13 @@ export function JobsPage() {
       },
       o: needsJob(openPosting),
       a: () => {
-        if (prompt && (!selectedJob || selectedJob.job_key === prompt.job_key)) return answerPrompt(true)
+        if (promptOpen) return answerPrompt('yes')
         if (selection.count && !selectedJob) return bulkApplied()
         if (!currentJob) return false
         toggleApplied(currentJob, !isApplied(currentJob))
       },
       s: () => {
+        if (promptOpen) return answerPrompt('saved')
         if (selection.count && !selectedJob) return bulkSave()
         if (!currentJob) return false
         toggleSaved(currentJob)
@@ -936,7 +1238,7 @@ export function JobsPage() {
           return undefined
         }
         if (selectedJob) return false // the drawer closes itself
-        if (prompt) return answerPrompt(false)
+        if (prompt) return answerPrompt('no')
         if (selection.count) return selection.clear()
         if (selectMode) return setSelectMode(false)
         return false
@@ -972,15 +1274,43 @@ export function JobsPage() {
   const ItemComponent = listView === 'grid' ? JobCard : JobRow
   const listClass = listView === 'grid' ? 'jobs-grid' : 'jobs-list'
   const metrics = <Metrics items={metricItems} trend={trend} onSelect={onMetric} />
-  const [emptyTitle, emptyText] = emptyMessage({ tab, narrowed: hasCustomFilters, scope, onlyFresh: onlyFreshFilter, muteOnly })
+  // Caught up: the Inbox had jobs in this scope (or you triaged some today) and none is left to look at
+  const caughtUp = tab === 'inbox' && (Number(summary.total) > 0 || Number(summary.triaged_today) > 0)
+  const empty = emptyMessage({
+    tab, narrowed: hasCustomFilters, scope, postedWithin: sort === 'expiring' ? '' : filters.postedWithin, muteOnly, caughtUp, expiring: summary.expiring,
+    rightApplies, triaged: summary.triaged_today, appliedToday,
+  })
   const selecting = selectMode || selection.count > 0
+  const stripRows = useMemo(() => expiringRows.filter(job => !isTracked(job) && !job.is_hidden), [expiringRows])
+  const showStrip = stripWanted && (stripRows.length > 0 || stripCollapsed)
+  const sorts = sortsFor(tab)
+
+  // "12 new since your last visit" between the last new row and the first older one (Recently found sort only)
+  const dividerKey = useMemo(() => {
+    if (sort !== 'found' || typeof since !== 'string') return null
+    let sawNew = false
+    for (const { job, child } of displayRows) {
+      if (child) continue
+      if (isNewJob(job, since)) sawNew = true
+      else return sawNew ? job.job_key : null
+    }
+    return null
+  }, [sort, since, displayRows])
+  const dividerCount = newSince ?? displayRows.filter(row => !row.child && isNewJob(row.job, since)).length
+
+  // Phone landscape has no room for these above the list: they move to the top of the Filters sheet (CSS)
+  const freshnessNote = (className = '') => freshness && (
+    <span className={`data-freshness ${freshness.stale ? 'stale' : ''} ${className}`} title={freshness.title}>{freshness.label}</span>
+  )
+  const stageChips = tab === 'applied' && (
+    <StageChips summary={summary} filters={filters} onChange={setFilterValues} onExport={exportCsv} exporting={exporting} />
+  )
+  const sheetExtra = (stageChips || freshness) ? <>{stageChips}{freshnessNote()}</> : null
 
   return (
     <div className={`page-shell ${selection.count ? 'has-bulk' : ''}`}>
       <Header
         metrics={metrics}
-        onSearch={toggleSearch}
-        searchOpen={searchVisible}
         view={view}
         onViewChange={changeView}
         onHelp={() => setHelpOpen(true)}
@@ -995,6 +1325,8 @@ export function JobsPage() {
           </div>
         )}
 
+        {staleText && <div className="hint-banner stale-banner" role="status">{staleText}</div>}
+
         {profileError && (
           <div className="hint-banner">
             <span>Could not load your profile, so fit scores may be missing: {profileError}</span>
@@ -1008,8 +1340,10 @@ export function JobsPage() {
             <input
               ref={searchRef}
               type="search"
+              enterKeyHint="search"
               value={searchInput}
               onChange={e => setSearchInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
               placeholder="Search title, company, role or skill (-word to exclude)"
               aria-label="Search jobs"
             />
@@ -1019,14 +1353,15 @@ export function JobsPage() {
             filters={filters}
             facets={facets}
             onChange={setFilters}
-            sorts={SORTS}
+            sorts={sorts}
             sort={sort}
             onSortChange={setSort}
             open={sheetOpen}
             onOpenChange={setSheetOpen}
+            extra={sheetExtra}
           />
           <select className="sort-select" value={sort} onChange={e => setSort(e.target.value)} aria-label="Sort jobs">
-            {SORTS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            {sorts.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
           {/* Toggle buttons, as in the bottom nav: the tabs filter the one list below rather than switch panels */}
           <div className="tab-group" role="group" aria-label="Job lists">
@@ -1047,20 +1382,7 @@ export function JobsPage() {
         </section>
 
         <section className="chip-row" aria-label="Quick filters">
-          <div className="segmented scope-toggle" role="group" aria-label="Which jobs">
-            {SCOPES.map(option => (
-              <button
-                key={option.value}
-                type="button"
-                className={scope === option.value ? 'active' : ''}
-                onClick={() => setScope(option.value)}
-                aria-pressed={scope === option.value}
-                title={option.title}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          {tab === 'inbox' && <ScopeMenu value={scopeValue} onChange={setScopeWindow} />}
           {/* A chip that cannot apply stays focusable (aria-disabled), so keyboard and screen-reader users reach its reason */}
           {quickChips.map(chip => {
             const active = !chip.disabled && chip.value !== '' && filters[chip.key] === chip.value
@@ -1093,12 +1415,12 @@ export function JobsPage() {
               className={`pill-toggle muted-peek ${muteOnly ? 'active' : ''}`}
               onClick={() => setFilterValues({ muteView: muteOnly ? '' : 'only' })}
               aria-pressed={muteOnly}
-              title={muteOnly ? 'Back to your lists' : 'Jobs your mute rules leave out (Settings → Mute rules)'}
+              title="Jobs your mute rules leave out (Settings → Mute rules)"
             >
-              {muteOnly ? `Showing ${mutedCount} muted · Back` : `${mutedCount} hidden by your rules · Show`}
+              {muteOnly ? `Showing ${mutedCount} muted · Back` : `${mutedCount} muted · Show`}
             </button>
           )}
-          {(hasCustomFilters || !onlyFreshFilter || muteOnly) && (
+          {(hasCustomFilters || muteOnly) && (
             <button type="button" className="text-button" onClick={clearAll}>Reset</button>
           )}
           {!error && jobs.length > 0 && (
@@ -1107,16 +1429,30 @@ export function JobsPage() {
               {(refreshing || (loading && page === 0)) && <span className="updating"> · updating…</span>}
             </span>
           )}
-          {freshness && (
-            <span className={`data-freshness ${freshness.stale ? 'stale' : ''}`} title={freshness.title}>{freshness.label}</span>
-          )}
+          {freshnessNote('on-page')}
         </section>
 
-        {tab === 'applied' && (
-          <StageChips summary={summary} filters={filters} onChange={setFilterValues} onExport={exportCsv} exporting={exporting} />
-        )}
+        {stageChips && <div className="on-page">{stageChips}</div>}
 
-        <SwipeHint />
+        {showStrip && (
+          <ExpiringStrip
+            ref={stripRef}
+            count={summary.expiring}
+            strong={summary.expiring_strong}
+            rows={stripRows}
+            collapsed={stripCollapsed}
+            busy={bulkBusy}
+            onToggle={() => {
+              saveExpiringCollapsed(!stripCollapsed)
+              setStripCollapsed(!stripCollapsed)
+            }}
+            onOpen={openJob}
+            onSave={job => changeStatus([job], 'saved', { message: 'Saved', tone: 'primary' })}
+            onApplied={job => toggleApplied(job, true)}
+            onHide={hideJob}
+            onSaveAll={rows => changeStatus(rows, 'saved', { message: `Saved ${plural(rows.length, 'job')}`, tone: 'primary' })}
+          />
+        )}
 
         {loading && jobs.length === 0 && (
           <section className={listClass} aria-busy="true">
@@ -1137,37 +1473,56 @@ export function JobsPage() {
         {jobs.length > 0 && (
           <section key={listKey} className={`${listClass} ${loading && page === 0 ? 'is-stale' : ''} ${selecting ? 'is-selecting' : ''}`}>
             {displayRows.map(({ job, group, child }) => (
-              <ItemComponent
-                key={job.job_key}
-                job={job}
-                profile={profile}
-                active={job.job_key === currentKey}
-                selected={selection.isSelected(job.job_key)}
-                selecting={selecting}
-                selectMode={selectMode}
-                showStatus={tab === 'applied' && isApplied(job)}
-                group={group}
-                child={child}
-                actions={rowActions}
-              />
+              <Fragment key={job.job_key}>
+                {job.job_key === dividerKey && (
+                  <div className="new-divider grid-span">{dividerCount} new since your last visit</div>
+                )}
+                <ItemComponent
+                  job={job}
+                  profile={profile}
+                  active={job.job_key === currentKey}
+                  selected={selection.isSelected(job.job_key)}
+                  selecting={selecting}
+                  selectMode={selectMode}
+                  showStatus={tab === 'applied' && isApplied(job)}
+                  group={group}
+                  child={child}
+                  actions={rowActions}
+                  since={since}
+                  tab={tab}
+                  rightApplies={rightApplies}
+                  peek={job.job_key === peekKey}
+                  leaving={leaving.has(job.job_key)}
+                />
+              </Fragment>
             ))}
           </section>
         )}
+        {/* Auto-load: the next page comes when this gets within 1200 px of the screen (Load more below stays) */}
+        {jobs.length > 0 && hasMore && <div ref={sentinelRef} className="list-sentinel" aria-hidden="true" />}
 
+        {/* Stays mounted so the first "1 selected" is read out too (BulkBar mounts with its count) */}
+        <span className="sr-only" aria-live="polite">{selection.count > 0 ? `${selection.count} selected` : ''}</span>
         {selection.count > 0 && (
           <BulkBar count={selection.count} busy={bulkBusy} onSave={bulkSave} onApplied={bulkApplied} onHide={bulkHide} onClear={selection.clear} />
         )}
 
         {!loading && !error && jobs.length === 0 && (
-          <div className="state-block">
-            <h3>{emptyTitle}</h3>
-            <p>{emptyText}</p>
-            <div className="actions-row">
-              {muteOnly && <button type="button" onClick={() => setFilterValues({ muteView: '' })} className="btn">Back to your lists</button>}
-              {!muteOnly && scope === 'match' && !trackedTab && <button type="button" onClick={() => setScope('all')} className="btn">Show all jobs</button>}
-              {hasCustomFilters && <button type="button" onClick={clearAll} className="btn">Clear filters</button>}
-              {filters.postedWithin && !trackedTab && <button type="button" onClick={showOlderJobs} className="btn">Show older jobs</button>}
-            </div>
+          <div className={`state-block ${empty.caughtUp ? 'caught-up' : ''}`} role="status">
+            <h3>{empty.title}</h3>
+            <p>{empty.text}</p>
+            {empty.action && (
+              <div className="actions-row">
+                {empty.action === 'muted' && <button type="button" onClick={() => setFilterValues({ muteView: '' })} className="btn">Back to your lists</button>}
+                {empty.action === 'clear' && <button type="button" onClick={clearAll} className="btn">Clear filters</button>}
+                {empty.action === 'older' && (
+                  <button type="button" onClick={() => setScopeWindow({ scope, postedWithin: '' })} className="btn">Show them</button>
+                )}
+                {empty.action === 'everything' && (
+                  <button type="button" onClick={() => setScopeWindow({ scope: 'all', postedWithin: '' })} className="btn">Show everything</button>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -1179,7 +1534,9 @@ export function JobsPage() {
           </div>
         )}
 
-        {!loading && !hasMore && jobs.length >= 10 && <div className="footer-note">That's all {jobs.length}</div>}
+        {!loading && !hasMore && !error && jobs.length > 0 && (tab === 'inbox' || jobs.length >= 10) && (
+          <div className="footer-note">{endOfListText(jobs.length, tab)}</div>
+        )}
 
         <p className="footer-note hide-mobile">Press <kbd>?</kbd> for keyboard shortcuts</p>
       </main>
@@ -1197,6 +1554,10 @@ export function JobsPage() {
             <span>{label}</span>
           </button>
         ))}
+        <button type="button" className={`nav-item ${searchVisible ? 'active' : ''}`} onClick={toggleSearch} aria-pressed={searchVisible} title="Search (/)">
+          <strong><SearchIcon /></strong>
+          <span>Search</span>
+        </button>
         <SearchFilter variant="nav" filters={filters} facets={facets} onChange={setFilters} open={sheetOpen} onOpenChange={setSheetOpen} panel={false} />
       </nav>
 
@@ -1214,12 +1575,23 @@ export function JobsPage() {
           onMuteCompany={muteCompany}
           onOpenJob={pushJobUrl}
           onToast={showToast}
+          onKnowSkill={knowSkill}
+          onSnooze={snoozeJob}
+          isAdmin={Boolean(sessionUser()?.isAdmin)}
+          since={since}
           statusFocus={focusStatus}
+          skillCounts={skillCounts}
         />
       )}
 
       {prompt && !promptAnswered && (
-        <ReturnPrompt prompt={prompt} autoFocus={!selectedJob} onYes={() => answerPrompt(true)} onNo={() => answerPrompt(false)} />
+        <ReturnPrompt
+          prompt={prompt}
+          autoFocus={!selectedJob}
+          onYes={() => answerPrompt('yes')}
+          onSave={() => answerPrompt('saved')}
+          onNo={() => answerPrompt('no')}
+        />
       )}
 
       {helpOpen && <ShortcutHelp onClose={() => setHelpOpen(false)} />}

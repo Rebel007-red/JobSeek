@@ -24,7 +24,7 @@ test('toCsv formats cells and joins lists', () => {
 
 test('the applications export has the agreed columns', () => {
   assert.deepEqual(TRACKED_CSV_COLUMNS.map(column => column.label), [
-    'Title', 'Company', 'Location', 'City', 'Status', 'Applied on', 'Status changed', 'Follow up', 'Fit', 'Posting open',
+    'Title', 'Company', 'Location', 'City', 'Status', 'Applied on', 'Status changed', 'Follow up', 'Fit', 'Older posting',
     'Source', 'Link', 'Note',
   ])
   const csv = toCsv([{
@@ -36,7 +36,7 @@ test('the applications export has the agreed columns', () => {
   assert.match(cells[5], /^2026-10-0[45]$/)
   assert.equal(cells[7], '2026-10-12')
   assert.equal(cells[8], '81')
-  assert.equal(cells[9], 'No')
+  assert.equal(cells[9], 'Yes')
   assert.equal(cells[11], '')
   assert.equal(cells[12], "'=cmd")
   assert.equal(trackedCsvFilename(new Date(2026, 9, 7)), 'jobseeker-applications-2026-10-07.csv')

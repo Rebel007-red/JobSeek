@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 
 const MAX_NEAREST = 3
 
@@ -7,10 +7,13 @@ const MAX_NEAREST = 3
 // or null when unknown. Unknown entries need confirming ("add as my own") and must pass validate(text) -> '' | problem.
 // noteFor(value) -> optional short status shown on the chip (e.g. for entries the user added themselves).
 // Without resolve, every entry is added as typed (after validate) and suggestions only autocomplete.
-export function ChipInput({ label, values, onChange, suggestions = [], resolve, validate, noteFor, placeholder, help, maxItems = 50, numbered = false, disabled = false }) {
+// A full list (maxItems) hides the input and says "Remove one to add another". id: the wrapper's id (a link anchor such
+// as /settings?tab=profile#roles).
+export function ChipInput({ id, label, values, onChange, suggestions = [], resolve, validate, noteFor, placeholder, help, maxItems = 50, numbered = false, disabled = false }) {
   const [input, setInput] = useState('')
   const [error, setError] = useState('')
   const [pending, setPending] = useState(null) // { text, nearest }
+  const chipsRef = useRef(null)
   const baseId = useId()
   const listId = `${baseId}-list`
   const inputId = `${baseId}-input`
@@ -22,7 +25,16 @@ export function ChipInput({ label, values, onChange, suggestions = [], resolve, 
   const push = (value) => {
     setPending(null)
     setInput('')
-    if (!values.some(item => item.toLowerCase() === value.toLowerCase())) onChange([...values, value])
+    if (values.some(item => item.toLowerCase() === value.toLowerCase())) return
+    onChange([...values, value])
+    // The last free place: the input goes away, so focus moves to the new chip's remove button
+    if (values.length + 1 >= maxItems) requestAnimationFrame(() => chipsRef.current?.querySelector('.skill-chip:last-child button')?.focus())
+  }
+
+  // The removed chip's button goes away; when the list was full the input comes back, so focus moves there
+  const remove = (value) => {
+    onChange(values.filter(item => item !== value))
+    if (full) requestAnimationFrame(() => document.getElementById(inputId)?.focus())
   }
 
   const add = (raw) => {
@@ -56,36 +68,45 @@ export function ChipInput({ label, values, onChange, suggestions = [], resolve, 
   }
 
   return (
-    <div className="settings-field settings-field-full">
-      <label htmlFor={inputId}>{label}</label>
-      <div className="settings-input-row">
-        <input
-          id={inputId}
-          type="text"
-          aria-describedby={describedBy}
-          aria-invalid={error ? true : undefined}
-          value={input}
-          list={suggestions.length ? listId : undefined}
-          onChange={e => {
-            setInput(e.target.value)
-            setPending(null)
-            setError('')
-          }}
-          onKeyDown={e => {
-            if (e.key === 'Enter' || e.key === ',') {
-              e.preventDefault()
-              add(input)
-            } else if (e.key === 'Backspace' && !input && values.length) {
-              onChange(values.slice(0, -1))
-            }
-          }}
-          placeholder={full ? `Limit of ${maxItems} reached` : placeholder}
-          disabled={full || disabled}
-          className="settings-input"
-        />
-        <button type="button" onClick={() => add(input)} className="secondary-button compact-button" disabled={full || disabled || !input.trim()}>Add</button>
-      </div>
-      {suggestions.length > 0 && (
+    <div id={id} className="settings-field settings-field-full chip-field">
+      {full ? (
+        // No input to label: the chips' remove buttons are what you can use
+        <span className="chip-field-label" id={`${baseId}-label`}>{label}</span>
+      ) : (
+        <label htmlFor={inputId}>{label}</label>
+      )}
+      {full ? (
+        <p className="chip-field-full">Remove one to add another</p>
+      ) : (
+        <div className="settings-input-row">
+          <input
+            id={inputId}
+            type="text"
+            aria-describedby={describedBy}
+            aria-invalid={error ? true : undefined}
+            value={input}
+            list={suggestions.length ? listId : undefined}
+            onChange={e => {
+              setInput(e.target.value)
+              setPending(null)
+              setError('')
+            }}
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ',') {
+                e.preventDefault()
+                add(input)
+              } else if (e.key === 'Backspace' && !input && values.length) {
+                onChange(values.slice(0, -1))
+              }
+            }}
+            placeholder={placeholder}
+            disabled={disabled}
+            className="settings-input"
+          />
+          <button type="button" onClick={() => add(input)} className="secondary-button compact-button" disabled={disabled || !input.trim()}>Add</button>
+        </div>
+      )}
+      {suggestions.length > 0 && !full && (
         <datalist id={listId}>
           {suggestions.map(item => <option key={item} value={item} />)}
         </datalist>
@@ -107,7 +128,7 @@ export function ChipInput({ label, values, onChange, suggestions = [], resolve, 
       {error && <p id={errorId} className="settings-inline-error">{error}</p>}
       {help && <small id={helpId}>{help}</small>}
       {values.length > 0 && (
-        <div className="settings-skill-list">
+        <div ref={chipsRef} className="settings-skill-list" role={full ? 'group' : undefined} aria-labelledby={full ? `${baseId}-label` : undefined}>
           {values.map((value, index) => {
             const note = noteFor?.(value)
             return (
@@ -115,7 +136,7 @@ export function ChipInput({ label, values, onChange, suggestions = [], resolve, 
                 {numbered && <b>{index + 1}</b>}
                 <span className="skill-chip-label">{value}</span>
                 {note && <em>{note}</em>}
-                <button type="button" onClick={() => onChange(values.filter(item => item !== value))} aria-label={`Remove ${value}`} disabled={disabled}>
+                <button type="button" onClick={() => remove(value)} aria-label={`Remove ${value}`} disabled={disabled}>
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                   </svg>
