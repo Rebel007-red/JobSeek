@@ -27,6 +27,8 @@ $$;
 
 -- 2) companies: admins manage sources from Settings; everyone else sees nothing
 ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
+-- An old dashboard-made policy let every signed-in user write companies; policies are OR-ed, so it must go
+DROP POLICY IF EXISTS "Authenticated users can manage companies" ON public.companies;
 DROP POLICY IF EXISTS companies_admin_all ON public.companies;
 CREATE POLICY companies_admin_all ON public.companies
   FOR ALL TO authenticated
