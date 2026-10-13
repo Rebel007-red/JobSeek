@@ -1,0 +1,36 @@
+{
+ "id": 5941542,
+ "shortcode": "43B289C7BB",
+ "title": "AI Deployment Engineer",
+ "remote": false,
+ "location": {
+  "city": "Bristol",
+  "country": "United Kingdom",
+  "countryCode": "GB",
+  "region": "England"
+ },
+ "locations": [
+  {
+   "city": "Bristol",
+   "country": "United Kingdom",
+   "countryCode": "GB",
+   "hidden": false,
+   "region": "England"
+  }
+ ],
+ "state": "published",
+ "isInternal": false,
+ "code": "",
+ "published": "2026-07-31T00:00:00.000Z",
+ "type": "full",
+ "language": "en",
+ "department": [
+  "CEO"
+ ],
+ "accountUid": "fea2761c-b6ac-4917-bd56-2e96ddefe357",
+ "approvalStatus": "approved",
+ "workplace": "hybrid",
+ "description": "<p>Location: Bristol/London - Hybrid, 3 days in the office<br><br>The deep technical engine behind our internal AI deployment team. Where the AI Deployment Strategist scopes and builds agents, you own the infrastructure underneath \u2014 data pipelines, system integrations, and everything that ensures de...[trimmed]",
+ "requirements": "<ul><li>Python &amp; SQL (production-grade pipeline development)</li><li>REST APIs, webhooks, OAuth, event-driven architecture</li><li>Orchestration tools: Airflow, Prefect, or Dagster</li><li>Cloud platforms: AWS, GCP, or Azure</li><li>Docker &amp; Kubernetes Microsoft 365 &amp; Microsoft Copilot</...[trimmed]",
+ "benefits": ""
+}

@@ -21,19 +21,25 @@ export const EMPTY_FILTERS = {
   muteView: '',
 }
 
-// What the dashboard starts with: only jobs from the last 24 hours (older ones are hidden until you widen it).
-export const FRESH_HOURS = '24'
+// What the Inbox starts with: '' = no time window, i.e. every live job. Untracked jobs live 7 days (the pipeline deletes
+// them after JOB_DELETE_AFTER_DAYS, src/utils/job.js), so this is "the last 7 days"; the "new since your last visit"
+// marker shows what arrived since. The name is kept from when the default was the last 24 hours.
+export const FRESH_HOURS = ''
 export const DEFAULT_FILTERS = { ...EMPTY_FILTERS, postedWithin: FRESH_HOURS }
 
 // Filters edited in the panel (search box and quick chips live on the page; the time window lives in the scope menu).
 export const PANEL_KEYS = ['role', 'category', 'source', 'company', 'location', 'city', 'workMode', 'employment', 'maxYears',
   'minFit']
 
-// Hours. The pipeline removes untracked jobs posted more than 2 days ago, so longer windows only add tracked jobs.
+// Hours; '' = no window. The pipeline removes untracked jobs posted more than 7 days ago, so '' is the last 7 days. Any
+// other value (an old link's or this device's remembered '48') falls back to the default.
 export const POSTED_OPTIONS = [
   { value: '24', label: 'Last 24 hours' },
-  { value: '48', label: 'Last 2 days' },
+  { value: '72', label: 'Last 3 days' },
+  { value: '', label: 'Last 7 days' },
 ]
+// The windows that are a number of hours (POSTED_OPTIONS without '')
+export const POSTED_HOURS = POSTED_OPTIONS.map(option => option.value).filter(Boolean)
 
 // Tabs, disjoint: 'inbox' (untracked: not saved, applied or hidden), 'saved', 'applied' (any stage). The old tabs
 // 'pending' (To apply) and 'all' are read as 'inbox' (old links, remembered tabs).
@@ -68,16 +74,17 @@ export const SCOPES = ['match', 'all']
 export const DEFAULT_SCOPE = 'match'
 export const SCOPE_LABELS = { match: 'For you', all: 'Everything' }
 
-// The scope menu ("Which jobs"): the scope and the time window are set together. These three are always offered; any
+// The scope menu ("Which jobs"): the scope and the time window are set together. These four are always offered; any
 // other combination (from a URL) is shown as its own checked item.
 export const SCOPE_PRESETS = [
-  { scope: 'match', postedWithin: FRESH_HOURS },
   { scope: 'match', postedWithin: '' },
+  { scope: 'match', postedWithin: '72' },
+  { scope: 'match', postedWithin: '24' },
   { scope: 'all', postedWithin: '' },
 ]
-const WINDOW_LABELS = new Map([['', 'any date'], ['24', 'last 24h'], ['48', 'last 2 days']])
+const WINDOW_LABELS = new Map([['', 'last 7 days'], ['72', 'last 3 days'], ['24', 'last 24h']])
 
-// "For you · last 24h", "Everything · any date"
+// "For you · last 24h", "Everything · last 7 days"
 export function scopeLabel({ scope, postedWithin } = {}) {
   const key = String(postedWithin ?? '')
   const span = WINDOW_LABELS.get(key) ?? `last ${key}h`

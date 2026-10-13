@@ -4,7 +4,7 @@
 // working: tab=pending (To apply) and tab=all open the Inbox.
 import { APPLIED_STATUSES, EMPLOYMENT_LABELS, WORK_MODE_LABELS } from './gold.js'
 import {
-  DEFAULT_FILTERS, DEFAULT_SCOPE, DEFAULT_TAB, FRESH_HOURS, POSTED_OPTIONS, SCOPES, defaultSortFor, normalizeTab, sortAllowed,
+  DEFAULT_FILTERS, DEFAULT_SCOPE, DEFAULT_TAB, FRESH_HOURS, POSTED_HOURS, SCOPES, defaultSortFor, normalizeTab, sortAllowed,
 } from './filters.js'
 
 const JOB_KEY_RE = /^[0-9a-f]{64}$/
@@ -19,7 +19,9 @@ const CHOICES = {
 const RANGES = { maxYears: [0, 40], minFit: [1, 100] }
 // Boolean filters, written as "<param>=1"
 const FLAGS = { matchedOnly: 'skills', myCities: 'myCities', followUp: 'followUp' }
-const POSTED_VALUES = new Set(POSTED_OPTIONS.map(option => option.value))
+// posted=<hours>; no window is written posted=any ('' is the default, so it is written only when this device remembers
+// another window)
+const POSTED_VALUES = new Set(POSTED_HOURS)
 const SHEETS = ['filters']
 
 export const isJobKey = (value) => typeof value === 'string' && JOB_KEY_RE.test(value)

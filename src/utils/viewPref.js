@@ -1,5 +1,5 @@
 import { sessionUser } from '../lib/session.js'
-import { DEFAULT_TAB, FRESH_HOURS, POSTED_OPTIONS, SCOPES, defaultSortFor, normalizeTab, sortAllowed } from './filters.js'
+import { DEFAULT_TAB, FRESH_HOURS, POSTED_HOURS, SCOPES, defaultSortFor, normalizeTab, sortAllowed } from './filters.js'
 
 // Job list preferences remembered on this device. Storage can be unavailable: the choice just isn't remembered.
 function read(key) {
@@ -40,10 +40,12 @@ const scopeKey = () => `jobseeker:scope:${user()}`
 export const readScope = () => (read(scopeKey()) === 'all' ? 'all' : 'match')
 export const saveScope = (scope) => save(scopeKey(), scope)
 
-// Time window of the Inbox (filters.postedWithin: '24' | '48' | '' = any date), per user on this device. The scope menu
-// sets it together with the scope, so "Everything · any date" opens as it was left; nothing stored = the last 24 hours.
-const windowKey = () => `jobseeker:window:${user()}`
-const POSTED_VALUES = new Set(POSTED_OPTIONS.map(option => option.value))
+// Time window of the Inbox (filters.postedWithin: '24' | '72' | '' = the last 7 days), per user on this device. The scope
+// menu sets it together with the scope, so "Everything · last 24h" opens as it was left; nothing stored = FRESH_HOURS.
+// A new key since jobs live 7 days instead of 2: a window remembered under the 2-day rule (most often the old default,
+// the last 24 hours) is not carried over, so everyone opens with the new default once.
+const windowKey = () => `jobseeker:window7:${user()}`
+const POSTED_VALUES = new Set(POSTED_HOURS)
 
 export const readWindow = () => {
   const value = read(windowKey())

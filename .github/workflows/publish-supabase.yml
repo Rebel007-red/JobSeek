@@ -1,9 +1,9 @@
 name: Publish to Supabase
 
-# Catch-up for the publish step of the LinkedIn workflow: publishes the newest complete pipeline output
-# (/Volumes/jobseeker/ops/pipeline/publish/<run_id>/) to Supabase. A no-op in seconds when it is already published,
-# e.g. after a run that outlasted the LinkedIn workflow's wait or a publish that failed. The hourly call also keeps the
-# free Supabase project from pausing.
+# Catch-up for the publish step of the ATS workflow (databricks-scrapers.yml; also the manual LinkedIn workflow):
+# publishes the newest complete pipeline output (/Volumes/jobseeker/ops/pipeline/publish/<run_id>/) to Supabase. A no-op
+# in seconds when it is already published, e.g. after a run that outlasted the ATS workflow's wait or a publish that
+# failed. The hourly call also keeps the free Supabase project from pausing.
 on:
   schedule:
     - cron: '50 * * * *'

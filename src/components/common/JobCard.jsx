@@ -1,6 +1,7 @@
 import { memo, useId, useMemo } from 'react'
 import { isOwnRole, skillsTag } from '../../utils/fit'
 import { profileSkillList, skillBuckets } from '../../utils/gold'
+import { sourceLabel } from '../../utils/sources'
 import { StatusPicker } from '../job/StatusPicker'
 import { FitBreakdown, FitRing } from './Fit'
 import { JobActions } from './JobActions'
@@ -43,7 +44,7 @@ export const JobCard = memo(function JobCard({
 
       <p className="job-card-meta">
         <JobPlace job={job} fallback="India" group={group} actions={child ? null : actions} />
-        {job.source && <span>{job.source}</span>}
+        {job.source && <span>{sourceLabel(job.source)}</span>}
       </p>
 
       <JobFlags job={job} showStage={!showStatus} />

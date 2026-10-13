@@ -1,0 +1,357 @@
+{
+ "results": [
+  {
+   "id": 6179526,
+   "shortcode": "8D374D23EC",
+   "title": "Software Engineering Manager",
+   "remote": false,
+   "location": {
+    "city": "Chennai",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Tamil Nadu"
+   },
+   "locations": [
+    {
+     "city": "Chennai",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Tamil Nadu"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-10-07T00:00:00.000Z",
+   "type": "full",
+   "language": "en",
+   "department": [
+    "Engineering & Technology",
+    "Software Engineering"
+   ],
+   "accountUid": "c35fa389-ac18-4082-ae96-abc43381e0f2",
+   "approvalStatus": "approved",
+   "workplace": "hybrid"
+  },
+  {
+   "id": 6159060,
+   "shortcode": "10B1B6F6C3",
+   "title": "Principal Architect - Payments & Ledger",
+   "remote": false,
+   "location": {
+    "city": "Bengaluru",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Karnataka"
+   },
+   "locations": [
+    {
+     "city": "Bengaluru",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Karnataka"
+    },
+    {
+     "city": "Chennai",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Tamil Nadu"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-09-29T00:00:00.000Z",
+   "type": "full",
+   "language": "en",
+   "department": [
+    "Engineering & Technology"
+   ],
+   "accountUid": "c35fa389-ac18-4082-ae96-abc43381e0f2",
+   "approvalStatus": "approved",
+   "workplace": "hybrid"
+  },
+  {
+   "id": 6159065,
+   "shortcode": "4FD362891F",
+   "title": "Technical Program Manager",
+   "remote": false,
+   "location": {
+    "city": "Bengaluru",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Karnataka"
+   },
+   "locations": [
+    {
+     "city": "Bengaluru",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Karnataka"
+    },
+    {
+     "city": "Chennai",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Tamil Nadu"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-09-29T00:00:00.000Z",
+   "type": "full",
+   "language": "en",
+   "department": [
+    "Engineering & Technology"
+   ],
+   "accountUid": "c35fa389-ac18-4082-ae96-abc43381e0f2",
+   "approvalStatus": "approved",
+   "workplace": "hybrid"
+  },
+  {
+   "id": 6106291,
+   "shortcode": "54F1FCD19A",
+   "title": "Senior Software Engineer (Backend)",
+   "remote": false,
+   "location": {
+    "city": "Bengaluru",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Karnataka"
+   },
+   "locations": [
+    {
+     "city": "Bengaluru",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Karnataka"
+    },
+    {
+     "city": "Chennai",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Tamil Nadu"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-09-22T00:00:00.000Z",
+   "type": "full",
+   "language": "en",
+   "department": [
+    "Engineering & Technology",
+    "Software Engineering"
+   ],
+   "accountUid": "c35fa389-ac18-4082-ae96-abc43381e0f2",
+   "approvalStatus": "approved",
+   "workplace": "hybrid"
+  },
+  {
+   "id": 6130564,
+   "shortcode": "0314F951E6",
+   "title": "Software Engineer II (Backend)",
+   "remote": false,
+   "location": {
+    "city": "Bengaluru",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Karnataka"
+   },
+   "locations": [
+    {
+     "city": "Bengaluru",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Karnataka"
+    },
+    {
+     "city": "Chennai",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Tamil Nadu"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-09-22T00:00:00.000Z",
+   "type": "full",
+   "language": "en",
+   "department": [
+    "Engineering & Technology",
+    "Software Engineering"
+   ],
+   "accountUid": "c35fa389-ac18-4082-ae96-abc43381e0f2",
+   "approvalStatus": "approved",
+   "workplace": "hybrid"
+  },
+  {
+   "id": 5328470,
+   "shortcode": "CC73E8DB94",
+   "title": "Senior DevOps Engineer",
+   "remote": false,
+   "location": {
+    "city": "Chennai",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Tamil Nadu"
+   },
+   "locations": [
+    {
+     "city": "Chennai",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Tamil Nadu"
+    },
+    {
+     "city": "Bengaluru",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Karnataka"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-09-21T00:00:00.000Z",
+   "type": "full",
+   "language": "en",
+   "department": [
+    "Engineering & Technology",
+    "DevOps"
+   ],
+   "accountUid": "c35fa389-ac18-4082-ae96-abc43381e0f2",
+   "approvalStatus": "approved",
+   "workplace": "hybrid"
+  },
+  {
+   "id": 6102943,
+   "shortcode": "780EB04619",
+   "title": "Software Engineer - Mobile App Development",
+   "remote": false,
+   "location": {
+    "city": "Bengaluru",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Karnataka"
+   },
+   "locations": [
+    {
+     "city": "Bengaluru",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Karnataka"
+    },
+    {
+     "city": "Chennai",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Tamil Nadu"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-09-16T00:00:00.000Z",
+   "type": "full",
+   "language": "en",
+   "department": [
+    "Engineering & Technology",
+    "Software Engineering"
+   ],
+   "accountUid": "c35fa389-ac18-4082-ae96-abc43381e0f2",
+   "approvalStatus": "approved",
+   "workplace": "hybrid"
+  },
+  {
+   "id": 6054402,
+   "shortcode": "684DBEF7D1",
+   "title": "Staff Mobile Engineer",
+   "remote": false,
+   "location": {
+    "city": "Singapore",
+    "country": "Singapore",
+    "countryCode": "SG",
+    "region": "Singapore"
+   },
+   "locations": [
+    {
+     "city": "Singapore",
+     "country": "Singapore",
+     "countryCode": "SG",
+     "hidden": false,
+     "region": "Singapore"
+    },
+    {
+     "city": "Bengaluru",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Karnataka"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-08-26T00:00:00.000Z",
+   "type": "full",
+   "language": "en",
+   "department": [
+    "Engineering & Technology",
+    "Software Engineering"
+   ],
+   "accountUid": "c35fa389-ac18-4082-ae96-abc43381e0f2",
+   "approvalStatus": "approved",
+   "workplace": "hybrid"
+  },
+  {
+   "id": 6051454,
+   "shortcode": "576C7E1EFE",
+   "title": "IT System Administrator",
+   "remote": false,
+   "location": {
+    "city": "Chennai",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Tamil Nadu"
+   },
+   "locations": [
+    {
+     "city": "Chennai",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Tamil Nadu"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": null,
+   "published": "2026-08-25T00:00:00.000Z",
+   "type": "full",
+   "language": "en",
+   "department": [
+    "Information Technology"
+   ],
+   "accountUid": "c35fa389-ac18-4082-ae96-abc43381e0f2",
+   "approvalStatus": "approved",
+   "workplace": "hybrid"
+  }
+ ],
+ "total": 9
+}

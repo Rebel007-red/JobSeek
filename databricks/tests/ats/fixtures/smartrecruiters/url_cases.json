@@ -1,0 +1,95 @@
+{
+ "_about": "Board URL -> companies columns. Pinned by databricks/tests/ats/test_base.py (adapter.source_columns) and by the form's test in src/ (same file). expect null = rejected.",
+ "cases": [
+  {
+   "input": "https://jobs.smartrecruiters.com/ServiceNow",
+   "expect": {
+    "slug": "ServiceNow",
+    "api_url": "https://api.smartrecruiters.com/v1/companies/ServiceNow/postings"
+   }
+  },
+  {
+   "input": "https://jobs.smartrecruiters.com/ServiceNow/744000154629109-staff-voice-ai-engineer-core-platform",
+   "expect": {
+    "slug": "ServiceNow",
+    "api_url": "https://api.smartrecruiters.com/v1/companies/ServiceNow/postings"
+   }
+  },
+  {
+   "input": "https://jobs.smartrecruiters.com/ServiceNow/744000154629109-staff-voice-ai-engineer-core-platform?oga=true",
+   "expect": {
+    "slug": "ServiceNow",
+    "api_url": "https://api.smartrecruiters.com/v1/companies/ServiceNow/postings"
+   }
+  },
+  {
+   "input": "https://careers.smartrecruiters.com/BoschGroup",
+   "expect": {
+    "slug": "BoschGroup",
+    "api_url": "https://api.smartrecruiters.com/v1/companies/BoschGroup/postings"
+   }
+  },
+  {
+   "input": "https://careers.smartrecruiters.com/BoschGroup/india",
+   "expect": {
+    "slug": "BoschGroup",
+    "api_url": "https://api.smartrecruiters.com/v1/companies/BoschGroup/postings"
+   }
+  },
+  {
+   "input": "https://www.smartrecruiters.com/Freshworks/744000154405299-lead-software-engineer-systems",
+   "expect": {
+    "slug": "Freshworks",
+    "api_url": "https://api.smartrecruiters.com/v1/companies/Freshworks/postings"
+   }
+  },
+  {
+   "input": "https://api.smartrecruiters.com/v1/companies/LinkedIn3/postings?country=in",
+   "expect": {
+    "slug": "LinkedIn3",
+    "api_url": "https://api.smartrecruiters.com/v1/companies/LinkedIn3/postings"
+   }
+  },
+  {
+   "input": "https://api.smartrecruiters.com/v1/companies/Ubisoft2/postings/744000154608984",
+   "expect": {
+    "slug": "Ubisoft2",
+    "api_url": "https://api.smartrecruiters.com/v1/companies/Ubisoft2/postings"
+   }
+  },
+  {
+   "input": "jobs.smartrecruiters.com/WesternDigital",
+   "expect": {
+    "slug": "WesternDigital",
+    "api_url": "https://api.smartrecruiters.com/v1/companies/WesternDigital/postings"
+   }
+  },
+  {
+   "input": "NielsenIQ",
+   "expect": {
+    "slug": "NielsenIQ",
+    "api_url": "https://api.smartrecruiters.com/v1/companies/NielsenIQ/postings"
+   }
+  },
+  {
+   "input": "https://careers.servicenow.com/jobs/744000154629109",
+   "expect": null
+  },
+  {
+   "input": "https://jobs.smartrecruiters.com/",
+   "expect": null
+  },
+  {
+   "input": "https://jobs.smartrecruiters.com/external-referrals/company/ServiceNow/publication/61a23642",
+   "expect": null
+  },
+  {
+   "input": "Bosch Group",
+   "expect": null
+  },
+  {
+   "input": "",
+   "expect": null
+  }
+ ]
+}

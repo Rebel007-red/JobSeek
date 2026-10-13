@@ -86,7 +86,7 @@ export function staleBannerText(freshness) {
 
 // The pipeline deletes an untracked job at the first run on or after UTC midnight of (job date + this + 1 days); job date =
 // posted_date, else the UTC day it was first seen. keep in sync: job_delete_after_days in 04_gold_cleanup.
-export const JOB_DELETE_AFTER_DAYS = 2
+export const JOB_DELETE_AFTER_DAYS = 7
 const EXPIRY_HINT_HOURS = 36
 
 function utcDay(value) {

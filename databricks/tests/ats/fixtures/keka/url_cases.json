@@ -1,0 +1,105 @@
+{
+ "_about": "Board URL -> companies columns. Pinned by databricks/tests/ats/test_base.py (adapter.source_columns) and by the form's test in src/ (same file). expect null = rejected.",
+ "cases": [
+  {
+   "input": "https://hr.keka.com/careers/",
+   "expect": {
+    "slug": "hr",
+    "api_url": "https://hr.keka.com/careers/api/jobs/default/active"
+   }
+  },
+  {
+   "input": "https://cloudthat.keka.com/careers",
+   "expect": {
+    "slug": "cloudthat",
+    "api_url": "https://cloudthat.keka.com/careers/api/jobs/default/active"
+   }
+  },
+  {
+   "input": "https://adda247.keka.com/careers/jobdetails/143333",
+   "expect": {
+    "slug": "adda247",
+    "api_url": "https://adda247.keka.com/careers/api/jobs/default/active"
+   }
+  },
+  {
+   "input": "https://acme.keka.com/careers/applyjob/143333?source=linkedin",
+   "expect": {
+    "slug": "acme",
+    "api_url": "https://acme.keka.com/careers/api/jobs/default/active"
+   }
+  },
+  {
+   "input": "https://acme.keka.com/careers/campus/",
+   "expect": {
+    "slug": "acme",
+    "api_url": "https://acme.keka.com/careers/api/jobs/campus/active"
+   }
+  },
+  {
+   "input": "https://acme.keka.com/careers/campus/jobdetails/123",
+   "expect": {
+    "slug": "acme",
+    "api_url": "https://acme.keka.com/careers/api/jobs/campus/active"
+   }
+  },
+  {
+   "input": "https://hr.keka.com/careers/api/jobs/default/active",
+   "expect": {
+    "slug": "hr",
+    "api_url": "https://hr.keka.com/careers/api/jobs/default/active"
+   }
+  },
+  {
+   "input": "https://hr.keka.com",
+   "expect": {
+    "slug": "hr",
+    "api_url": "https://hr.keka.com/careers/api/jobs/default/active"
+   }
+  },
+  {
+   "input": "niyo.keka.com/careers",
+   "expect": {
+    "slug": "niyo",
+    "api_url": "https://niyo.keka.com/careers/api/jobs/default/active"
+   }
+  },
+  {
+   "input": "CloudThat",
+   "expect": {
+    "slug": "cloudthat",
+    "api_url": "https://cloudthat.keka.com/careers/api/jobs/default/active"
+   }
+  },
+  {
+   "input": "https://careers.acme.com/",
+   "expect": {
+    "slug": "careers.acme.com",
+    "api_url": "https://careers.acme.com/api/jobs/default/active"
+   }
+  },
+  {
+   "input": "https://careers.acme.com/api/jobs/default/active",
+   "expect": {
+    "slug": "careers.acme.com",
+    "api_url": "https://careers.acme.com/api/jobs/default/active"
+   }
+  },
+  {
+   "input": "https://hr.keka.com/login",
+   "expect": null
+  },
+  {
+   "input": "http://careers.acme.com/",
+   "expect": null
+  },
+  {
+   "input": "careers.acme.com",
+   "expect": null
+  },
+  {
+   "input": "",
+   "expect": null
+  }
+ ]
+}

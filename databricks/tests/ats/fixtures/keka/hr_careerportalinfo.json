@@ -1,0 +1,48 @@
+{
+ "_request": "GET https://hr.keka.com/careers/api/organization/default/careerportalinfo",
+ "name": "Keka Technologies Pvt. Ltd",
+ "logoPath": "careerportal/f865ec9a1dc34a4da5b2ad4a36f34982.png",
+ "careersBackgroundPath": "/ats/documents/24040a7e-a7c5-47a5-9cd5-019962c66385/careerportal/3b7d058397a943dc83c01ee6e6a32085.jpg",
+ "careersPortalColorCode": "#1077da",
+ "shortName": "Keka Technologies Pvt. Ltd",
+ "careersPortalDomain": "hr.keka.com",
+ "companyWebsite": "https://hr.keka.com/careers",
+ "socialLinks": [
+  {
+   "type": 1,
+   "url": "https://www.linkedin.com/company/keka-hr/"
+  },
+  {
+   "type": 3,
+   "url": "https://twitter.com/kekahr_official"
+  },
+  {
+   "type": 9,
+   "url": "https://www.instagram.com/kekahr/"
+  },
+  {
+   "type": 12,
+   "url": "https://www.youtube.com/channel/UChNjNxut1Hko0d58CWQCWIw"
+  }
+ ],
+ "fontFamily": "Open sans",
+ "jobListingSetting": {
+  "filters": [
+   "department",
+   "location",
+   "jobType"
+  ],
+  "jobFields": [
+   "location",
+   "experience",
+   "jobType"
+  ],
+  "jobListingFormat": 2
+ },
+ "backgroundColor": "#FFFFFF",
+ "fontSize": 1,
+ "descriptionColor": "#101828",
+ "headingColor": "#101828",
+ "buttonLabelColor": "#FFFFFF",
+ "applyStyles": false
+}

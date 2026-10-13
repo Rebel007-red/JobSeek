@@ -30,7 +30,7 @@ export const FOLLOW_UP_DAYS = 14
 // Most jobs one write sends (api.js splits larger selections into chunks of this size; app.c_max_bulk_keys)
 export const MAX_BULK_KEYS = 100
 
-// Application statuses (app.c_application_statuses). Tracked = applied (any stage) or saved: kept past the 2-day
+// Application statuses (app.c_application_statuses). Tracked = applied (any stage) or saved: kept past the 7-day
 // expiry, never muted, always "For you".
 export const APPLICATION_STATUSES = ['not_applied', 'saved', 'applied', 'interviewing', 'offer', 'rejected', 'withdrawn']
 // Statuses that count as applied (is_applied)

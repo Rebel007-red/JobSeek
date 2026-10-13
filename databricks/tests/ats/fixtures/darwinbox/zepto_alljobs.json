@@ -1,0 +1,151 @@
+{
+ "_request": "POST https://zepto.darwinbox.in/ms/candidateapi/job/alljobs?companyId=main body={\"page\":1,\"limit\":100} headers: sec-fetch-mode: cors",
+ "status": "success",
+ "job_counts": 2,
+ "data": [
+  {
+   "_id": "6abcb9fe9291e405390ec776",
+   "id": "a6abcb9fe0cca8",
+   "parent_company_id": "a630cab4c687a3",
+   "designation": "a6929e65e2df95094959089",
+   "department_id": "a690b3c430442b",
+   "designation_display_name": "",
+   "internal_job_code": "JID477",
+   "employee_type": "a630cb34ea0073",
+   "employee_sub_type": "a6569c0092f644",
+   "experience_from": "2",
+   "experience_to": "5",
+   "experience": "2 - 5 Years",
+   "salary_currency": "",
+   "salary_min": "",
+   "salary_max": "",
+   "salary_range": "",
+   "salary_timeframe": "Annual",
+   "jd": "",
+   "officelocation_arr": [
+    "a630cb857297de"
+   ],
+   "officelocation_show_arr": "Bengaluru, Karnataka\r, India (GC1.BEN)",
+   "officelocations_area": [
+    "Bengaluru, Karnataka\r, India"
+   ],
+   "officelocations_without_area": [
+    "Bengaluru, Karnataka\r, India"
+   ],
+   "country": "India",
+   "designation_title": "",
+   "created_on": "2026-09-30T07:27:58.000Z",
+   "is_remote": 0,
+   "designation_name": "Senior Manager I - Category Growth",
+   "department_name": "Category Growth (GC1.BU_14.COE.CATEGROW)",
+   "department_name_only": "Category Growth",
+   "emp_type_name": "Full-Time",
+   "emp_sub_type_name": "Non UE",
+   "functional_area_name": "",
+   "functional_area": "",
+   "job_tags": [],
+   "jd_summary": "",
+   "legal_entity_ids": [],
+   "job_posting": {
+    "careers": {
+     "source": "careers",
+     "from": 1791138600,
+     "to": 1792780199
+    },
+    "refer": {
+     "source": "refer",
+     "from": null,
+     "to": null
+    },
+    "ijp": {
+     "source": "ijp",
+     "from": null,
+     "to": null
+    }
+   },
+   "posted_on": 1791138600,
+   "designation_name_id": "a6929e53497f77059560429",
+   "officelocation_show_arr_list": [
+    "Bengaluru, Karnataka, India "
+   ],
+   "locations": "Bengaluru, Karnataka\r, India",
+   "tool_tip_locations": [
+    "Bengaluru, Karnataka, India"
+   ],
+   "designation_title_name": "",
+   "title": "Senior Manager I - Category Growth"
+  },
+  {
+   "_id": "6a90169ebb6baaf5bd0c4f56",
+   "id": "a6a90169df097b",
+   "parent_company_id": "a630cab4c687a3",
+   "designation": "a684da655c76b2",
+   "department_id": "a684da0943bfe5",
+   "designation_display_name": "",
+   "employee_type": "a630cb34ea0073",
+   "employee_sub_type": "",
+   "experience_from": "1",
+   "experience_to": "7",
+   "experience": "1 - 7 Years",
+   "salary_currency": "",
+   "salary_min": "",
+   "salary_max": "",
+   "salary_range": "",
+   "salary_timeframe": "Annual",
+   "jd": "&lt;p&gt;&lt;b&gt;DH Operations Department&lt;/b&gt;&lt;/p&gt;&lt;p&gt;&lt;b&gt;No lengthy intro here, let’s get straight to the details, Zepto speed.&lt;/b&gt;&lt;/p&gt;&lt;p&gt;&lt;b&gt;Responsibilities, aka, what we’d like you to deliver :&lt;/b&gt;&lt;/p&gt;&lt;p&gt;&lt;b&gt;● Own inventory management at the delivery hub, including stock accuracy, ageing, DOH,&lt;/b&gt;&lt;/p&gt;&lt;p&gt;&lt;b...[trimmed]",
+   "officelocation_arr": [
+    "a630cb857297de"
+   ],
+   "officelocation_show_arr": "Bengaluru, Karnataka\r, India (GC1.BEN)",
+   "officelocations_area": [
+    "Bengaluru, Karnataka\r, India"
+   ],
+   "officelocations_without_area": [
+    "Bengaluru, Karnataka\r, India"
+   ],
+   "country": "India",
+   "designation_title": "",
+   "created_on": "2026-08-27T10:51:09.000Z",
+   "is_remote": 0,
+   "designation_name": "Manager I - Delivery Hub Manager",
+   "department_name": "FM Operations (GC.1.BU.76_DHOPS.FMOPS)",
+   "department_name_only": "FM Operations",
+   "emp_type_name": "Full-Time",
+   "emp_sub_type_name": "",
+   "functional_area_name": "",
+   "functional_area": "",
+   "job_tags": [],
+   "jd_summary": "",
+   "legal_entity_ids": [],
+   "internal_job_code": "JID292",
+   "job_posting": {
+    "careers": {
+     "source": "careers",
+     "from": 1787855400,
+     "to": 1793471399
+    },
+    "refer": {
+     "source": "refer",
+     "from": null,
+     "to": null
+    },
+    "ijp": {
+     "source": "ijp",
+     "from": null,
+     "to": null
+    }
+   },
+   "posted_on": 1787855400,
+   "designation_name_id": "a67419d966dd65",
+   "officelocation_show_arr_list": [
+    "Bengaluru, Karnataka, India "
+   ],
+   "locations": "Bengaluru, Karnataka\r, India",
+   "tool_tip_locations": [
+    "Bengaluru, Karnataka, India"
+   ],
+   "designation_title_name": "",
+   "title": "Manager I - Delivery Hub Manager"
+  }
+ ]
+}

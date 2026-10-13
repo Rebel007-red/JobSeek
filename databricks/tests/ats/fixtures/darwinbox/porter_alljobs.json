@@ -1,0 +1,224 @@
+{
+ "_request": "POST https://porter.darwinbox.in/ms/candidateapi/job/alljobs?companyId=main body={\"page\":1,\"limit\":100} headers: sec-fetch-mode: cors",
+ "status": "success",
+ "job_counts": 119,
+ "data": [
+  {
+   "_id": "6abe22efc4e89d23aa022583",
+   "id": "a6abe22eed80b3",
+   "parent_company_id": "a664361beb2876",
+   "designation": "a6abdfb16704b8301488462",
+   "department_id": "a6989bbb554d60235537701",
+   "designation_display_name": "Administrative/PRO Specialist",
+   "internal_job_code": "JOB_3335",
+   "employee_type": "601a3ad0be1a2",
+   "employee_sub_type": "",
+   "experience_from": "3",
+   "experience_to": "5",
+   "experience": "3 - 5 Years",
+   "salary_currency": "",
+   "salary_min": "",
+   "salary_max": "",
+   "salary_range": "",
+   "salary_timeframe": "Annual",
+   "jd": "&lt;p style=&quot;margin:0px;padding:0px;border:0px;vertical-align:baseline;background:rgba(0,0,0,0) none repeat scroll 0% 0%;line-height:1.42857;color:rgba(0,0,0,0.9);font-family:&#039;-apple-system&#039;, &#039;system-ui&#039;, BlinkMacSystemFont, &#039;Segoe UI&#039;, Roboto, &#039;Helvetica Neue&#039;, &#039;Fira Sans&#039;, Ubuntu, Oxygen, &#039;Oxygen Sans&#039;, Cantarell, &#039;Droid Sans&...[trimmed]",
+   "officelocation_arr": [
+    "a66436c673125d"
+   ],
+   "officelocation_show_arr": "Branch Office, Dubai, Dubai\r, United Arab Emirates (the) (WC_PAE_02)",
+   "officelocations_area": [
+    "Branch Office, Dubai, Dubai\r, United Arab Emirates (the)"
+   ],
+   "officelocations_without_area": [
+    "Dubai, Dubai\r, United Arab Emirates (the)"
+   ],
+   "country": "United Arab Emirates (the)",
+   "designation_title": "",
+   "created_on": "2026-10-01T09:07:58.000Z",
+   "job_posting": {
+    "careers": {
+     "source": "careers",
+     "from": 1790798400,
+     "to": 1792094399
+    },
+    "refer": {
+     "source": "refer",
+     "from": 1790798400,
+     "to": 1792094399
+    },
+    "ijp": {
+     "source": "ijp",
+     "from": null,
+     "to": null
+    }
+   },
+   "is_remote": 0,
+   "designation_name": "Senior Business Associate",
+   "department_name": "People & Culture",
+   "department_name_only": "People & Culture",
+   "emp_type_name": "Contractual",
+   "emp_sub_type_name": "",
+   "functional_area_name": "",
+   "functional_area": "",
+   "job_tags": [],
+   "jd_summary": "",
+   "legal_entity_ids": [],
+   "posted_on": 1790798400,
+   "designation_name_id": "6018fc051ba3b",
+   "capability": [],
+   "officelocation_show_arr_list": [
+    "Branch Office, Dubai, Dubai, United Arab Emirates "
+   ],
+   "locations": "Branch Office, Dubai, Dubai\r, United Arab Emirates (the)",
+   "tool_tip_locations": [
+    "Branch Office, Dubai, Dubai, United Arab Emirates (the)"
+   ],
+   "designation_title_name": "",
+   "title": "Administrative/PRO Specialist"
+  },
+  {
+   "_id": "6ab640c901ab5fc04f0e42fc",
+   "id": "a6ab640c8cee75",
+   "parent_company_id": "6018ea7335aea",
+   "designation": "a69482bda0e639173496548",
+   "department_id": "a69440c5a342c4992028814",
+   "designation_display_name": "",
+   "employee_type": "601a3ac737c0c",
+   "employee_sub_type": "",
+   "experience_from": "7",
+   "experience_to": "10",
+   "experience": "7 - 10 Years",
+   "salary_currency": "",
+   "salary_min": "",
+   "salary_max": "",
+   "salary_range": "",
+   "salary_timeframe": "Annual",
+   "jd": "&lt;p dir=&quot;ltr&quot; style=&quot;line-height:1.656;background-color:#ffffff;margin-top:12pt;margin-bottom:0pt;padding:0pt 0pt 12pt 0pt;&quot;&gt;&lt;span style=&quot;font-size:11pt;font-family:Calibri, sans-serif;color:#000000;background-color:transparent;font-weight:700;font-style:normal;font-variant:normal;text-decoration:none;vertical-align:baseline;white-space:pre-wrap;&quot;&gt;Porter: C...[trimmed]",
+   "officelocation_arr": [
+    "6018f56551d5f"
+   ],
+   "officelocation_show_arr": "Branch Office, Surat, Gujarat\r, India (WC_009)",
+   "officelocations_area": [
+    "Branch Office, Surat, Gujarat\r, India"
+   ],
+   "officelocations_without_area": [
+    "Surat, Gujarat\r, India"
+   ],
+   "country": "India",
+   "designation_title": "",
+   "created_on": "2026-09-25T09:37:12.000Z",
+   "is_remote": 0,
+   "designation_name": "Deputy General Manager",
+   "department_name": "Rest of India - Operations",
+   "department_name_only": "Rest of India - Operations",
+   "emp_type_name": "Permanent",
+   "emp_sub_type_name": "",
+   "functional_area_name": "",
+   "functional_area": "",
+   "job_tags": [],
+   "jd_summary": "",
+   "legal_entity_ids": [],
+   "internal_job_code": "JOB_3319",
+   "job_posting": {
+    "careers": {
+     "source": "careers",
+     "from": 1790274600,
+     "to": null
+    },
+    "refer": {
+     "source": "refer",
+     "from": 1790274600,
+     "to": null
+    },
+    "ijp": {
+     "source": "ijp",
+     "from": null,
+     "to": null
+    }
+   },
+   "posted_on": 1790274600,
+   "designation_name_id": "6018fc045530c",
+   "capability": [],
+   "officelocation_show_arr_list": [
+    "Branch Office, Surat, Gujarat, India "
+   ],
+   "locations": "Branch Office, Surat, Gujarat\r, India",
+   "tool_tip_locations": [
+    "Branch Office, Surat, Gujarat, India"
+   ],
+   "designation_title_name": "",
+   "title": "Deputy General Manager"
+  },
+  {
+   "_id": "6aa23f92a41ba6a2c1050a30",
+   "id": "a6aa23f920e552",
+   "parent_company_id": "6018ea7335aea",
+   "designation": "a69482b9cb6265459119535",
+   "department_id": "a69440c84b490e808699797",
+   "designation_display_name": "",
+   "employee_type": "601a3ac737c0c",
+   "employee_sub_type": "",
+   "experience": "",
+   "salary_currency": "",
+   "salary_min": "",
+   "salary_max": "",
+   "salary_range": "",
+   "salary_timeframe": "Annual",
+   "jd": "",
+   "officelocation_arr": [
+    "6018f724d443b"
+   ],
+   "officelocation_show_arr": "Branch Office, Hyderabad, Telangana\r, India (WC_005)",
+   "officelocations_area": [
+    "Branch Office, Hyderabad, Telangana\r, India"
+   ],
+   "officelocations_without_area": [
+    "Hyderabad, Telangana\r, India"
+   ],
+   "country": "India",
+   "designation_title": "",
+   "created_on": "2026-09-10T05:26:42.000Z",
+   "is_remote": 0,
+   "designation_name": "Business Associate",
+   "department_name": "City Operations",
+   "department_name_only": "City Operations",
+   "emp_type_name": "Permanent",
+   "emp_sub_type_name": "",
+   "functional_area_name": "",
+   "functional_area": "",
+   "job_tags": [],
+   "jd_summary": "",
+   "legal_entity_ids": [],
+   "internal_job_code": "JOB_3273",
+   "job_posting": {
+    "careers": {
+     "source": "careers",
+     "from": 1790015400,
+     "to": null
+    },
+    "refer": {
+     "source": "refer",
+     "from": 1790015400,
+     "to": null
+    },
+    "ijp": {
+     "source": "ijp",
+     "from": null,
+     "to": null
+    }
+   },
+   "posted_on": 1790015400,
+   "designation_name_id": "6018fc03a6156",
+   "capability": [],
+   "officelocation_show_arr_list": [
+    "Branch Office, Hyderabad, Telangana, India "
+   ],
+   "locations": "Branch Office, Hyderabad, Telangana\r, India",
+   "tool_tip_locations": [
+    "Branch Office, Hyderabad, Telangana, India"
+   ],
+   "designation_title_name": "",
+   "title": "Business Associate"
+  }
+ ]
+}

@@ -1,0 +1,115 @@
+{
+ "_request": "GET https://hr.keka.com/careers/api/jobs/default/active",
+ "_note": "response is a bare JSON array of ALL active jobs (no pagination); trimmed to 3",
+ "_total": 63,
+ "jobs": [
+  {
+   "id": 143478,
+   "title": "Solution Consultant",
+   "description": "<h2 style=\"margin-top: 0px; margin-bottom: 0px;\"><strong style=\"background-color: rgb(255, 255, 255); color: rgb(0, 0, 0);\">Role Overview</strong></h2><div><span style=\"background-color: rgb(255, 255, 255); color: rgb(0, 0, 0);\">As a Presales Consultant at Keka HR, you will be the technical and doma...[trimmed]",
+   "departmentIdentifier": "24f9683f-0e4b-435e-9eb0-c5a3f654801b",
+   "departmentName": "Sales",
+   "excerpt": "Role OverviewAs a Presales Consultant at Keka HR, you will be the technical and domain expert during the sales cycle. You will engage with prospective customers, understand their HR / people‑ops challenges, map those to Keka’s product/features, conduct demos or proofs of concept, and enable the sale...[trimmed]",
+   "jobLocations": [
+    {
+     "id": 66,
+     "name": "Delhi",
+     "city": "Delhi",
+     "state": "DL",
+     "countryCode": "IN",
+     "countryName": "India"
+    },
+    {
+     "id": 67,
+     "name": "Mumbai",
+     "city": "Mumbai",
+     "state": "MH",
+     "countryCode": "IN",
+     "countryName": "India"
+    }
+   ],
+   "jobType": 2,
+   "experience": "3-6",
+   "jobNumber": "KEKA/1445",
+   "salaryRange": {
+    "currency": "INR",
+    "salaryPeriod": 0,
+    "cultureInfo": "en-IN"
+   },
+   "salaryRangeFormat": "",
+   "publishedOn": "2026-10-05T06:46:26.383Z",
+   "publishedSinceDays": 4,
+   "skillNames": []
+  },
+  {
+   "id": 143465,
+   "title": "Senior Product Manager- HCM",
+   "description": "<div style=\"text-align: center;\"><strong> </strong></div><div>We are looking for an experienced Product Manager who is passionate about building products that customers love. You will join a dynamic and fast-paced environment and work with cross-functional teams to design, build and roll-out product...[trimmed]",
+   "departmentIdentifier": "a0852e0b-a0da-4fc2-bee2-b21277d76ce6",
+   "departmentName": "Product Management",
+   "excerpt": " We are looking for an experienced Product Manager who is passionate about building products that customers love. You will join a dynamic and fast-paced environment and work with cross-functional teams to design, build and roll-out products that deliver the company’s vision and strategy.Your respons...[trimmed]",
+   "jobLocations": [
+    {
+     "id": 70,
+     "name": "Bengaluru",
+     "city": "Bengaluru",
+     "state": "KA",
+     "countryCode": "IN",
+     "countryName": "India"
+    }
+   ],
+   "jobType": 2,
+   "experience": "4+",
+   "jobNumber": "KEKA/1444",
+   "salaryRange": {
+    "currency": "INR",
+    "salaryPeriod": 0,
+    "cultureInfo": "en-IN"
+   },
+   "salaryRangeFormat": "",
+   "publishedOn": "2026-10-09T05:54:08.447Z",
+   "publishedSinceDays": 0,
+   "skillNames": []
+  },
+  {
+   "id": 142820,
+   "title": "Lead Product Manager- HCM",
+   "description": "<div><strong>About the Role</strong></div><div><br></div><div>As the LPM    for CoreHRMS, you will    own    the    strategic    charter across CoreHRMS, Time    &amp;    Attendance, and Compliance pods.    This    is    not    just    about    solving module-level    problems but    shaping    how ...[trimmed]",
+   "departmentIdentifier": "a0852e0b-a0da-4fc2-bee2-b21277d76ce6",
+   "departmentName": "Product Management",
+   "excerpt": "About the RoleAs the LPM    for CoreHRMS, you will    own    the    strategic    charter across CoreHRMS, Time    &amp;    Attendance, and Compliance pods.    This    is    not    just    about    solving module-level    problems but    shaping    how    employee    lifecycle,    policies,    and   ...[trimmed]",
+   "jobLocations": [
+    {
+     "id": 70,
+     "name": "Bengaluru",
+     "city": "Bengaluru",
+     "state": "KA",
+     "countryCode": "IN",
+     "countryName": "India"
+    }
+   ],
+   "jobType": 2,
+   "experience": "10+",
+   "jobNumber": "KEKA/1434",
+   "salaryRange": {
+    "currency": "INR",
+    "salaryPeriod": 0,
+    "cultureInfo": "en-IN"
+   },
+   "salaryRangeFormat": "",
+   "publishedOn": "2026-10-07T01:16:00.83Z",
+   "publishedSinceDays": 2,
+   "skillNames": [
+    "COMMUNICATION SKILLS",
+    "Cross-functional Collaboration",
+    "Problem-Solving",
+    "PRODUCT STRATEGY",
+    "LEADERSHIP",
+    "Product Development",
+    "Market Analysis",
+    "Roadmapping",
+    "STAKEHOLDER MANAGEMENT"
+   ]
+  }
+ ]
+}

@@ -58,7 +58,16 @@ def start_or_find_run(args, job_id):
                       f"(< {args.min_interval_hours:g} h); the next run ingests the new files")
                 return (active_runs[0]["run_id"], "active") if active_runs else (None, "none")
 
-    run_id = api("POST", "/api/2.2/jobs/run-now", json={"job_id": job_id})["run_id"]
+    try:
+        run_id = api("POST", "/api/2.2/jobs/run-now", json={"job_id": job_id})["run_id"]
+    except RuntimeError as exc:
+        # Free Edition pauses new runs account-wide (e.g. over its compute allowance): not a scraper failure.
+        # The uploaded files stay on the volume and the next allowed run ingests them (Auto Loader).
+        if "FEATURE_DISABLED" not in str(exc):
+            raise
+        print(f"::warning::Databricks is not accepting new runs right now (FEATURE_DISABLED); the uploaded files are "
+              f"kept and ingested by the next run. {str(exc)[:200]}")
+        return None, "paused"
     print(f"[RUN] job {args.job_name} id={job_id} run_id={run_id} ({len(active_runs)} active before) {host()}/jobs/{job_id}/runs/{run_id}")
     return run_id, "started"
 
@@ -112,6 +121,9 @@ def main():
         raise RuntimeError(f"No Databricks job named {args.job_name!r}; deploy it with databricks/jobs/deploy_job.py")
 
     run_id, chosen = start_or_find_run(args, job_id)
+    if chosen == "paused":
+        write_output(run_id="", result="PAUSED")
+        return 0
     if not args.wait:
         write_output(run_id=run_id, result="STARTED" if chosen == "started" else "NONE")
         return 0

@@ -39,6 +39,7 @@ import { TRACKED_CSV_COLUMNS, downloadCsv, toCsv, trackedCsvFilename } from '../
 import { PROFILE_LIMITS } from '../utils/entries'
 import { skillCounts as countSkills } from '../utils/fit'
 import { caughtUpText, endOfListText } from '../utils/schedule'
+import { sourceLabel } from '../utils/sources'
 import {
   countOpenWithoutSwipe, readAutoAdvance, readExpiringCollapsed, readSwipePeekDone, readSwipeRightApplies, readSwipeTipShown,
   readSwipeUsed, readView, recordOpened, saveExpiringCollapsed, saveSwipePeekDone, saveSwipeTipShown, saveView,
@@ -88,6 +89,7 @@ function chipValue(key, value) {
   if (key === 'maxYears') return value === '0' ? 'Fresher' : `≤ ${value} yrs`
   if (key === 'workMode') return WORK_MODE_LABELS[value] || value
   if (key === 'employment') return EMPLOYMENT_LABELS[value] || value
+  if (key === 'source') return sourceLabel(value)
   return value
 }
 
@@ -107,7 +109,7 @@ function emptyMessage({ tab, narrowed, scope, postedWithin, muteOnly, caughtUp, 
   if (postedWithin) {
     const e = Number(expiring) || 0
     return {
-      title: postedWithin === '48' ? 'Nothing new in the last 2 days' : 'Nothing new in the last 24 hours',
+      title: postedWithin === '72' ? 'Nothing new in the last 3 days' : 'Nothing new in the last 24 hours',
       text: e > 0 ? `Older jobs are hidden (${e} disappear tonight).` : 'Older jobs are hidden.',
       action: 'older',
     }
@@ -115,11 +117,11 @@ function emptyMessage({ tab, narrowed, scope, postedWithin, muteOnly, caughtUp, 
   if (scope === 'match') {
     return {
       title: 'No jobs for your roles yet',
-      text: `Nothing in your roles with fit ${MATCH_MIN_FIT}+ right now. New jobs arrive with the next update (every ~4 hours).`,
+      text: `Nothing in your roles with fit ${MATCH_MIN_FIT}+ right now. New jobs arrive with the next update (every ~6 hours).`,
       action: 'everything',
     }
   }
-  return { title: 'No jobs yet', text: 'Jobs appear here after the next update (every ~4 hours).' }
+  return { title: 'No jobs yet', text: 'Jobs appear here after the next update (every ~6 hours).' }
 }
 
 export function JobsPage() {
@@ -816,7 +818,7 @@ export function JobsPage() {
           setSelectedJob(row)
           recordOpen()
         } else {
-          showToast("This job has disappeared. Jobs you haven't saved disappear 2 days after posting.")
+          showToast("This job has disappeared. Jobs you haven't saved disappear 7 days after posting.")
           closeJobUrl()
         }
       })

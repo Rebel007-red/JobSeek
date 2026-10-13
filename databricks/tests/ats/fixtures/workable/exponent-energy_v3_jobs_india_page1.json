@@ -1,0 +1,336 @@
+{
+ "nextPage": "WzE3ODk2MDMyMDAwMDAsNjEwNTcxN10=",
+ "results": [
+  {
+   "id": 6178726,
+   "shortcode": "2A8AC1C0F1",
+   "title": "APQP Program Quality Engineer (Battery, Product & Integration)",
+   "remote": false,
+   "location": {
+    "city": "Bengaluru",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Karnataka"
+   },
+   "locations": [
+    {
+     "city": "Bengaluru",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Karnataka"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-10-06T00:00:00.000Z",
+   "type": "full",
+   "language": "en",
+   "department": [
+    "New Product Development"
+   ],
+   "accountUid": "b1959def-bbe8-477e-84e8-b6c1e9153c1c",
+   "approvalStatus": "approved",
+   "workplace": "on_site"
+  },
+  {
+   "id": 6178753,
+   "shortcode": "1D1AD08491",
+   "title": "APQP Program Quality Engineer (Charger)",
+   "remote": false,
+   "location": {
+    "city": "Bengaluru",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Karnataka"
+   },
+   "locations": [
+    {
+     "city": "Bengaluru",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Karnataka"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-10-06T00:00:00.000Z",
+   "type": "full",
+   "language": "en",
+   "department": [
+    "New Product Development"
+   ],
+   "accountUid": "b1959def-bbe8-477e-84e8-b6c1e9153c1c",
+   "approvalStatus": "approved",
+   "workplace": "on_site"
+  },
+  {
+   "id": 6178788,
+   "shortcode": "210A1B63C6",
+   "title": "Product Integration Quality Engineer",
+   "remote": false,
+   "location": {
+    "city": "Bengaluru",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Karnataka"
+   },
+   "locations": [
+    {
+     "city": "Bengaluru",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Karnataka"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-10-06T00:00:00.000Z",
+   "type": "full",
+   "language": "en",
+   "department": [
+    "New Product Development"
+   ],
+   "accountUid": "b1959def-bbe8-477e-84e8-b6c1e9153c1c",
+   "approvalStatus": "approved",
+   "workplace": "on_site"
+  },
+  {
+   "id": 6178841,
+   "shortcode": "601C0BAE1D",
+   "title": "Process Quality Engineer (Charger)",
+   "remote": false,
+   "location": {
+    "city": "Bengaluru",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Karnataka"
+   },
+   "locations": [
+    {
+     "city": "Bengaluru",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Karnataka"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-10-06T00:00:00.000Z",
+   "type": "full",
+   "language": "en",
+   "department": [
+    "New Product Development"
+   ],
+   "accountUid": "b1959def-bbe8-477e-84e8-b6c1e9153c1c",
+   "approvalStatus": "approved",
+   "workplace": "on_site"
+  },
+  {
+   "id": 6178885,
+   "shortcode": "05DF108C1F",
+   "title": "Design Quality Engineer (Charger)",
+   "remote": false,
+   "location": {
+    "city": "Bengaluru",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Karnataka"
+   },
+   "locations": [
+    {
+     "city": "Bengaluru",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Karnataka"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-10-06T00:00:00.000Z",
+   "type": "full",
+   "language": "en",
+   "department": [
+    "New Product Development"
+   ],
+   "accountUid": "b1959def-bbe8-477e-84e8-b6c1e9153c1c",
+   "approvalStatus": "approved",
+   "workplace": "on_site"
+  },
+  {
+   "id": 6178914,
+   "shortcode": "22160DBBD1",
+   "title": "Build Quality Engineer (Battery, Product & Integration)",
+   "remote": false,
+   "location": {
+    "city": "Bengaluru",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Karnataka"
+   },
+   "locations": [
+    {
+     "city": "Bengaluru",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Karnataka"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-10-06T00:00:00.000Z",
+   "type": "full",
+   "language": "en",
+   "department": [
+    "New Product Development"
+   ],
+   "accountUid": "b1959def-bbe8-477e-84e8-b6c1e9153c1c",
+   "approvalStatus": "approved",
+   "workplace": "on_site"
+  },
+  {
+   "id": 6178940,
+   "shortcode": "AF8FFFAF06",
+   "title": "Build Quality Engineer (Charger)",
+   "remote": false,
+   "location": {
+    "city": "Bengaluru",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Karnataka"
+   },
+   "locations": [
+    {
+     "city": "Bengaluru",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Karnataka"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-10-06T00:00:00.000Z",
+   "type": "full",
+   "language": "en",
+   "department": [
+    "New Product Development"
+   ],
+   "accountUid": "b1959def-bbe8-477e-84e8-b6c1e9153c1c",
+   "approvalStatus": "approved",
+   "workplace": "on_site"
+  },
+  {
+   "id": 6173678,
+   "shortcode": "0CDE490243",
+   "title": "Lead - Mechanical Design Engineer",
+   "remote": false,
+   "location": {
+    "city": "Bengaluru",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Karnataka"
+   },
+   "locations": [
+    {
+     "city": "Bengaluru",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Karnataka"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-10-05T00:00:00.000Z",
+   "type": "full",
+   "language": "en",
+   "department": [
+    "RnD Engineering"
+   ],
+   "accountUid": "b1959def-bbe8-477e-84e8-b6c1e9153c1c",
+   "approvalStatus": "approved",
+   "workplace": "on_site"
+  },
+  {
+   "id": 6130179,
+   "shortcode": "E90732EE8A",
+   "title": "Graduate Engineer Trainee",
+   "remote": false,
+   "location": {
+    "city": "Bengaluru",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Karnataka"
+   },
+   "locations": [
+    {
+     "city": "Bengaluru",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Karnataka"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-09-22T00:00:00.000Z",
+   "type": "full",
+   "language": "en",
+   "department": [
+    "After Sales"
+   ],
+   "accountUid": "b1959def-bbe8-477e-84e8-b6c1e9153c1c",
+   "approvalStatus": "approved",
+   "workplace": "on_site"
+  },
+  {
+   "id": 6105717,
+   "shortcode": "BDF8898B9C",
+   "title": "Team Lead - Customer Support",
+   "remote": false,
+   "location": {
+    "city": "Bengaluru",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Karnataka"
+   },
+   "locations": [
+    {
+     "city": "Bengaluru",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Karnataka"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-09-17T00:00:00.000Z",
+   "type": "full",
+   "language": "en",
+   "department": [
+    "Operations"
+   ],
+   "accountUid": "b1959def-bbe8-477e-84e8-b6c1e9153c1c",
+   "approvalStatus": "approved",
+   "workplace": "on_site"
+  }
+ ],
+ "total": 49
+}

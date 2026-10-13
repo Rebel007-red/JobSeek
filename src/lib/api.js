@@ -217,7 +217,7 @@ export const EXPIRING_MAX = 10
 const EXPIRING_IGNORED = ['tab', 'scope', 'postedWithin', 'offset', 'closed', 'followUp', 'stage', 'muteView']
 const MUTE_FIELDS = { companies: 'muted_companies', titleWords: 'muted_title_words', levels: 'muted_levels' }
 // Glossary words: a job "disappears" from the list; the posting itself may still be open
-const EXPIRED_MESSAGE = "this job just disappeared (jobs you haven't saved or applied to disappear 2 days after posting). Refresh to see the current list."
+const EXPIRED_MESSAGE = "this job just disappeared (jobs you haven't saved or applied to disappear 7 days after posting). Refresh to see the current list."
 
 async function write(action, params, stale) {
   const payload = await callApi(action, params)

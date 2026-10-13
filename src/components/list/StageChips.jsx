@@ -3,7 +3,7 @@ import { DownloadIcon } from '../common/icons'
 
 // The Applied tab's chips: All · each stage · Follow up · Older postings (last), with counts from the summary (stages,
 // follow_up, closed). They set one of the stage / followUp / closed filters; All clears them. Older postings = closed
-// 'only': applications to postings that left the job snapshot (over 2 days old), which may still be open. onExport
+// 'only': applications to postings that left the job snapshot (over 7 days old), which may still be open. onExport
 // downloads the CSV.
 export function StageChips({ summary, filters, onChange, onExport, exporting = false }) {
   const ready = summary.applied !== undefined && summary.applied !== null
@@ -32,7 +32,7 @@ export function StageChips({ summary, filters, onChange, onExport, exporting = f
       label: 'Older postings',
       count: count(summary.closed),
       active: filters.closed === 'only',
-      title: 'Applications to postings over 2 days old; they may still be open',
+      title: 'Applications to postings over 7 days old; they may still be open',
       patch: { stage: '', followUp: false, closed: filters.closed === 'only' ? '' : 'only' },
     },
   ]

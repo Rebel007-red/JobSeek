@@ -1,10 +1,13 @@
 name: LinkedIn Databricks Scraper
 
+# Manual runs only (Actions > LinkedIn Databricks Scraper > Run workflow): the owner stopped the scheduled LinkedIn
+# searches. The ATS Scrapers workflow (databricks-scrapers.yml) now triggers the pipeline every 6 hours. LinkedIn jobs a
+# user tracks stay; the others age out with the 7-day rule (04_gold_cleanup).
 # scrape + upload -> send app user data to Databricks -> run the pipeline and wait -> publish the results to Supabase.
-# Databricks never gets a Supabase credential: user data and results move as files in the ops volume, carried here.
+# A run within 3 h of the last pipeline run does not start another one (trigger_job.py --min-interval-hours 3): its CSV
+# is ingested by the next scheduled ATS run. Databricks never gets a Supabase credential: user data and results move as
+# files in the ops volume, carried here.
 on:
-  schedule:
-    - cron: '0 */4 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -72,15 +75,15 @@ jobs:
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
         run: python databricks/jobs/sync_user_data.py
 
-      # Manual dispatches within 3 h of the last pipeline run don't start a second one (they wait for an active run, if
-      # any); scheduled runs always trigger (cron drift + scrape time can bring two scheduled triggers closer than 3 h)
+      # Within 3 h of the last pipeline run (e.g. a scheduled ATS run) no second run is started: it waits for an active
+      # run, if any, and otherwise the next ATS run ingests this CSV (Auto Loader)
       - name: Run the Databricks pipeline and wait
         env:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
         run: >-
           python databricks/jobs/trigger_job.py
-          --min-interval-hours "${{ github.event_name == 'schedule' && '0' || '3' }}"
+          --min-interval-hours 3
           --wait --wait-timeout-minutes 100
 
   publish:

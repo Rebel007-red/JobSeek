@@ -1,0 +1,127 @@
+{
+ "_about": "Board URL -> companies columns. Pinned by databricks/tests/ats/test_base.py (adapter.source_columns) and by the form's test in src/ (same file). expect null = rejected.",
+ "cases": [
+  {
+   "input": "https://apply.workable.com/smartstream/",
+   "expect": {
+    "slug": "smartstream",
+    "api_url": "https://apply.workable.com/api/v1/widget/accounts/smartstream?details=true"
+   }
+  },
+  {
+   "input": "https://apply.workable.com/2070health/j/58DF5D1CD5/",
+   "expect": {
+    "slug": "2070health",
+    "api_url": "https://apply.workable.com/api/v1/widget/accounts/2070health?details=true"
+   }
+  },
+  {
+   "input": "https://apply.workable.com/exponent-energy/j/2A8AC1C0F1/apply",
+   "expect": {
+    "slug": "exponent-energy",
+    "api_url": "https://apply.workable.com/api/v1/widget/accounts/exponent-energy?details=true"
+   }
+  },
+  {
+   "input": "https://apply.workable.com/YouTrip",
+   "expect": {
+    "slug": "youtrip",
+    "api_url": "https://apply.workable.com/api/v1/widget/accounts/youtrip?details=true"
+   }
+  },
+  {
+   "input": "https://leena-ai.workable.com/",
+   "expect": {
+    "slug": "leena-ai",
+    "api_url": "https://apply.workable.com/api/v1/widget/accounts/leena-ai?details=true"
+   }
+  },
+  {
+   "input": "https://zifo.workable.com/jobs/123456",
+   "expect": {
+    "slug": "zifo",
+    "api_url": "https://apply.workable.com/api/v1/widget/accounts/zifo?details=true"
+   }
+  },
+  {
+   "input": "https://apply.workable.com/api/v1/widget/accounts/1kosmos",
+   "expect": {
+    "slug": "1kosmos",
+    "api_url": "https://apply.workable.com/api/v1/widget/accounts/1kosmos?details=true"
+   }
+  },
+  {
+   "input": "https://apply.workable.com/api/v1/widget/accounts/smartstream?details=true",
+   "expect": {
+    "slug": "smartstream",
+    "api_url": "https://apply.workable.com/api/v1/widget/accounts/smartstream?details=true"
+   }
+  },
+  {
+   "input": "https://apply.workable.com/api/v3/accounts/smartstream/jobs",
+   "expect": {
+    "slug": "smartstream",
+    "api_url": "https://apply.workable.com/api/v1/widget/accounts/smartstream?details=true"
+   }
+  },
+  {
+   "input": "https://www.workable.com/api/accounts/2070health?details=true",
+   "expect": {
+    "slug": "2070health",
+    "api_url": "https://apply.workable.com/api/v1/widget/accounts/2070health?details=true"
+   }
+  },
+  {
+   "input": "apply.workable.com/zifo",
+   "expect": {
+    "slug": "zifo",
+    "api_url": "https://apply.workable.com/api/v1/widget/accounts/zifo?details=true"
+   }
+  },
+  {
+   "input": "exponent-energy",
+   "expect": {
+    "slug": "exponent-energy",
+    "api_url": "https://apply.workable.com/api/v1/widget/accounts/exponent-energy?details=true"
+   }
+  },
+  {
+   "input": "https://apply.workable.com/j/58DF5D1CD5",
+   "expect": {
+    "slug": "",
+    "api_url": "https://apply.workable.com/j/58DF5D1CD5"
+   }
+  },
+  {
+   "input": "https://apply.workable.com/j/58DF5D1CD5/apply?utm_source=x",
+   "expect": {
+    "slug": "",
+    "api_url": "https://apply.workable.com/j/58DF5D1CD5"
+   }
+  },
+  {
+   "input": "https://jobs.workable.com/view/abc123/engineer-in-bengaluru-at-acme",
+   "expect": null
+  },
+  {
+   "input": "https://jobs.workable.com/company/xyz/acme",
+   "expect": null
+  },
+  {
+   "input": "https://www.workable.com/",
+   "expect": null
+  },
+  {
+   "input": "https://apply.workable.com/",
+   "expect": null
+  },
+  {
+   "input": "https://example.com/careers",
+   "expect": null
+  },
+  {
+   "input": "",
+   "expect": null
+  }
+ ]
+}

@@ -1,9 +1,9 @@
 name: Scrape to Databricks volume
-description: Run one databricks/ scraper, upload its CSV to the Databricks landing volume and save it as an artifact.
+description: Run one databricks/ scraper, upload its CSV(s) to the Databricks landing volume and save them as an artifact.
 
-# Scrape + upload only (plus the scrape report to Supabase). The LinkedIn workflow starts the pipeline in its own job
-# (sync user data, run and wait, publish to Supabase); the Workday / Greenhouse uploads are ingested by the next
-# pipeline run.
+# Scrape + upload only (plus the scrape report to Supabase). The calling workflow starts the pipeline in its own job
+# (sync user data, run and wait, publish to Supabase): the ATS Scrapers workflow after its Workday, Greenhouse and API
+# board scrapes, the LinkedIn workflow (manual runs only) after its search.
 
 # Composite actions can't read the secrets context, so the calling step passes secrets in as inputs.
 # Each secret is handed only to the step that used it before this action existed.
@@ -11,12 +11,26 @@ inputs:
   scraper:
     description: Scraper script to run, e.g. databricks/workday.py
     required: true
+  scraper-args:
+    description: Extra command-line arguments for the scraper, e.g. --all-api (split on spaces; no quoting)
+    required: false
+    default: ''
   csv-pattern:
     description: Glob of the CSV(s) the scraper writes, e.g. databricks/output/workday*.csv
     required: true
+  upload-all:
+    description: >-
+      'true' uploads every file matching csv-pattern (ats_scrape.py writes one CSV per ATS) and treats no match as
+      nothing to upload; the default uploads the newest match and fails when there is none
+    required: false
+    default: 'false'
   artifact-name:
     description: Name of the uploaded CSV artifact
     required: true
+  install-browser:
+    description: "'false' skips the Playwright Chromium install (scrapers that only make HTTP requests)"
+    required: false
+    default: 'true'
   supabase-anon-key:
     description: secrets.VITE_SUPABASE_ANON_KEY (scraper step)
     required: true
@@ -33,7 +47,9 @@ inputs:
     description: secrets.DATABRICKS_TOKEN (upload step)
     required: true
   scraper-reads-databricks:
-    description: "'true' also gives the scraper the Databricks credentials (linkedin.py reads the user roles and seen job id files from the ops volume)"
+    description: >-
+      'true' also gives the scraper the Databricks credentials: it reads pipeline config files from the ops volume
+      (linkedin.py the user roles and seen job ids, workday.py and ats_scrape.py the seen job keys)
     required: false
     default: 'false'
 
@@ -55,42 +71,67 @@ runs:
         pip install -r databricks/requirements.txt
 
     - name: Install Playwright browser
+      if: inputs.install-browser == 'true'
       shell: bash
       run: |
         python -m playwright install --with-deps chromium
 
-    # Two copies of the scraper step so the Databricks credentials only reach scrapers that need them
+    # Two copies of the scraper step so the Databricks credentials only reach scrapers that need them.
+    # Inputs reach the shell as environment variables (never pasted into the script); SCRAPER_ARGS is split on spaces.
     - name: Run scraper
       if: inputs.scraper-reads-databricks != 'true'
       shell: bash
       env:
+        SCRAPER: ${{ inputs.scraper }}
+        SCRAPER_ARGS: ${{ inputs.scraper-args }}
         VITE_SUPABASE_ANON_KEY: ${{ inputs.supabase-anon-key }}
         SUPABASE_SERVICE_ROLE_KEY: ${{ inputs.supabase-service-role-key }}
         SUPABASE_URL: ${{ inputs.supabase-url }}
       run: |
-        python ${{ inputs.scraper }}
+        # shellcheck disable=SC2086
+        python "$SCRAPER" $SCRAPER_ARGS
 
     - name: Run scraper (with Databricks access)
       if: inputs.scraper-reads-databricks == 'true'
       shell: bash
       env:
+        SCRAPER: ${{ inputs.scraper }}
+        SCRAPER_ARGS: ${{ inputs.scraper-args }}
         VITE_SUPABASE_ANON_KEY: ${{ inputs.supabase-anon-key }}
         SUPABASE_SERVICE_ROLE_KEY: ${{ inputs.supabase-service-role-key }}
         SUPABASE_URL: ${{ inputs.supabase-url }}
         DATABRICKS_HOST: ${{ inputs.databricks-host }}
         DATABRICKS_TOKEN: ${{ inputs.databricks-token }}
       run: |
-        python ${{ inputs.scraper }}
+        # shellcheck disable=SC2086
+        python "$SCRAPER" $SCRAPER_ARGS
 
+    # upload_to_volume.py uploads the newest match of each --pattern; with upload-all every matching file is passed as
+    # its own pattern (an exact path matches only itself), and no match at all is not an error
     - name: Upload CSV to Databricks volume
       shell: bash
       env:
+        CSV_PATTERN: ${{ inputs.csv-pattern }}
+        UPLOAD_ALL: ${{ inputs.upload-all }}
         DATABRICKS_HOST: ${{ inputs.databricks-host }}
         DATABRICKS_TOKEN: ${{ inputs.databricks-token }}
       run: |
-        python databricks/upload_to_volume.py \
-          --volume /Volumes/jobseeker/default/scrapes \
-          --pattern "${{ inputs.csv-pattern }}"
+        args=()
+        if [ "$UPLOAD_ALL" = "true" ]; then
+          shopt -s nullglob
+          # shellcheck disable=SC2206
+          files=( $CSV_PATTERN )
+          shopt -u nullglob
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "[INFO] no files for $CSV_PATTERN"
+            exit 0
+          fi
+          for file in "${files[@]}"; do args+=(--pattern "$file"); done
+          echo "[INFO] uploading ${#files[@]} file(s) for $CSV_PATTERN"
+        else
+          args+=(--pattern "$CSV_PATTERN")
+        fi
+        python databricks/upload_to_volume.py --volume /Volumes/jobseeker/default/scrapes "${args[@]}"
 
     # always() here covers a failure in any step above, i.e. everything after checkout
     - name: Save CSV artifact
@@ -103,13 +144,15 @@ runs:
         retention-days: 7
 
     # Run summary for Settings > System and the company health badges (app.scrape_runs / app.scrape_companies). Also
-    # after a failed or crashed scrape: without a report file it records the run as crashed. Never fails the job.
+    # after a failed or crashed scrape: without a report file it records the run as crashed. For ats_scrape.py it sends
+    # the report of every ATS the run's manifest lists as started. Never fails the job.
     - name: Record scrape report
       if: always()
       continue-on-error: true
       shell: bash
       env:
+        SCRAPER: ${{ inputs.scraper }}
         SUPABASE_URL: ${{ inputs.supabase-url }}
         SUPABASE_SERVICE_ROLE_KEY: ${{ inputs.supabase-service-role-key }}
       run: |
-        python databricks/jobs/record_scrape_report.py --scraper "${{ inputs.scraper }}"
+        python databricks/jobs/record_scrape_report.py --scraper "$SCRAPER"

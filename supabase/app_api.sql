@@ -119,7 +119,14 @@ CREATE OR REPLACE FUNCTION app.c_mute_word_re() RETURNS text LANGUAGE sql IMMUTA
 CREATE OR REPLACE FUNCTION app.c_max_bulk_keys() RETURNS int LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT 100 $$;
 -- keep in sync: src/utils/job.js JOB_DELETE_AFTER_DAYS (an untracked job is deleted at the first publish on or after UTC
 -- midnight of its job date + this + 1 days, so from job date + this days on it is "expiring")
-CREATE OR REPLACE FUNCTION app.c_job_delete_after_days() RETURNS int LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT 2 $$;
+CREATE OR REPLACE FUNCTION app.c_job_delete_after_days() RETURNS int LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT 7 $$;
+-- keep in sync: databricks/ats/registry.py ALL_SOURCES (every scrape source: the companies' ats_type, the CSV prefix, the
+-- scrape report source and app.jobs.source; pinned in src/utils/sql_constants.test.js). Defined in app_schema.sql too
+-- (the CHECK on app.scrape_runs.source calls it), with the same body.
+CREATE OR REPLACE FUNCTION app.c_scrape_sources() RETURNS text[] LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT ARRAY[
+  'workday', 'greenhouse', 'linkedin', 'lever', 'ashby', 'smartrecruiters', 'workable', 'oracle', 'successfactors',
+  'darwinbox', 'keka'
+]::text[] $$;
 -- keep in sync: most rows of the expiring list (the Expiring tonight strip; pinned in src/utils/sql_constants.test.js)
 CREATE OR REPLACE FUNCTION app.c_expiring_max() RETURNS int LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT 10 $$;
 -- keep in sync: src/hooks/useVisit.js VISIT_GAP_MS (a ping after this many minutes without activity is a new visit)
@@ -2794,7 +2801,7 @@ BEGIN
     PERFORM app.fail('Unknown report format');
   END IF;
   v_source := CASE WHEN jsonb_typeof(v_report -> 'source') = 'string' THEN v_report ->> 'source' END;
-  IF v_source IS NULL OR v_source NOT IN ('workday', 'greenhouse', 'linkedin') THEN
+  IF v_source IS NULL OR v_source <> ALL (app.c_scrape_sources()) THEN
     PERFORM app.fail('Invalid source');
   END IF;
   v_run := CASE WHEN jsonb_typeof(v_report -> 'run') = 'object' THEN v_report -> 'run' ELSE '{}'::jsonb END;

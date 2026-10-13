@@ -12,7 +12,7 @@ const SCOPE_TITLES = {
 
 // "Which jobs": the scope (For you / Everything) and the time window of the Inbox, set together. Sits at the left end of
 // the chip row on the Inbox only. value: { scope, postedWithin }; onChange gets the chosen { scope, postedWithin }.
-// The three presets are always listed; any other state (from a link) shows as its own checked item. The menu is
+// The four presets are always listed; any other state (from a link) shows as its own checked item. The menu is
 // rendered into <body> (fixed, under its button), because the chip row scrolls sideways on phones and would clip it.
 export function ScopeMenu({ value, onChange }) {
   const [open, setOpen] = useState(false)

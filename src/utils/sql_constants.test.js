@@ -190,3 +190,18 @@ test('trust release constants: expiry, the expiring list, visits, activity reten
     assert.ok(!/>= 70\b/.test(body), `app.${name} repeats 70`)
   }
 })
+
+test('scrape sources: app.c_scrape_sources() in both SQL files = src/utils/sources.js = databricks/ats/registry.py', async () => {
+  const { SCRAPE_SOURCES } = await import('./sources.js')
+  assert.deepEqual(textArray('scrape_sources'), SCRAPE_SOURCES) // sources.test.js pins SCRAPE_SOURCES to the registry
+  const inSchema = /CREATE OR REPLACE FUNCTION app\.c_scrape_sources\(\)[^$]*\$\$\s*SELECT\s+ARRAY\[([\s\S]*?)\]::text\[\]\s*\$\$;/.exec(SCHEMA)
+  assert.ok(inSchema, 'app.c_scrape_sources() missing from app_schema.sql (the CHECK on app.scrape_runs.source calls it)')
+  assert.deepEqual(quoted(inSchema[1]), SCRAPE_SOURCES)
+  assert.match(SCHEMA, /CONSTRAINT scrape_runs_source_check CHECK \(source = ANY \(app\.c_scrape_sources\(\)\)\)/)
+  const record = SQL.slice(SQL.indexOf('CREATE OR REPLACE FUNCTION public.pipeline_record_scrape('))
+  assert.match(record.slice(0, record.indexOf('$$;')), /v_source <> ALL \(app\.c_scrape_sources\(\)\)/)
+  // record_scrape_report.py keeps its own copy (SOURCES); test_scrape_report.py pins it to the registry
+  const recorder = source('../../databricks/jobs/record_scrape_report.py')
+  const tuple = /^SOURCES = \(([\s\S]*?)\)/m.exec(recorder)
+  if (tuple) assert.deepEqual(quoted(tuple[1].replaceAll('"', "'")), SCRAPE_SOURCES, 'record_scrape_report.py SOURCES')
+})

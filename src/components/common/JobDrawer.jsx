@@ -5,6 +5,7 @@ import { useDialogFocus } from '../../hooks/useDialogFocus'
 import { PROFILE_LIMITS } from '../../utils/entries'
 import { formatDate, formatRelativeAge, parseDay, postedAgo } from '../../utils/job'
 import { recordOpened } from '../../utils/viewPref'
+import { sourceLabel } from '../../utils/sources'
 import {
   APPLIED_STATUSES, EMPLOYMENT_LABELS, FIT_PARTS, WORK_MODE_LABELS, experienceLabel, fitLabel, formatDescription, isApplied, jobDate,
   jobUrl, statusLabel,
@@ -249,7 +250,7 @@ export function JobDrawer({
   const modeLabel = SUBTITLE_MODES.includes(job.work_mode) ? WORK_MODE_LABELS[job.work_mode] : null
   // left out when the location already says it ("Remote · Remote")
   const mode = modeLabel && !String(job.location || '').toLowerCase().includes(modeLabel.toLowerCase()) ? modeLabel : null
-  // An older posting (over 2 days, is_active false) gets a neutral "Posted 5 days ago": it may still be open
+  // An older posting (over 7 days, is_active false) gets a neutral "Posted 5 days ago": it may still be open
   const age = job.is_active === false ? postedAgo(job) : date ? `${formatRelativeAge(date)} · ${formatDate(date)}` : null
   const inlineMessage = message.key === jobKey ? message.text : ''
   // An applied job shows its stage ("Interviewing"); plain applied (or an older row without a status) shows "Applied".
@@ -459,7 +460,7 @@ export function JobDrawer({
                   <DetailRow label="Employment" value={EMPLOYMENT_LABELS[job.employment_kind] || job.employment_type} />
                   <DetailRow label="Function" value={extra?.job_function} />
                   <DetailRow label="Industry" value={extra?.industries} />
-                  <DetailRow label="Source" value={job.source} />
+                  <DetailRow label="Source" value={job.source ? sourceLabel(job.source) : job.source} />
                   <DetailRow label="Posted" value={formatDate(job.posted_date)} />
                   <DetailRow label="First found" value={formatDate(job.first_seen_at)} />
                   <DetailRow label="Applied on" value={applied ? formatDate(job.applied_at) : null} />

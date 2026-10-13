@@ -63,7 +63,7 @@ export function useJobList({ filters, scope, sort, tab }) {
     try {
       const rows = await api.jobs(
         // The muted view lists every posting (not groups), so it matches the "N muted" count. "Expiring first" lists
-        // whatever the time window (the jobs that disappear tonight are 2 days old, outside "last 24h")
+        // whatever the time window (the jobs that disappear tonight are 7 days old, outside "last 24h" and "last 3 days")
         {
           ...filters, scope, sort, tab, limit: PAGE_SIZE, offset,
           ...(filters.muteView === 'only' ? { collapse: false } : {}),

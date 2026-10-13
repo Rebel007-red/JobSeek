@@ -299,10 +299,18 @@ CREATE TABLE IF NOT EXISTS app.pipeline_runs (
 );
 COMMENT ON COLUMN app.pipeline_runs.tasks IS '[{task_key, state, result, started_at, duration_s}]';
 
+-- keep in sync: databricks/ats/registry.py ALL_SOURCES (every scrape source: the companies' ats_type, the CSV prefix, the
+-- scrape report source and app.jobs.source; pinned in src/utils/sql_constants.test.js). Defined in app_api.sql too
+-- (with the same body); here because the CHECK on app.scrape_runs.source calls it.
+CREATE OR REPLACE FUNCTION app.c_scrape_sources() RETURNS text[] LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT ARRAY[
+  'workday', 'greenhouse', 'linkedin', 'lever', 'ashby', 'smartrecruiters', 'workable', 'oracle', 'successfactors',
+  'darwinbox', 'keka'
+]::text[] $$;
+
 -- One row per scraper run (record_scrape_report.py; newest 30 per source)
 CREATE TABLE IF NOT EXISTS app.scrape_runs (
   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  source text NOT NULL CHECK (source IN ('workday', 'greenhouse', 'linkedin')),
+  source text NOT NULL CONSTRAINT scrape_runs_source_check CHECK (source = ANY (app.c_scrape_sources())),
   github_run_id text,
   github_run_attempt int,
   workflow text,
@@ -323,6 +331,69 @@ CREATE TABLE IF NOT EXISTS app.scrape_runs (
   -- NULLS NOT DISTINCT: a local run (no GitHub ids) re-recorded replaces its row instead of adding one
   UNIQUE NULLS NOT DISTINCT (source, github_run_id, github_run_attempt)
 );
+
+-- Before the ATS scrapers the CHECK listed workday / greenhouse / linkedin: replaced by the list above (idempotent; a
+-- constraint that already calls app.c_scrape_sources() is left alone). NOT VALID, then validated: no long lock.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                 WHERE conrelid = 'app.scrape_runs'::regclass AND conname = 'scrape_runs_source_check'
+                   AND pg_get_constraintdef(oid) LIKE '%c_scrape_sources()%') THEN
+    ALTER TABLE app.scrape_runs DROP CONSTRAINT IF EXISTS scrape_runs_source_check;
+    ALTER TABLE app.scrape_runs ADD CONSTRAINT scrape_runs_source_check
+      CHECK (source = ANY (app.c_scrape_sources())) NOT VALID;
+    ALTER TABLE app.scrape_runs VALIDATE CONSTRAINT scrape_runs_source_check;
+  END IF;
+END
+$$;
+
+-- public.companies (Settings > Companies; created outside these files): an older allow-list CHECK on its ats_type
+-- (the deployed one lists workday, phenom, icims, oracle, successfactors, jsearch, linkedin, greenhouse, medpace,
+-- indeed) would refuse the new ATS types. A CHECK that names some sources but not all is replaced by
+-- companies_ats_type_check = every scrape source plus any ats_type rows already use (legacy rows such as 'indeed'
+-- stay valid; the scrapers ignore them). It is written as ARRAY['...'] so a later apply finds every source named and
+-- leaves it alone; a source added to app.c_scrape_sources() later replaces it again. Other CHECKs on ats_type (lower
+-- case, not empty) name no source and stay. Not allowed (another owner): a WARNING, and the rest of the apply goes on.
+DO $$
+DECLARE
+  c record;
+  v_dropped boolean := false;
+  v_names text;
+BEGIN
+  IF to_regclass('public.companies') IS NULL THEN
+    RETURN;
+  END IF;
+  FOR c IN SELECT conname, pg_get_constraintdef(oid) AS def FROM pg_constraint
+           WHERE conrelid = 'public.companies'::regclass AND contype = 'c'
+             AND pg_get_constraintdef(oid) LIKE '%ats_type%'
+  LOOP
+    IF EXISTS (SELECT 1 FROM unnest(app.c_scrape_sources()) AS s(name)
+               WHERE position(quote_literal(s.name) IN c.def) > 0)
+       AND EXISTS (SELECT 1 FROM unnest(app.c_scrape_sources()) AS s(name)
+                   WHERE position(quote_literal(s.name) IN c.def) = 0) THEN
+      BEGIN
+        EXECUTE format('ALTER TABLE public.companies DROP CONSTRAINT %I', c.conname);
+        RAISE NOTICE 'Dropped public.companies constraint % (%): it did not allow every scrape source', c.conname, c.def;
+        v_dropped := true;
+      EXCEPTION WHEN insufficient_privilege THEN
+        RAISE WARNING 'Could not drop public.companies constraint % (%): drop it by hand so the new ATS types can be added',
+          c.conname, c.def;
+      END;
+    END IF;
+  END LOOP;
+  IF v_dropped AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.companies'::regclass
+                                                             AND conname = 'companies_ats_type_check') THEN
+    EXECUTE 'SELECT string_agg(quote_literal(name), '', '' ORDER BY name) FROM (
+               SELECT unnest(app.c_scrape_sources()) AS name
+               UNION SELECT ats_type FROM public.companies WHERE ats_type IS NOT NULL) AS names'
+      INTO v_names;
+    EXECUTE format('ALTER TABLE public.companies ADD CONSTRAINT companies_ats_type_check '
+                   'CHECK (ats_type = ANY (ARRAY[%s]::text[])) NOT VALID', v_names);
+    ALTER TABLE public.companies VALIDATE CONSTRAINT companies_ats_type_check;
+    RAISE NOTICE 'Added public.companies constraint companies_ats_type_check: ats_type in (%)', v_names;
+  END IF;
+END
+$$;
 
 -- Latest scrape result per company (or LinkedIn search); rows not scraped for 30 days are deleted
 CREATE TABLE IF NOT EXISTS app.scrape_companies (

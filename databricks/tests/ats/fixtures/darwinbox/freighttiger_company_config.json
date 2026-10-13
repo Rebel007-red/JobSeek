@@ -1,0 +1,81 @@
+{
+ "_request": "GET https://freighttiger.darwinbox.in/ms/candidateapi/getCompanyConfig?companyId=main&is_preview=false",
+ "message": {
+  "company": {
+   "id": "",
+   "recruitment_enabled": true,
+   "onboarding_enabled": true,
+   "agent_builder_enabled": false,
+   "new_careers": true,
+   "is_preview": false,
+   "company_name": "Freight Tiger",
+   "subdomain": "freighttiger",
+   "tenant_id": "350",
+   "banner_text": "",
+   "custom_weblink": "",
+   "custom_weblink_alias": "",
+   "help_email": "",
+   "all_jobs_header_image": {},
+   "all_jobs_banner_text": "",
+   "languages": {},
+   "terms_url": "https://darwinbox.com/terms-of-use.php",
+   "terms_url_custom": "",
+   "is_pendo_enable_careers": "0",
+   "show_employer_benefits_jobdetailed": false,
+   "social_media_urls": {
+    "linkedIn": "",
+    "twitter": "",
+    "instagram": "",
+    "facebook": ""
+   },
+   "group_company_site": "",
+   "allJobsCount": 15,
+   "dynamic_background": false,
+   "dynamic_color": "#1676e2",
+   "dynamic_color_top": "linear-gradient(73deg, #115eb4, #1676e2, #1aa5c9)",
+   "is_country_of_residence": false,
+   "loginwithotp": "0",
+   "job_tile_permissions": {
+    "showPostedDate": false,
+    "showJobId": false,
+    "showDepartment": false,
+    "showLocation": true,
+    "showExperienceRange": true,
+    "showEmployeeType": true,
+    "showEmployeeSubType": false,
+    "salaryRange": false,
+    "legalEntities": false
+   },
+   "job_detail_permissions": {
+    "showPostedDate": true,
+    "showJobId": true,
+    "showDepartment": true,
+    "showLocation": true,
+    "showExperienceRange": true,
+    "showEmployeeType": true,
+    "showEmployeeSubType": true,
+    "salaryRange": true,
+    "legalEntities": false
+   },
+   "careers_filters": {
+    "department": "1",
+    "location": "1",
+    "experience": "1",
+    "employee_type": "1",
+    "functional_area": "0",
+    "capability": "0",
+    "job_tags": "1",
+    "country": "1",
+    "job_title": "1"
+   },
+   "date_time_format": {
+    "dateFormat": "DD-MM-YYYY",
+    "timeFormat": "24",
+    "timezone": "Asia/Kolkata"
+   },
+   "enableCvBasedJobRecommendations": false,
+   "brandingId": ""
+  }
+ },
+ "status": "success"
+}

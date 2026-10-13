@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
-  STALE_DATA_MS, dataFreshness, dupLabel, dupPill, expiringStripCopy, expiryHint, followUpDateLabel, followUpTitle, formatDate, formatRelativeAge,
+  JOB_DELETE_AFTER_DAYS, STALE_DATA_MS, dataFreshness, dupLabel, dupPill, expiringStripCopy, expiryHint, followUpDateLabel, followUpTitle, formatDate, formatRelativeAge,
   groupKeys, isExpiring, isNewJob, nextExpiryAt, parseDay, placeLabel, postedAgo, sinceLabel, staleBannerText,
 } from './job.js'
 
@@ -78,32 +78,33 @@ test('staleBannerText shows only for a stale publish', () => {
   assert.equal(staleBannerText(null), null)
 })
 
-test('expiryHint counts down to the first run after UTC midnight of job date + 3 days', () => {
+test('expiryHint counts down to the first run after UTC midnight of job date + 8 days', () => {
   const at = (iso) => Date.parse(iso)
-  // posted Oct 6: deleted from Oct 9 00:00 UTC
-  assert.equal(expiryHint({ posted_date: '2026-10-06' }, at('2026-10-07T00:00:00Z')), null) // 72 h left
-  assert.deepEqual(expiryHint({ posted_date: '2026-10-06' }, at('2026-10-07T12:00:00Z')), { hours: 36, label: 'Disappears in ~36h' })
-  assert.deepEqual(expiryHint({ posted_date: '2026-10-06' }, at('2026-10-08T14:30:00Z')), { hours: 10, label: 'Disappears in ~10h' })
-  assert.deepEqual(expiryHint({ posted_date: '2026-10-06' }, at('2026-10-08T23:59:30Z')), { hours: 1, label: 'Disappears in ~1h' })
-  assert.deepEqual(expiryHint({ posted_date: '2026-10-06' }, at('2026-10-09T00:00:00Z')), { hours: 0, label: 'Disappears at the next update' })
-  // without a posted date the UTC day it was first seen counts (19:00 IST on Oct 6 is Oct 6 UTC; 03:00 IST Oct 7 is Oct 6 UTC)
-  assert.equal(expiryHint({ first_seen_at: '2026-10-06T21:30:00Z' }, at('2026-10-08T20:00:00Z')).hours, 4)
-  assert.equal(expiryHint({ first_seen_at: '2026-10-06T21:30:00+00:00', posted_date: null }, at('2026-10-08T20:00:00Z')).hours, 4)
+  assert.equal(JOB_DELETE_AFTER_DAYS, 7)
+  // posted Oct 1: deleted from Oct 9 00:00 UTC
+  assert.equal(expiryHint({ posted_date: '2026-10-01' }, at('2026-10-07T00:00:00Z')), null) // 48 h left
+  assert.deepEqual(expiryHint({ posted_date: '2026-10-01' }, at('2026-10-07T12:00:00Z')), { hours: 36, label: 'Disappears in ~36h' })
+  assert.deepEqual(expiryHint({ posted_date: '2026-10-01' }, at('2026-10-08T14:30:00Z')), { hours: 10, label: 'Disappears in ~10h' })
+  assert.deepEqual(expiryHint({ posted_date: '2026-10-01' }, at('2026-10-08T23:59:30Z')), { hours: 1, label: 'Disappears in ~1h' })
+  assert.deepEqual(expiryHint({ posted_date: '2026-10-01' }, at('2026-10-09T00:00:00Z')), { hours: 0, label: 'Disappears at the next update' })
+  // without a posted date the UTC day it was first seen counts (03:00 IST on Oct 2 is Oct 1 UTC)
+  assert.equal(expiryHint({ first_seen_at: '2026-10-01T21:30:00Z' }, at('2026-10-08T20:00:00Z')).hours, 4)
+  assert.equal(expiryHint({ first_seen_at: '2026-10-01T21:30:00+00:00', posted_date: null }, at('2026-10-08T20:00:00Z')).hours, 4)
   // posted_date wins over first_seen_at
-  assert.equal(expiryHint({ posted_date: '2026-10-07', first_seen_at: '2026-10-05T00:00:00Z' }, at('2026-10-08T20:00:00Z')).hours, 28)
+  assert.equal(expiryHint({ posted_date: '2026-10-02', first_seen_at: '2026-09-30T00:00:00Z' }, at('2026-10-08T20:00:00Z')).hours, 28)
   // tracked jobs never expire
-  assert.equal(expiryHint({ posted_date: '2026-10-06', is_applied: true }, at('2026-10-08T20:00:00Z')), null)
-  assert.equal(expiryHint({ posted_date: '2026-10-06', application_status: 'saved' }, at('2026-10-08T20:00:00Z')), null)
-  assert.equal(expiryHint({ posted_date: '2026-10-06', application_status: 'rejected' }, at('2026-10-08T20:00:00Z')), null)
+  assert.equal(expiryHint({ posted_date: '2026-10-01', is_applied: true }, at('2026-10-08T20:00:00Z')), null)
+  assert.equal(expiryHint({ posted_date: '2026-10-01', application_status: 'saved' }, at('2026-10-08T20:00:00Z')), null)
+  assert.equal(expiryHint({ posted_date: '2026-10-01', application_status: 'rejected' }, at('2026-10-08T20:00:00Z')), null)
   assert.equal(expiryHint({}, at('2026-10-08T20:00:00Z')), null)
   assert.equal(expiryHint(null), null)
 })
 
-test('isExpiring: on its last UTC day (the server rule job_date <= current_date - 2)', () => {
+test('isExpiring: on its last UTC day (the server rule job_date <= current_date - 7)', () => {
   const at = (iso) => Date.parse(iso)
-  const job = { posted_date: '2026-10-06' }
-  assert.equal(isExpiring(job, at('2026-10-07T23:59:00Z')), false) // job_date = today - 1
-  assert.equal(isExpiring(job, at('2026-10-08T00:00:00Z')), true) // job_date = today - 2: exactly 24 h left
+  const job = { posted_date: '2026-10-01' }
+  assert.equal(isExpiring(job, at('2026-10-07T23:59:00Z')), false) // job_date = today - 6
+  assert.equal(isExpiring(job, at('2026-10-08T00:00:00Z')), true) // job_date = today - 7: exactly 24 h left
   assert.equal(isExpiring(job, at('2026-10-08T00:00:01Z')), true)
   assert.equal(isExpiring(job, at('2026-10-09T03:00:00Z')), true) // overdue, gone at the next update
   assert.equal(isExpiring({ ...job, application_status: 'saved' }, at('2026-10-08T12:00:00Z')), false)

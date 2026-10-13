@@ -1,11 +1,11 @@
 // When the scheduled workflows start, and when the next new jobs should arrive (the caught-up line, the System tab).
 
-// When the scheduled workflows start (UTC). keep in sync: the `cron` lines of .github/workflows/linkedin-databricks.yml
-// ('0 */4 * * *'), databricks-scrapers.yml ('7 2,14 * * *') and publish-supabase.yml ('50 * * * *')
+// When the scheduled workflows start (UTC). keep in sync: the `cron` lines of .github/workflows/databricks-scrapers.yml
+// ('7 0,6,12,18 * * *', "ATS Scrapers": every company board, then the pipeline and publish) and publish-supabase.yml
+// ('50 * * * *'). linkedin-databricks.yml has no schedule any more (it is run by hand).
 const EVERY_HOUR = Array.from({ length: 24 }, (_, hour) => hour)
 export const SCHEDULES = [
-  { label: 'LinkedIn scrape, then the pipeline and publish', hours: [0, 4, 8, 12, 16, 20], minute: 0 },
-  { label: 'Workday and Greenhouse scrape', hours: [2, 14], minute: 7 },
+  { label: 'Company boards scrape, then the pipeline and publish', hours: [0, 6, 12, 18], minute: 7 },
   { label: 'Catch-up publish', hours: EVERY_HOUR, minute: 50 },
 ]
 
@@ -20,12 +20,12 @@ export function nextStart({ hours, minute }, now = new Date()) {
   return null
 }
 
-// A LinkedIn run's jobs are published about this long after it starts (estimated from the README: the 00:00 UTC run
-// publishes around 05:50 IST; not measured)
-export const PUBLISH_LAG_MINUTES = 20
+// A board scrape's jobs are published about this long after it starts. An estimate (the Workday scrape takes up to 75 min,
+// then the Databricks pipeline and the publish); re-measure from the System tab after the first runs.
+export const PUBLISH_LAG_MINUTES = 120
 const LAG_MS = PUBLISH_LAG_MINUTES * 60_000
 
-// When the next new jobs should arrive: the first LinkedIn start s with s + lag > now, plus the lag
+// When the next new jobs should arrive: the first board-scrape start s with s + lag > now, plus the lag
 export function nextJobsAt(now = new Date()) {
   const start = nextStart(SCHEDULES[0], new Date(now.getTime() - LAG_MS))
   return new Date(start.getTime() + LAG_MS)

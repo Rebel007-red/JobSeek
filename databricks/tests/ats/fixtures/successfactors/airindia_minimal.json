@@ -1,0 +1,60 @@
+{
+ "search_url": "https://careers.airindia.com/search/?q=&sortColumn=referencedate&sortDirection=desc&startrow=0",
+ "total": 17,
+ "rows_parsed": [
+  {
+   "href": "/job/Gurugram-B737-Type-Rated-Co-Pilots-%28First-Officer-Senior-First-Officer%29-Guru/52871144/",
+   "title": "B737 Type Rated Co-Pilots (First Officer / Senior First Officer)",
+   "location": null,
+   "date": null,
+   "dept": null
+  },
+  {
+   "href": "/job/Gurugram-Apprentice/60542344/",
+   "title": "Apprentice",
+   "location": null,
+   "date": null,
+   "dept": null
+  },
+  {
+   "href": "/aix/job/_-Manager-Route-Revenue/60495444/",
+   "title": "Manager - Route Revenue",
+   "location": null,
+   "date": null,
+   "dept": null
+  },
+  {
+   "href": "/job/Bengaluru-Licensed-Engineer-MRO-%28Bengaluru%29/54998844/",
+   "title": "Licensed Engineer - MRO (Bengaluru)",
+   "location": null,
+   "date": null,
+   "dept": null
+  },
+  {
+   "href": "/job/Gurugram-Manager-Special-Projects/60343744/",
+   "title": "Manager - Special Projects",
+   "location": null,
+   "date": null,
+   "dept": null
+  }
+ ],
+ "detail_url": "https://careers.airindia.com/job/Gurugram-B737-Type-Rated-Co-Pilots-%28First-Officer-Senior-First-Officer%29-Guru/52871144/",
+ "detail_microdata": {
+  "jobLocation": "",
+  "address": "",
+  "addressLocality": "Gurugram",
+  "addressRegion": "Guru",
+  "addressCountry": "No",
+  "datePosted": "Fri Oct 09 02:00:00 UTC 2026",
+  "validThrough": "Mon May 31 18:30:00 UTC 2027",
+  "hiringOrganization": "Air India Careers",
+  "title": "B737 Type Rated Co-Pilots (First Officer / Senior First Officer)"
+ },
+ "detail_careersite_props": {
+  "title": "B737 Type Rated Co-Pilots (First Officer / Senior First Officer)",
+  "city": "Gurugram",
+  "date": "Oct 9, 2026",
+  "description": "AIR INDIA GROUP is Inviting Applications from Experienced B737 Type Rated Co-Pilots (First Officer  / Senior First Officer). This opportunity is with Air India Express. Who can Apply: Experienced Type"
+ },
+ "detail_description_html_trimmed": "<p><strong>AIR INDIA GROUP</strong><strong> is Inviting Applications from Experienced B737 Type Rated Co-Pilots (First Officer  / Senior First Officer).</strong></p>\n<p> </p>\n<p><strong>This opportunity is with Air India Express.  </strong></p>\n<p> </p>\n<p><strong>Who can Apply:</strong></p>\n<p><strong>Experienced Type Rated P2s (First Officer (CPL) / Senior First Officer (ATPL))</strong></p>\n<ul>...[trimmed]"
+}

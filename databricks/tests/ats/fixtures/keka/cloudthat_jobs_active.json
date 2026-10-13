@@ -1,0 +1,97 @@
+{
+ "_request": "GET https://cloudthat.keka.com/careers/api/jobs/default/active",
+ "_note": "response is a bare JSON array of ALL active jobs (no pagination); trimmed to 3",
+ "_total": 86,
+ "jobs": [
+  {
+   "id": 143905,
+   "title": "Intern - Tech Trainer (Jan 2027 Batch)",
+   "description": "<h3 style=\"margin-top: 0px; margin-bottom: 0px;\"><strong style=\"background-color: rgb(255, 255, 255); color: rgb(0, 0, 0);\">Technical Trainer Intern</strong></h3><div><br></div><div><strong style=\"background-color: rgb(255, 255, 255); color: rgb(0, 0, 0);\">Job Description</strong></div><div><br></di...[trimmed]",
+   "departmentIdentifier": "56e3b973-cf9c-447c-9171-67d4ca379d5b",
+   "departmentName": "TT - L&D",
+   "excerpt": "Technical Trainer InternJob DescriptionWe're looking for Freshers [Technical Trainer Intern] to come in and help us take our team to the next level. Initially for 6 months you will get the Stipend of 15K/month later after completion of internship based on your performance your package will be revise...[trimmed]",
+   "jobLocations": [
+    {
+     "id": 18665,
+     "name": "Bangalore - Head Office",
+     "city": "Bengaluru",
+     "state": "KA",
+     "countryCode": "IN",
+     "countryName": "India"
+    }
+   ],
+   "jobType": 2,
+   "experience": "0",
+   "jobNumber": "Job ID-465",
+   "salaryRange": {
+    "currency": "INR",
+    "salaryPeriod": 0,
+    "cultureInfo": "en-IN"
+   },
+   "salaryRangeFormat": "",
+   "publishedOn": "2026-10-08T11:19:32.143Z",
+   "publishedSinceDays": 1,
+   "skillNames": []
+  },
+  {
+   "id": 143731,
+   "title": "Executive / Specialist – Trainer Acquisition",
+   "description": "<div><strong style=\"color: rgb(0, 0, 0); background-color: rgb(255, 255, 255);\">Job Title –</strong><span style=\"color: rgb(0, 0, 0); background-color: rgb(255, 255, 255);\"> Executive / Specialist – Trainer Acquisition</span></div><div><strong style=\"color: rgb(0, 0, 0); background-color: rgb(255, 2...[trimmed]",
+   "departmentIdentifier": "f27b0528-cdff-450a-9d0b-20df2b8dcf61",
+   "departmentName": "Training Operations",
+   "excerpt": "Job Title – Executive / Specialist – Trainer AcquisitionLocation: Bengaluru, India (Work from Office)Employment Type: Full-timeAbout Our Company: CloudThat, founded in 2012 by Bhavesh Goswami, is India’s first company to offer comprehensive cloud consulting and training. Headquartered in Bengaluru w...[trimmed]",
+   "jobLocations": [
+    {
+     "id": 18665,
+     "name": "Bangalore - Head Office",
+     "city": "Bengaluru",
+     "state": "KA",
+     "countryCode": "IN",
+     "countryName": "India"
+    }
+   ],
+   "jobType": 2,
+   "experience": "2-5 Yrs",
+   "jobNumber": "Job ID-463",
+   "salaryRange": {
+    "currency": "INR",
+    "salaryPeriod": 0,
+    "cultureInfo": "en-IN"
+   },
+   "salaryRangeFormat": "",
+   "publishedOn": "2026-10-07T05:40:08.597Z",
+   "publishedSinceDays": 2,
+   "skillNames": []
+  },
+  {
+   "id": 142588,
+   "title": "Technical Program Manager – University & Technology Learning",
+   "description": "<h1 style=\"margin-top: 0px; margin-bottom: 0px;\"><strong style=\"color: rgb(0, 0, 0);\">Technical Program Lead </strong></h1><div><br></div><div><strong>Location: </strong>Dehradun, Uttarakhand (on-site at a University, with travel to CloudThat offices as required)</div><div><strong>Business Unit: </s...[trimmed]",
+   "departmentIdentifier": "af34d139-54a8-4988-92dc-9fa547f4c6b5",
+   "departmentName": "TT - AWS",
+   "excerpt": "Technical Program Lead Location: Dehradun, Uttarakhand (on-site at a University, with travel to CloudThat offices as required)Business Unit: Training Employment Type: Full-time | Techno-managerial individual contributorExperience: 2-4 years1. Role SummaryCloudThat is seeking an on-ground Technical P...[trimmed]",
+   "jobLocations": [
+    {
+     "id": 37821,
+     "name": "Dehradun, India",
+     "city": "Deharadun",
+     "state": "UT",
+     "countryCode": "IN",
+     "countryName": "India"
+    }
+   ],
+   "jobType": 2,
+   "experience": "2-4 Yrs",
+   "jobNumber": "Job ID-459",
+   "salaryRange": {
+    "currency": "INR",
+    "salaryPeriod": 0,
+    "cultureInfo": "en-IN"
+   },
+   "salaryRangeFormat": "",
+   "publishedOn": "2026-09-23T06:59:57.233Z",
+   "publishedSinceDays": 16,
+   "skillNames": []
+  }
+ ]
+}

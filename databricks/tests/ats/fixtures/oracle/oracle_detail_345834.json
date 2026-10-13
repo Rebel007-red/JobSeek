@@ -1,0 +1,121 @@
+{
+ "_request": "https://eeho.fa.us2.oraclecloud.com/hcmRestApi/resources/latest/recruitingCEJobRequisitionDetails?expand=all&onlyData=true&finder=ById%3BId%3D%22345834%22%2CsiteNumber%3DCX_45001",
+ "items": [
+  {
+   "Id": "345834",
+   "Title": "Principal Data Center Facilities Development Manager",
+   "Category": "Technology Operations",
+   "RequisitionType": "Professional",
+   "JobGrade": null,
+   "RequisitionId": 302969632521556,
+   "ExternalPostedStartDate": "2026-10-07T06:57:05+00:00",
+   "JobLevel": null,
+   "JobSchedule": null,
+   "JobShift": null,
+   "StudyLevel": null,
+   "InternationalTravelRequired": null,
+   "ExternalContactName": null,
+   "ExternalContactEmail": null,
+   "ContractType": null,
+   "ExternalPostedEndDate": null,
+   "JobFamilyId": 302958497961746,
+   "GeographyId": 300000000106947,
+   "GeographyNodeId": 100879842726383,
+   "ExternalDescriptionStr": "Leads the construction of data centers by colocation providers, ensuring projects are completed on time, within budget, and to the highest quality standards. Creates, reviews, and maintains documentation, including design review, commissioning, and problem-solving papers. Implements and oversees qua...[trimmed]",
+   "CorporateDescriptionStr": "<p style=\"margin-bottom:12pt\">Only Oracle brings together the data, infrastructure, applications, and expertise to power everything from industry innovations to life-saving care. And with AI embedded across our products and services, we help customers turn that promise into a better future for all. ...[trimmed]",
+   "OrganizationDescriptionStr": "",
+   "ShortDescriptionStr": "Leads the construction of data centers by colocation providers, ensuring projects are completed on time, within budget, and to the highest quality standards.",
+   "ContentLocale": "en",
+   "PrimaryLocation": "India",
+   "PrimaryLocationCountry": "IN",
+   "ObjectVerNumberProfile": "1",
+   "ApplyWhenNotPostedFlag": true,
+   "ExternalQualificationsStr": "",
+   "InternalQualificationsStr": "",
+   "InternalResponsibilitiesStr": "<div class=\"WordSection1\"><p class=\"MsoNormal\" style=\"line-height:normal;margin-bottom:0in;\"><span style=\"color:black;font-family:&quot;Oracle Sans Light&quot;,sans-serif;\"><span style=\"font-size:12.0pt;\"><strong>Key Responsibilities</strong></span></span><br><span style=\"color:black;font-family:&qu...[trimmed]",
+   "ExternalResponsibilitiesStr": "<div class=\"WordSection1\"><p class=\"MsoNormal\" style=\"line-height:normal;margin-bottom:0in;\"><span style=\"color:black;font-family:&quot;Oracle Sans Light&quot;,sans-serif;\"><span style=\"font-size:12.0pt;\"><strong>Key Responsibilities</strong></span></span><br><span style=\"color:black;font-family:&qu...[trimmed]",
+   "JobFunctionCode": "DCOPS",
+   "HotJobFlag": false,
+   "TrendingFlag": true,
+   "BeFirstToApplyFlag": false,
+   "WorkplaceTypeCode": null,
+   "WorkplaceType": "",
+   "OtherRequisitionTitle": null,
+   "NumberOfOpenings": null,
+   "HiringManager": null,
+   "Organization": null,
+   "BusinessUnitId": 300001096431127,
+   "LegalEmployerId": 300005406230212,
+   "OrganizationId": 300001902541887,
+   "WorkerType": null,
+   "JobType": null,
+   "WorkMonths": null,
+   "WorkYears": null,
+   "WorkHours": null,
+   "WorkDays": null,
+   "LegalEmployer": null,
+   "BusinessUnit": null,
+   "Department": null,
+   "DomesticTravelRequired": null,
+   "JobFunction": "Data Center Operations",
+   "secondaryLocations": [],
+   "media": [],
+   "workLocation": [],
+   "otherWorkLocations": [],
+   "requisitionFlexFields": [
+    {
+     "Prompt": "Role",
+     "Value": "Individual Contributor",
+     "ControlType": "SingleChoiceList",
+     "SequenceNumber": 4
+    },
+    {
+     "Prompt": "Job Type",
+     "Value": "Regular Employee",
+     "ControlType": "SingleChoiceList",
+     "SequenceNumber": 5
+    },
+    {
+     "Prompt": "Does this position require a security clearance?",
+     "Value": "No",
+     "ControlType": "SingleChoiceList",
+     "SequenceNumber": 12
+    },
+    {
+     "Prompt": "Years",
+     "Value": "3 to 5+ years",
+     "ControlType": "SingleChoiceList",
+     "SequenceNumber": 13
+    },
+    {
+     "Prompt": "Additional Info",
+     "Value": "Visa / work permit sponsorship is not available for this position",
+     "ControlType": "SingleChoiceList",
+     "SequenceNumber": 45
+    }
+   ],
+   "primaryLocationCoordinates": [
+    {
+     "GeographyNodeId": 100879842726383,
+     "GeographyId": 300000000106947,
+     "Latitude": "20.79519",
+     "Longitude": "79.00132",
+     "CountryCode": "IN"
+    }
+   ],
+   "skills": []
+  }
+ ],
+ "count": 1,
+ "hasMore": false,
+ "limit": 499,
+ "offset": 0,
+ "links": [
+  {
+   "rel": "self",
+   "href": "https://eeho.fa.us2.oraclecloud.com:443/hcmRestApi/resources/11.13.18.05/recruitingCEJobRequisitionDetails",
+   "name": "recruitingCEJobRequisitionDetails",
+   "kind": "collection"
+  }
+ ]
+}

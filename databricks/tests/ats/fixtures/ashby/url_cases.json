@@ -1,0 +1,105 @@
+{
+ "_about": "Board URL -> companies columns. Pinned by databricks/tests/ats/test_base.py (adapter.source_columns) and by the form's test in src/ (same file). expect null = rejected.",
+ "cases": [
+  {
+   "input": "https://jobs.ashbyhq.com/sarvam",
+   "expect": {
+    "slug": "sarvam",
+    "api_url": "https://api.ashbyhq.com/posting-api/job-board/sarvam"
+   }
+  },
+  {
+   "input": "https://jobs.ashbyhq.com/sarvam/c0406fe0-c8c0-44aa-aa3e-b879f2bf1049",
+   "expect": {
+    "slug": "sarvam",
+    "api_url": "https://api.ashbyhq.com/posting-api/job-board/sarvam"
+   }
+  },
+  {
+   "input": "https://jobs.ashbyhq.com/atlan/254c1250-953b-4323-8d18-9fe5e41d8d7d/application",
+   "expect": {
+    "slug": "atlan",
+    "api_url": "https://api.ashbyhq.com/posting-api/job-board/atlan"
+   }
+  },
+  {
+   "input": "https://jobs.ashbyhq.com/notion?departmentId=abc",
+   "expect": {
+    "slug": "notion",
+    "api_url": "https://api.ashbyhq.com/posting-api/job-board/notion"
+   }
+  },
+  {
+   "input": "https://jobs.ashbyhq.com/composio/embed?version=2",
+   "expect": {
+    "slug": "composio",
+    "api_url": "https://api.ashbyhq.com/posting-api/job-board/composio"
+   }
+  },
+  {
+   "input": "https://jobs.ashbyhq.com/Sarvam",
+   "expect": {
+    "slug": "Sarvam",
+    "api_url": "https://api.ashbyhq.com/posting-api/job-board/Sarvam"
+   }
+  },
+  {
+   "input": "https://jobs.ashbyhq.com/Acme%20Labs/123",
+   "expect": {
+    "slug": "Acme Labs",
+    "api_url": "https://api.ashbyhq.com/posting-api/job-board/Acme%20Labs"
+   }
+  },
+  {
+   "input": "https://api.ashbyhq.com/posting-api/job-board/notion?includeCompensation=true",
+   "expect": {
+    "slug": "notion",
+    "api_url": "https://api.ashbyhq.com/posting-api/job-board/notion"
+   }
+  },
+  {
+   "input": "https://api.ashbyhq.com/posting-api/job-board/Acme%20Labs",
+   "expect": {
+    "slug": "Acme Labs",
+    "api_url": "https://api.ashbyhq.com/posting-api/job-board/Acme%20Labs"
+   }
+  },
+  {
+   "input": "jobs.ashbyhq.com/linear",
+   "expect": {
+    "slug": "linear",
+    "api_url": "https://api.ashbyhq.com/posting-api/job-board/linear"
+   }
+  },
+  {
+   "input": "supabase",
+   "expect": {
+    "slug": "supabase",
+    "api_url": "https://api.ashbyhq.com/posting-api/job-board/supabase"
+   }
+  },
+  {
+   "input": "Acme Labs",
+   "expect": {
+    "slug": "Acme Labs",
+    "api_url": "https://api.ashbyhq.com/posting-api/job-board/Acme%20Labs"
+   }
+  },
+  {
+   "input": "https://sarvam.ai/careers",
+   "expect": null
+  },
+  {
+   "input": "https://jobs.ashbyhq.com/api/non-user-graphql",
+   "expect": null
+  },
+  {
+   "input": "https://jobs.lever.co/paytm",
+   "expect": null
+  },
+  {
+   "input": "",
+   "expect": null
+  }
+ ]
+}

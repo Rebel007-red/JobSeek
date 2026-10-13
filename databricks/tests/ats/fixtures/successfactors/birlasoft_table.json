@@ -1,0 +1,65 @@
+{
+ "search_url": "https://jobs.birlasoft.com/search/?q=&sortColumn=referencedate&sortDirection=desc&startrow=0&optionsFacetsDD_country=IN",
+ "total": 601,
+ "rows_parsed": [
+  {
+   "href": "/job/Bengaluru-SAP-FICO-ARIBA-Functional-Subcontractor-INDI/59646544/",
+   "title": "SAP FICO ARIBA Functional Subcontractor",
+   "location": "INDIA - BENGALURU - HP, IN",
+   "date": "Oct 9, 2026",
+   "dept": "Enterprise Applications"
+  },
+  {
+   "href": "/job/Bengaluru-Java-API-Developer-INDI/59652244/",
+   "title": "Java API Developer",
+   "location": "INDIA - BENGALURU - BIRLASOFT OFFICE, IN",
+   "date": "Oct 9, 2026",
+   "dept": "Business Applications"
+  },
+  {
+   "href": "/job/Bengaluru-Java-API-Developer-INDI/59652744/",
+   "title": "Java API Developer",
+   "location": "INDIA - BENGALURU - BIRLASOFT OFFICE, IN",
+   "date": "Oct 9, 2026",
+   "dept": "Business Applications"
+  },
+  {
+   "href": "/job/Pune-Sr-Lead-Architect-INDI/52477944/",
+   "title": "Sr Lead Architect",
+   "location": "INDIA - PUNE - BIRLASOFT OFFICE - HINJAWADI, IN",
+   "date": "Oct 9, 2026",
+   "dept": "Architecture"
+  },
+  {
+   "href": "/job/Pune-Azure-Integration-Lead-INDI/55764244/",
+   "title": "Azure Integration Lead",
+   "location": "INDIA - PUNE - BIRLASOFT OFFICE - HINJAWADI, IN",
+   "date": "Oct 9, 2026",
+   "dept": "Business Applications"
+  }
+ ],
+ "detail_url": "https://jobs.birlasoft.com/job/Bengaluru-SAP-FICO-ARIBA-Functional-Subcontractor-INDI/59646544/",
+ "detail_microdata": {
+  "jobLocation": "",
+  "address": "",
+  "addressLocality": "Bengaluru",
+  "addressRegion": "INDI",
+  "addressCountry": "IN",
+  "datePosted": "Fri Oct 09 02:00:00 UTC 2026",
+  "validThrough": "Fri Oct 30 18:30:00 UTC 2026",
+  "hiringOrganization": "Birlasoft Limited",
+  "title": "SAP FICO ARIBA Functional Subcontractor"
+ },
+ "detail_careersite_props": {
+  "travel": "",
+  "country": "IN",
+  "customfield1": "38730",
+  "customfield2": "",
+  "customfield3": "",
+  "customfield4": "",
+  "customfield5": "INDIA - BENGALURU - HP",
+  "title": "SAP FICO ARIBA Functional Subcontractor",
+  "description": "Area(s) of responsibility Analyze, design, configure, and support SAP Finance & Controlling (FICO) modules. General Ledger (GL) :Accounts Payable (AP) :Accounts Receivable (AR) :Asset Accounting (AA) "
+ },
+ "detail_description_html_trimmed": "<div><div style=\"padding:10.0px 0.0px;border:1.0px solid transparent\"><div style=\"font-size:14.0px;word-wrap:break-word\"><h2 style=\"font-size:1.0em;margin:0.0px\">Area(s) of responsibility</h2> </div><div><ul style=\"margin-top:0.0cm;margin-bottom:0.0cm\">\n<li style=\"margin:0.0cm 0.0cm 0.0cm 0.0px;line-height:normal;font-size:11.0pt;font-family:Aptos, sans-serif\">Analyze, design, configure, and suppo...[trimmed]"
+}

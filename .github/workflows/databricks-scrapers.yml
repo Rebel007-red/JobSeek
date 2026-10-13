@@ -1,15 +1,27 @@
-name: Databricks Scrapers
+name: ATS Scrapers
 
-# Upload only: the next LinkedIn-triggered pipeline run ingests these CSVs (Auto Loader picks up every new file).
-# 02:07 / 14:07 UTC stays clear of LinkedIn's 4-hourly slots, so both scrapers usually finish before the next LinkedIn trigger.
+# Every 6 hours: scrape the company job boards -> upload the CSVs -> send app user data to Databricks -> run the pipeline
+# and wait -> publish the results to Supabase. This is the workflow that keeps the jobs feed fresh; LinkedIn only runs
+# when started by hand (linkedin-databricks.yml).
+#   workday     databricks/workday.py (Playwright)
+#   greenhouse  databricks/greenhouse.py (boards API)
+#   ats         databricks/ats_scrape.py --all-api: Lever, Ashby, SmartRecruiters, Workable, Oracle Recruiting,
+#               SAP SuccessFactors, Darwinbox, Keka (an ATS without companies in Settings > Companies is skipped)
+# Every scraper keeps jobs posted within the last 7 days (scraper_common.MAX_POSTED_DAYS); the pipeline deletes untracked
+# jobs posted more than 7 days ago. Databricks never gets a Supabase credential: user data and results move as files in
+# the ops volume, carried here.
 on:
   schedule:
-    - cron: '7 2,14 * * *'
+    # 00:07 / 06:07 / 12:07 / 18:07 UTC = 05:37 / 11:37 / 17:37 / 23:37 IST (keep in sync: src/utils/schedule.js)
+    - cron: '7 0,6,12,18 * * *'
   workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
+
+permissions:
+  contents: read
 
 env:
   TZ: Asia/Kolkata
@@ -17,7 +29,9 @@ env:
 jobs:
   workday:
     runs-on: ubuntu-latest
-    timeout-minutes: 100
+    # Within the ats job's 90 min, so it never delays the pipeline further. Descriptions of jobs the pipeline already
+    # has are not fetched again (ats_seen_keys.json), so only the first run after a long pause comes near it.
+    timeout-minutes: 90
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -28,6 +42,8 @@ jobs:
           scraper: databricks/workday.py
           csv-pattern: databricks/output/workday*.csv
           artifact-name: workday-csv
+          # reads the seen job keys file the pipeline writes to the ops volume
+          scraper-reads-databricks: 'true'
           supabase-anon-key: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           supabase-service-role-key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           supabase-url: ${{ secrets.SUPABASE_URL }}
@@ -36,7 +52,7 @@ jobs:
 
   greenhouse:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -52,3 +68,113 @@ jobs:
           supabase-url: ${{ secrets.SUPABASE_URL }}
           databricks-host: ${{ secrets.DATABRICKS_HOST }}
           databricks-token: ${{ secrets.DATABRICKS_TOKEN }}
+
+  ats:
+    runs-on: ubuntu-latest
+    # The CSVs are uploaded only after the whole scrape, so a job timeout loses every ATS. Hence all 8 ATS run at once
+    # (each on its own hosts, so no host gets more than one request at a time) and each stops starting companies after
+    # 50 min: the slowest ATS then ends within about 70 min (its last company finishes), inside 90.
+    timeout-minutes: 90
+    env:
+      ATS_PARALLEL: '8'
+      ATS_TIME_BUDGET_S: '3000'
+      # Comma-separated ATS whose robots.txt disallows the API path but that are scraped anyway (the owner's decision;
+      # e.g. 'smartrecruiters'). A repository variable, so it changes without a code change; empty = respect robots.txt.
+      ATS_ROBOTS_OVERRIDE: ${{ vars.ATS_ROBOTS_OVERRIDE }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Scrape the API job boards to Databricks volume
+        uses: ./.github/actions/scrape-to-volume
+        with:
+          scraper: databricks/ats_scrape.py
+          scraper-args: --all-api
+          # one CSV per ATS that has companies (output/ats/<ats>_<timestamp>.csv), all uploaded; none is fine
+          csv-pattern: databricks/output/ats/*.csv
+          upload-all: 'true'
+          artifact-name: ats-csv
+          install-browser: 'false'
+          # reads the seen job keys file, so detail requests are only made for jobs the pipeline does not have yet
+          scraper-reads-databricks: 'true'
+          supabase-anon-key: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          supabase-service-role-key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          supabase-url: ${{ secrets.SUPABASE_URL }}
+          databricks-host: ${{ secrets.DATABRICKS_HOST }}
+          databricks-token: ${{ secrets.DATABRICKS_TOKEN }}
+
+  pipeline:
+    needs: [workday, greenhouse, ats]
+    # Also when a scraper failed or timed out: whatever the others uploaded is still ingested (not when the workflow
+    # run itself was cancelled)
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    # The run waits up to 100 min (a run queued behind a running one included); a longer run ends as a warning and the
+    # hourly publish-supabase workflow publishes it once it finishes
+    timeout-minutes: 120
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+          cache-dependency-path: databricks/jobs/requirements.txt
+
+      - name: Install Python dependencies
+        run: pip install -r databricks/jobs/requirements.txt
+
+      # A Supabase outage must not stop ingestion: the run then uses the previous user_data.json
+      - name: Send app user data to Databricks
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: python databricks/jobs/sync_user_data.py
+
+      # Manual dispatches within 3 h of the last pipeline run don't start a second one (they wait for an active run, if
+      # any); scheduled runs always trigger (cron drift + scrape time can bring two scheduled triggers closer than 3 h)
+      - name: Run the Databricks pipeline and wait
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: >-
+          python databricks/jobs/trigger_job.py
+          --min-interval-hours "${{ github.event_name == 'schedule' && '0' || '3' }}"
+          --wait --wait-timeout-minutes 100
+
+  publish:
+    needs: pipeline
+    # Also after a failed run: the publisher picks the newest complete publish directory (a failed run writes none, so
+    # this is a quick no-op then, or it catches up on an earlier run whose publish failed)
+    if: always() && (needs.pipeline.result == 'success' || needs.pipeline.result == 'failure')
+    runs-on: ubuntu-latest
+    concurrency:
+      group: supabase-publish
+      cancel-in-progress: false
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+          cache-dependency-path: databricks/jobs/requirements.txt
+
+      - name: Install Python dependencies
+        run: pip install -r databricks/jobs/requirements.txt
+
+      - name: Publish the pipeline results to Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: python databricks/jobs/publish_to_supabase.py

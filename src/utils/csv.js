@@ -2,6 +2,7 @@
 // with ' so a spreadsheet shows it as text instead of running it as a formula.
 import { statusLabel } from './gold.js'
 import { localDay } from './job.js'
+import { sourceLabel } from './sources.js'
 
 const FORMULA_START = /^[=+\-@\t\r]/
 
@@ -55,9 +56,9 @@ export const TRACKED_CSV_COLUMNS = [
   { key: 'status_updated_at', label: 'Status changed', format: day },
   { key: 'next_action_at', label: 'Follow up', format: day },
   { key: 'fit_score', label: 'Fit' },
-  // Yes = a posting over 2 days old that left the job snapshot (kept because you track it); it may still be open
+  // Yes = a posting over 7 days old that left the job snapshot (kept because you track it); it may still be open
   { key: 'is_active', label: 'Older posting', format: value => (value === false ? 'Yes' : 'No') },
-  { key: 'source', label: 'Source' },
+  { key: 'source', label: 'Source', format: sourceLabel },
   { key: 'job_url', label: 'Link', format: value => (value && value !== '#' ? value : '') },
   { key: 'note', label: 'Note' },
 ]

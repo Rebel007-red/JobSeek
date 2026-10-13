@@ -13,7 +13,7 @@ export function JobBadges({ job, since }) {
   const followUpDate = !job.follow_up ? followUpDateLabel(job.next_action_at) : null
   const badges = [
     isNewJob(job, since) && { key: 'new', tone: 'new', label: 'New', title: 'Found since your last visit' },
-    expiry && { key: 'expiry', tone: 'warning', label: expiry.label, title: 'Jobs you haven\'t saved or applied to disappear 2 days after posting. Save it to keep it.' },
+    expiry && { key: 'expiry', tone: 'warning', label: expiry.label, title: 'Jobs you haven\'t saved or applied to disappear 7 days after posting. Save it to keep it.' },
     job.follow_up && { key: 'follow', tone: 'warning', label: 'Follow up', title: followUpTitle(job) },
     followUpDate && { key: 'date', tone: 'neutral', label: followUpDate, title: 'Your follow-up date' },
     job.muted_by && { key: 'muted', tone: 'neutral', label: `Muted: ${job.muted_value || job.muted_by}`, title: 'Left out by your mute rules (Settings → Mute rules)' },

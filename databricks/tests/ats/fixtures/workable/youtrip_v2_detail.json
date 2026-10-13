@@ -1,0 +1,37 @@
+{
+ "id": 5288826,
+ "shortcode": "E184FE4B11",
+ "title": "Accountant",
+ "remote": false,
+ "location": {
+  "city": "Petaling Jaya",
+  "country": "Malaysia",
+  "countryCode": "MY",
+  "region": "Selangor"
+ },
+ "locations": [
+  {
+   "city": "Petaling Jaya",
+   "country": "Malaysia",
+   "countryCode": "MY",
+   "hidden": false,
+   "region": "Selangor"
+  }
+ ],
+ "state": "published",
+ "isInternal": false,
+ "code": "",
+ "published": "2026-05-19T00:00:00.000Z",
+ "type": "full",
+ "language": "en",
+ "department": [
+  "Finance",
+  "Accounting"
+ ],
+ "accountUid": "c35fa389-ac18-4082-ae96-abc43381e0f2",
+ "approvalStatus": "approved",
+ "workplace": "hybrid",
+ "description": "<p>YouTrip is the leading and fastest-growing multi-currency payment platform in Asia Pacific. In 2018, we pioneered the region's first multi-currency digital wallet. Now, YouTrip is the #1 multi-currency digital wallet trusted by millions across the region, processing over US$15 billion in total pa...[trimmed]",
+ "requirements": "<p><strong>Daily Operations</strong></p><ul><li>Prepare and analyse daily reports for payment related operations for AU and MY market;</li><li>Cross-checking daily operational reports prepared by team;</li><li>Prepare and monitor daily settlement transactions in bank;</li><li>Perform daily accountin...[trimmed]",
+ "benefits": ""
+}

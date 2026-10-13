@@ -1,0 +1,78 @@
+{
+ "_about": "Board URL -> companies columns. Pinned by databricks/tests/ats/test_base.py (adapter.source_columns) and by the form's test in src/ (same file). expect null = rejected.",
+ "cases": [
+  {
+   "input": "https://jobs.birlasoft.com/",
+   "expect": {
+    "slug": "jobs.birlasoft.com",
+    "api_url": "https://jobs.birlasoft.com"
+   }
+  },
+  {
+   "input": "https://jobs.birlasoft.com/search/?q=&optionsFacetsDD_country=IN",
+   "expect": {
+    "slug": "jobs.birlasoft.com",
+    "api_url": "https://jobs.birlasoft.com"
+   }
+  },
+  {
+   "input": "https://jobs.cargill.com/job/Bangalore-Trading-Engineer-%28Data%29-Karn-560087/1366572257/",
+   "expect": {
+    "slug": "jobs.cargill.com",
+    "api_url": "https://jobs.cargill.com"
+   }
+  },
+  {
+   "input": "https://southasiacareers.deloitte.com/go/Consulting/4444444/",
+   "expect": {
+    "slug": "southasiacareers.deloitte.com",
+    "api_url": "https://southasiacareers.deloitte.com"
+   }
+  },
+  {
+   "input": "https://careers.airindia.com/aix/job/_-Manager-Route-Revenue/60495444/",
+   "expect": {
+    "slug": "careers.airindia.com",
+    "api_url": "https://careers.airindia.com"
+   }
+  },
+  {
+   "input": "Jobs.Cargill.com",
+   "expect": {
+    "slug": "jobs.cargill.com",
+    "api_url": "https://jobs.cargill.com"
+   }
+  },
+  {
+   "input": "https://jobs.cargill.com",
+   "expect": {
+    "slug": "jobs.cargill.com",
+    "api_url": "https://jobs.cargill.com"
+   }
+  },
+  {
+   "input": "https://career44.sapsf.com/career?company=birlasoftl&career_ns=job_listing_summary",
+   "expect": null
+  },
+  {
+   "input": "https://career2.successfactors.eu/career?company=cargill",
+   "expect": null
+  },
+  {
+   "input": "https://performancemanager.successfactors.com/login",
+   "expect": null
+  },
+  {
+   "input": "Birlasoft",
+   "expect": null
+  },
+  {
+   "input": "ftp://jobs.birlasoft.com/",
+   "expect": null
+  },
+  {
+   "input": "",
+   "expect": null
+  }
+ ]
+}

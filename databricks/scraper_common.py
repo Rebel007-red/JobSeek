@@ -5,6 +5,7 @@ which upload_to_volume.py then copies to the Databricks landing volume. Each run
 output/<source>_report.json (scrape_report below), which jobs/record_scrape_report.py sends to Supabase.
 """
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -24,8 +25,9 @@ load_dotenv(HERE.parent / ".env")
 SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").rstrip("/")
 BASE_URL = f"{SUPABASE_URL}/rest/v1" if SUPABASE_URL else ""
 
-# Keep jobs posted within this many days (0 = today only). Downstream MERGE dedupes overlaps.
-MAX_POSTED_DAYS = int(os.getenv("MAX_POSTED_DAYS", "1"))
+# Keep jobs posted within this many days (0 = today only): the owner's 7-day job lifetime, matching 03 job_max_age_days
+# and 04 job_delete_after_days. Downstream MERGE dedupes overlaps.
+MAX_POSTED_DAYS = int(os.getenv("MAX_POSTED_DAYS", "7"))
 
 OUTPUT_DIR = HERE / "output"
 
@@ -128,9 +130,12 @@ def print_companies(companies, label):
 # Written by 04_gold_cleanup (before its gold MERGE) to the ops volume:
 #   linkedin_roles.json    {"generated_at": ..., "profiles": [{"user_id": ..., "roles": [...], "cities": [...]}]}
 #   linkedin_seen_ids.json {"generated_at": ..., "job_ids": [...]}: LinkedIn ids silver already has a description for
+#   ats_seen_keys.json     {"generated_at": ..., "job_keys": [...]}: job_key of the Workday and API / HTML board jobs
+#                          (ats_scrape.py) silver already has a description for
 CONFIG_DIR = "/Volumes/jobseeker/ops/pipeline/config"
 LINKEDIN_ROLES_FILE = os.getenv("LINKEDIN_ROLES_FILE", f"{CONFIG_DIR}/linkedin_roles.json")
 LINKEDIN_SEEN_IDS_FILE = os.getenv("LINKEDIN_SEEN_IDS_FILE", f"{CONFIG_DIR}/linkedin_seen_ids.json")
+ATS_SEEN_KEYS_FILE = os.getenv("ATS_SEEN_KEYS_FILE", f"{CONFIG_DIR}/ats_seen_keys.json")
 
 
 async def _download_config_file(session, path, skipped_note):
@@ -227,6 +232,32 @@ async def fetch_linkedin_seen_ids():
     return job_ids
 
 
+def job_key(ats_type, company_name, job_id):
+    """The pipeline's job_key (02_ingest_silver): sha2(concat_ws('|', lower(ats_type), lower(trim(company_name)), job_id))."""
+    raw = f"{str(ats_type or '').strip().lower()}|{str(company_name or '').strip().lower()}|{str(job_id or '').strip()}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+async def fetch_seen_job_keys():
+    """job_keys the pipeline already has a description for (ats_seen_keys.json; empty set when unavailable)."""
+    async with aiohttp.ClientSession() as session:
+        data = await _download_config_file(session, ATS_SEEN_KEYS_FILE, "Fetching every description.")
+    if not isinstance(data, dict):
+        if data is not None:
+            print(f"    [WARN] {ATS_SEEN_KEYS_FILE} is not a JSON object. Fetching every description.")
+        return set()
+    keys = {str(key).strip() for key in data.get("job_keys") or []} - {""}
+    print(f"[INFO] Seen job keys: {len(keys)}, file generated {data.get('generated_at')}")
+    return keys
+
+
+def is_seen(job, skip_ids=frozenset(), skip_keys=frozenset()):
+    """True when the pipeline already has the job's description (its job_id in skip_ids, or its job_key in skip_keys)."""
+    if str(job.get("job_id") or "") in skip_ids:
+        return True
+    return bool(skip_keys) and job_key(job.get("ats_type"), job.get("company_name"), job.get("job_id")) in skip_keys
+
+
 def jobs_to_dataframe(jobs):
     """One row per job in OUTPUT_COLUMNS order; posted_date and posted_days must already be normalized."""
     rows = [
@@ -268,15 +299,16 @@ async def goto_settled(page, url):
         await page.goto(url, wait_until="domcontentloaded", timeout=20000)
 
 
-async def fetch_descriptions(jobs, label, read_description, skip_ids=frozenset()):
+async def fetch_descriptions(jobs, label, read_description, skip_ids=frozenset(), skip_keys=frozenset()):
     """Fill in missing descriptions by opening each job_url in headless Chromium, 3 pages at a time.
 
     read_description(page, job) loads the job page and returns its description; any failure leaves "".
-    Jobs whose job_id is in skip_ids keep an empty description: the pipeline already has it, and its silver MERGE never
-    overwrites a stored description with an empty one, so the row only refreshes last_seen_at.
+    Jobs whose job_id is in skip_ids (or whose job_key is in skip_keys) keep an empty description: the pipeline already
+    has it, and its silver MERGE never overwrites a stored description with an empty one, so the row only refreshes
+    last_seen_at.
     """
     missing = [job for job in jobs if not job.get("description")]
-    pending = [job for job in missing if str(job.get("job_id") or "") not in skip_ids]
+    pending = [job for job in missing if not is_seen(job, skip_ids, skip_keys)]
     if len(pending) < len(missing):
         print(f"[DESC] {label}: {len(missing) - len(pending)} already seen jobs skipped, {len(pending)} to fetch")
     if not pending:
@@ -330,14 +362,16 @@ def write_flat_jobs_csv(dataframe, prefix, output_dir=OUTPUT_DIR):
         return None
 
 
-async def write_recent_jobs(jobs, label, prefix, read_description, skip_ids=frozenset()):
-    """Keep jobs posted within MAX_POSTED_DAYS, fetch their missing descriptions (except skip_ids) and write the CSV.
+async def write_recent_jobs(jobs, label, prefix, read_description, skip_ids=frozenset(), skip_keys=frozenset()):
+    """Keep jobs posted within MAX_POSTED_DAYS, fetch their missing descriptions (except skip_ids / skip_keys) and
+    write the CSV.
 
     Returns the written dataframe and the output file (None when writing failed).
     """
     recent = keep_recent_jobs(jobs_to_dataframe(jobs))
     print(f"[FILTER] {label} jobs after filtering (posted_days <= {MAX_POSTED_DAYS}): {len(recent)}")
-    recent_jobs = await fetch_descriptions(recent.to_dict(orient="records"), label, read_description, skip_ids)
+    recent_jobs = await fetch_descriptions(recent.to_dict(orient="records"), label, read_description, skip_ids,
+                                           skip_keys)
     dataframe = jobs_to_dataframe(recent_jobs)
     return dataframe, write_flat_jobs_csv(dataframe, prefix)
 

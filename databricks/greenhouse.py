@@ -1,8 +1,9 @@
 import asyncio
 import html
+import os
 import re
 import sys
-from datetime import date, datetime
+from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlparse
 
 import aiohttp
@@ -34,6 +35,31 @@ DESCRIPTION_SELECTORS = [
 
 
 BOARD_TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,99}")
+
+# Posted dates are India calendar dates (the pipeline and the app count days in IST), whatever the runner's TZ is
+IST = timezone(timedelta(hours=5, minutes=30), "IST")
+# Seconds between two board requests (the boards API is public; one request per company, sequentially)
+REQUEST_DELAY_S = 1.0
+WORKPLACE_LABELS = {"remote": "Remote", "hybrid": "Hybrid", "on-site": "Onsite", "onsite": "Onsite",
+                    "on site": "Onsite", "in-office": "Onsite", "in office": "Onsite", "office": "Onsite"}
+EMPLOYMENT_RULES = [
+	(re.compile(r"\bintern(?:ship)?s?\b|\btrainee|\bapprentice", re.I), "Internship"),
+	(re.compile(r"part[\s_-]*time", re.I), "Part-time"),
+	(re.compile(r"contract|contractor|freelance|fixed[\s_-]*term", re.I), "Contract"),
+	(re.compile(r"temp", re.I), "Temporary"),
+	(re.compile(r"full[\s_-]*time|permanent|regular", re.I), "Full-time"),
+]
+
+
+def user_agent():
+	"""Honest User-Agent: who we are and where the code lives (the GitHub repo when running in Actions)."""
+	repo = os.getenv("GITHUB_REPOSITORY")
+	contact = f"+https://github.com/{repo}; " if repo else ""
+	return f"JobSeekerBot/1.0 ({contact}personal job search; low volume)"
+
+
+def today_ist():
+	return datetime.now(IST).date()
 
 
 def board_token(value):
@@ -100,18 +126,22 @@ def greenhouse_content_to_text(content):
 
 
 def parse_iso_date(posted_date):
-	"""Local calendar date of an ISO timestamp, or None when the value isn't one."""
+	"""IST calendar date of an ISO timestamp ('2026-10-07T05:00:00-04:00'; a naive one is UTC), or None when the value
+	isn't one. Explicit IST, so the date does not depend on the runner's TZ setting."""
 	try:
-		# Convert to local time (IST via TZ) before taking the date so it matches date.today().
-		return datetime.fromisoformat((posted_date or "").strip().replace("Z", "+00:00")).astimezone().date()
+		moment = datetime.fromisoformat(str(posted_date or "").strip().replace("Z", "+00:00"))
 	except ValueError:
 		return None
+	if moment.tzinfo is None:
+		moment = moment.replace(tzinfo=timezone.utc)
+	return moment.astimezone(IST).date()
 
 
-def posted_iso_to_days(posted_date):
+def posted_iso_to_days(posted_date, today=None):
+	"""Whole days since the posted date (0 = today, IST); a date ahead of today (time zones) counts as today."""
 	parsed = parse_iso_date(posted_date)
 	if parsed:
-		return (date.today() - parsed).days
+		return max(0, ((today or today_ist()) - parsed).days)
 	return relative_text_to_days(posted_date)
 
 
@@ -120,6 +150,43 @@ def format_posted_date(posted_date):
 	if parsed:
 		return format_calendar_date(parsed)
 	return (posted_date or "").strip()
+
+
+def metadata_value(item, pattern):
+	"""Text of the first custom field (Greenhouse 'metadata') whose name matches pattern ('Workplace Type': 'Hybrid')."""
+	for field in item.get("metadata") or []:
+		if not isinstance(field, dict) or not re.search(pattern, str(field.get("name") or ""), re.I):
+			continue
+		value = field.get("value")
+		if isinstance(value, list):
+			value = ", ".join(str(part) for part in value if part)
+		text = str(value or "").strip() if not isinstance(value, bool) else ""
+		if text:
+			return text
+	return ""
+
+
+def workplace_label(item):
+	"""'Remote' / 'Hybrid' / 'Onsite' from the board's workplace custom field, '' when it has none."""
+	value = metadata_value(item, r"workplace|work\s*(?:place|location)\s*type|remote")
+	return WORKPLACE_LABELS.get(value.strip().lower(), "")
+
+
+def employment_type(item):
+	"""The app.employment_kind vocabulary from an 'Employment Type' / 'Job Type' custom field, '' when unknown."""
+	value = metadata_value(item, r"employment\s*type|job\s*type|worker\s*type|time\s*type")
+	for pattern, label in EMPLOYMENT_RULES:
+		if pattern.search(value):
+			return label
+	return ""
+
+
+def location_with_workplace(location_name, workplace):
+	"""'Bengaluru, India (Hybrid)': the app's work_mode reads the label from the location text."""
+	text = (location_name or "").strip()
+	if workplace and workplace.lower() not in text.lower():
+		return f"{text} ({workplace})" if text else workplace
+	return text
 
 
 def parse_jobs_from_api(payload, board_url):
@@ -149,10 +216,11 @@ def parse_jobs_from_api(payload, board_url):
 		parsed_jobs.append({
 			"job_id": job_id,
 			"title": title,
-			"location": location_name or "Not specified",
+			"location": location_with_workplace(location_name, workplace_label(item)) or "Not specified",
 			"job_url": job_url,
 			"posted_date": posted_date,
 			"description": greenhouse_content_to_text(item.get("content", "")),
+			"employment_type": employment_type(item),
 		})
 
 	if missing_published:
@@ -199,9 +267,11 @@ async def read_greenhouse_description(page, job):
 async def collect_greenhouse_jobs(companies, report):
 	"""Jobs of every company, with one report outcome per company."""
 	collected_jobs = []
-	collected_on = format_calendar_date(date.today())
+	today = today_ist()
+	collected_on = format_calendar_date(today)
+	requested = False
 
-	async with aiohttp.ClientSession() as session:
+	async with aiohttp.ClientSession(headers={"User-Agent": user_agent(), "Accept": "application/json"}) as session:
 		for company in companies:
 			company_name = company.get("name") or "Unknown"
 			try:
@@ -213,6 +283,9 @@ async def collect_greenhouse_jobs(companies, report):
 
 			# The API URL is always built from the token
 			board_url = f"https://job-boards.greenhouse.io/{token}"
+			if requested:
+				await asyncio.sleep(REQUEST_DELAY_S)
+			requested = True
 			try:
 				payload = await fetch_board_jobs(session, board_api_url(token))
 			except ScrapeFailed as exc:
@@ -236,7 +309,8 @@ async def collect_greenhouse_jobs(companies, report):
 					"job_url": job.get("job_url", ""),
 					"description": job.get("description", ""),
 					"collected_on": collected_on,
-					"posted_days": posted_iso_to_days(posted_date),
+					"posted_days": posted_iso_to_days(posted_date, today),
+					"employment_type": job.get("employment_type", ""),
 				})
 
 	return collected_jobs

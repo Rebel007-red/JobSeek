@@ -1952,6 +1952,17 @@ h1[tabindex="-1"]:focus {
   font-size: 11px;
 }
 
+/* Add company: what the pasted link resolves to ("Will read: Lever site "paytm"") */
+.settings-field small.settings-derived {
+  color: var(--success);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.settings-field small.settings-derived:empty {
+  display: none;
+}
+
 .settings-input-row {
   display: flex;
   gap: 6px;

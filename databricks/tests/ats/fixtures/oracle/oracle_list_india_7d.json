@@ -1,0 +1,337 @@
+{
+ "_request": "https://eeho.fa.us2.oraclecloud.com/hcmRestApi/resources/latest/recruitingCEJobRequisitions?onlyData=true&expand=requisitionList.secondaryLocations,flexFieldsFacet.values&finder=findReqs;siteNumber=CX_45001,facetsList=LOCATIONS;POSTING_DATES;CATEGORIES;FLEX_FIELDS,limit=3,offset=0,sortBy=POSTING_DATES_DESC,location=India,selectedPostingDatesFacet=7",
+ "items": [
+  {
+   "SearchId": 1,
+   "Keyword": null,
+   "CorrectedKeyword": null,
+   "UseExactKeywordFlag": false,
+   "SuggestedKeyword": null,
+   "ExecuteSpellCheckFlag": true,
+   "Location": "India",
+   "LocationId": null,
+   "Radius": 0,
+   "RadiusUnit": "MI",
+   "SelectedTitlesFacet": null,
+   "SelectedCategoriesFacet": null,
+   "SelectedPostingDatesFacet": "7",
+   "SelectedLocationsFacet": null,
+   "LastSelectedFacet": null,
+   "Facets": "LOCATIONS;POSTING_DATES;CATEGORIES;FLEX_FIELDS",
+   "Offset": 0,
+   "Limit": 3,
+   "SortBy": "POSTING_DATES_DESC",
+   "TotalJobsCount": 3,
+   "Latitude": null,
+   "Longitude": null,
+   "SiteNumber": "CX_45001",
+   "JobFamilyId": null,
+   "PostingStartDate": null,
+   "PostingEndDate": null,
+   "SelectedWorkLocationsFacet": null,
+   "RequisitionId": null,
+   "CandidateNumber": null,
+   "WorkLocationZipCode": null,
+   "WorkLocationCountryCode": null,
+   "SelectedFlexFieldsFacets": null,
+   "OrganizationId": null,
+   "SelectedOrganizationsFacet": null,
+   "UserTargetFacetName": null,
+   "UserTargetFacetInputTerm": null,
+   "HotJobFlag": null,
+   "WorkplaceType": null,
+   "SelectedWorkplaceTypesFacet": null,
+   "BotQRShortCode": null,
+   "requisitionList": [
+    {
+     "Id": "345834",
+     "Title": "Principal Data Center Facilities Development Manager",
+     "PostedDate": "2026-10-07",
+     "PostingEndDate": null,
+     "Language": "US",
+     "PrimaryLocationCountry": "IN",
+     "GeographyId": 300000000106947,
+     "HotJobFlag": false,
+     "WorkplaceTypeCode": null,
+     "JobFamily": null,
+     "JobFunction": null,
+     "WorkerType": null,
+     "ContractType": null,
+     "ManagerLevel": null,
+     "JobSchedule": null,
+     "JobShift": null,
+     "JobType": null,
+     "StudyLevel": null,
+     "DomesticTravelRequired": null,
+     "InternationalTravelRequired": null,
+     "WorkDurationYears": null,
+     "WorkDurationMonths": null,
+     "WorkHours": null,
+     "WorkDays": null,
+     "LegalEmployer": null,
+     "BusinessUnit": null,
+     "Department": null,
+     "Organization": null,
+     "BusinessUnitId": 300001096431127,
+     "LegalEmployerId": 300005406230212,
+     "OrganizationId": 300001902541887,
+     "MediaThumbURL": "https://img.youtube.com/vi/BV0GMCITXg4/hqdefault.jpg",
+     "ShortDescriptionStr": "Leads the construction of data centers by colocation providers, ensuring projects are completed on time, within budget, and to the highest quality standards.",
+     "PrimaryLocation": "India",
+     "Distance": 1791331200000.0,
+     "TrendingFlag": true,
+     "BeFirstToApplyFlag": false,
+     "Relevancy": 10.0,
+     "WorkplaceType": "",
+     "ExternalQualificationsStr": null,
+     "ExternalResponsibilitiesStr": null,
+     "secondaryLocations": []
+    },
+    {
+     "Id": "346882",
+     "Title": "Principal Application Software Engineer",
+     "PostedDate": "2026-10-06",
+     "PostingEndDate": null,
+     "Language": "US",
+     "PrimaryLocationCountry": "IN",
+     "GeographyId": 300001842985425,
+     "HotJobFlag": false,
+     "WorkplaceTypeCode": null,
+     "JobFamily": null,
+     "JobFunction": null,
+     "WorkerType": null,
+     "ContractType": null,
+     "ManagerLevel": null,
+     "JobSchedule": null,
+     "JobShift": null,
+     "JobType": null,
+     "StudyLevel": null,
+     "DomesticTravelRequired": null,
+     "InternationalTravelRequired": null,
+     "WorkDurationYears": null,
+     "WorkDurationMonths": null,
+     "WorkHours": null,
+     "WorkDays": null,
+     "LegalEmployer": null,
+     "BusinessUnit": null,
+     "Department": null,
+     "Organization": null,
+     "BusinessUnitId": 300001096431127,
+     "LegalEmployerId": 300000000482027,
+     "OrganizationId": 300001902541887,
+     "MediaThumbURL": "https://img.youtube.com/vi/BV0GMCITXg4/hqdefault.jpg",
+     "ShortDescriptionStr": "Seeking an IC4 Software Development Engineer to build and enhance ITSR, Oracle’s AI-powered employee IT support service. The role will focus on ChatGPT/Codex plugin development, Python backend services, and integrations with Slack, Jira Service Management, MyHelp, knowledge sources, and Oracle APIs....[trimmed]",
+     "PrimaryLocation": "BENGALURU, KARNATAKA, India",
+     "Distance": 1791244800000.0,
+     "TrendingFlag": false,
+     "BeFirstToApplyFlag": false,
+     "Relevancy": 10.0,
+     "WorkplaceType": "",
+     "ExternalQualificationsStr": null,
+     "ExternalResponsibilitiesStr": null,
+     "secondaryLocations": [
+      {
+       "RequisitionLocationId": 302970186318951,
+       "GeographyNodeId": 100879842726511,
+       "GeographyId": 300001842985230,
+       "Name": "HYDERABAD, TELANGANA, India",
+       "CountryCode": "IN",
+       "Latitude": 17.3174,
+       "Longitude": 78.6611
+      }
+     ]
+    },
+    {
+     "Id": "346911",
+     "Title": "Senior Platform Software Engineer",
+     "PostedDate": "2026-10-06",
+     "PostingEndDate": null,
+     "Language": "US",
+     "PrimaryLocationCountry": "IN",
+     "GeographyId": 300001842985425,
+     "HotJobFlag": false,
+     "WorkplaceTypeCode": null,
+     "JobFamily": null,
+     "JobFunction": null,
+     "WorkerType": null,
+     "ContractType": null,
+     "ManagerLevel": null,
+     "JobSchedule": null,
+     "JobShift": null,
+     "JobType": null,
+     "StudyLevel": null,
+     "DomesticTravelRequired": null,
+     "InternationalTravelRequired": null,
+     "WorkDurationYears": null,
+     "WorkDurationMonths": null,
+     "WorkHours": null,
+     "WorkDays": null,
+     "LegalEmployer": null,
+     "BusinessUnit": null,
+     "Department": null,
+     "Organization": null,
+     "BusinessUnitId": 300001096431127,
+     "LegalEmployerId": 300000000814110,
+     "OrganizationId": 300001902541887,
+     "MediaThumbURL": "https://img.youtube.com/vi/BV0GMCITXg4/hqdefault.jpg",
+     "ShortDescriptionStr": "Owns moderately complex components within platform services or SDKs; leads team-level improvements to integration frameworks and developer tooling.",
+     "PrimaryLocation": "BENGALURU, KARNATAKA, India",
+     "Distance": 1791244800000.0,
+     "TrendingFlag": false,
+     "BeFirstToApplyFlag": false,
+     "Relevancy": 10.0,
+     "WorkplaceType": "",
+     "ExternalQualificationsStr": null,
+     "ExternalResponsibilitiesStr": null,
+     "secondaryLocations": []
+    }
+   ],
+   "categoriesFacet": [
+    {
+     "Id": 302958497961752,
+     "Name": "Product and Research",
+     "TotalCount": 2
+    },
+    {
+     "Id": 302958497961746,
+     "Name": "Technology Operations",
+     "TotalCount": 1
+    }
+   ],
+   "locationsFacet": [
+    {
+     "Id": 300000000106947,
+     "Name": "India",
+     "TotalCount": 3
+    },
+    {
+     "Id": 300001842984480,
+     "Name": "KARNATAKA, India",
+     "TotalCount": 2
+    },
+    {
+     "Id": 300001842985425,
+     "Name": "BENGALURU, KARNATAKA, India",
+     "TotalCount": 2
+    },
+    {
+     "Id": 300001842984495,
+     "Name": "TELANGANA, India",
+     "TotalCount": 1
+    },
+    {
+     "Id": 300001842985230,
+     "Name": "HYDERABAD, TELANGANA, India",
+     "TotalCount": 1
+    }
+   ],
+   "postingDatesFacet": [
+    {
+     "Id": 7,
+     "Name": "Less than 7 days",
+     "TotalCount": 3
+    },
+    {
+     "Id": 30,
+     "Name": "Less than 30 days",
+     "TotalCount": 3
+    }
+   ],
+   "titlesFacet": [],
+   "workLocationsFacet": [],
+   "flexFieldsFacet": [
+    {
+     "Name": "AttributeChar29",
+     "Label": "Role",
+     "values": [
+      {
+       "Id": "Individual Contributor",
+       "Name": "Individual Contributor",
+       "TotalCount": 3
+      }
+     ]
+    },
+    {
+     "Name": "AttributeChar4",
+     "Label": "Job Type",
+     "values": [
+      {
+       "Id": "Employee",
+       "Name": "Regular Employee",
+       "TotalCount": 3
+      }
+     ]
+    },
+    {
+     "Name": "AttributeChar13",
+     "Label": "Experience Level",
+     "values": [
+      {
+       "Id": "Professional",
+       "Name": "Professional",
+       "TotalCount": 3
+      }
+     ]
+    },
+    {
+     "Name": "AttributeChar15",
+     "Label": "Line of Business",
+     "values": [
+      {
+       "Id": "OCI",
+       "Name": "Oracle Cloud Infrastructure",
+       "TotalCount": 2
+      },
+      {
+       "Id": "OIT - Enterprise Engineering",
+       "Name": "OIT - Enterprise Engineering",
+       "TotalCount": 1
+      }
+     ]
+    },
+    {
+     "Name": "AttributeChar6",
+     "Label": "Years",
+     "values": [
+      {
+       "Id": "6 to 10+ years",
+       "Name": "6 to 10+ years",
+       "TotalCount": 2
+      },
+      {
+       "Id": "3 to 5+ years",
+       "Name": "3 to 5+ years",
+       "TotalCount": 1
+      }
+     ]
+    }
+   ],
+   "organizationsFacet": [],
+   "workplaceTypesFacet": []
+  }
+ ],
+ "count": 1,
+ "hasMore": false,
+ "limit": 200,
+ "offset": 0,
+ "links": [
+  {
+   "rel": "self",
+   "href": "https://eeho.fa.us2.oraclecloud.com:443/hcmRestApi/resources/11.13.18.05/recruitingCEJobRequisitions",
+   "name": "recruitingCEJobRequisitions",
+   "kind": "collection"
+  },
+  {
+   "rel": "action",
+   "href": "https://eeho.fa.us2.oraclecloud.com:443/hcmRestApi/resources/11.13.18.05/recruitingCEJobRequisitions/action/getRequisitionsLocationCoordinates",
+   "name": "getRequisitionsLocationCoordinates",
+   "kind": "other"
+  },
+  {
+   "rel": "action",
+   "href": "https://eeho.fa.us2.oraclecloud.com:443/hcmRestApi/resources/11.13.18.05/recruitingCEJobRequisitions/action/getRequisitionDetailsForMap",
+   "name": "getRequisitionDetailsForMap",
+   "kind": "other"
+  }
+ ]
+}

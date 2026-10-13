@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react'
 import { api } from '../../lib/api'
 import { dataFreshness } from '../../utils/job'
 import { SCHEDULES, clockLabel, nextJobsAt, nextStart } from '../../utils/schedule'
+import { MANUAL_SOURCES, SCRAPE_SOURCES, sourceLabel } from '../../utils/sources'
 
+// Every scrape source: the scheduled company boards first, then the ones run by hand only (LinkedIn), shown as paused
 const SOURCES = [
-  { key: 'linkedin', label: 'LinkedIn' },
-  { key: 'workday', label: 'Workday' },
-  { key: 'greenhouse', label: 'Greenhouse' },
-]
+  ...SCRAPE_SOURCES.filter(key => !MANUAL_SOURCES.includes(key)),
+  ...SCRAPE_SOURCES.filter(key => MANUAL_SOURCES.includes(key)),
+].map(key => ({ key, label: sourceLabel(key), manual: MANUAL_SOURCES.includes(key) }))
+const PAUSED = { label: 'Paused', tone: 'muted' }
+const PAUSED_TITLE = 'No schedule: runs only when the LinkedIn workflow is started by hand'
 
 // Run results (Databricks result_state / life cycle state) and scrape statuses as badges: { label, tone }
 const RUN_RESULTS = {
@@ -176,8 +179,8 @@ export function StatusPanel() {
           })}
         </ul>
         <p className="muted-text">
-          Users see &ldquo;Next jobs around {clockLabel(nextJobsAt(now))}&rdquo; (the next LinkedIn run plus about the time
-          it takes to publish).
+          Users see &ldquo;Next jobs around {clockLabel(nextJobsAt(now))}&rdquo; (the next company-boards scrape plus about
+          the time it takes to publish, an estimate). LinkedIn has no schedule: it runs only when started by hand.
         </p>
       </section>
 
@@ -193,11 +196,16 @@ export function StatusPanel() {
               <div key={source.key} className="settings-row system-row">
                 <div className="settings-row-main">
                   <div className="settings-company-name">
-                    {source.label} <Badge badge={latest ? SCRAPE_STATUSES[latest.status] || { label: latest.status, tone: 'pending' } : { label: 'No report yet', tone: 'pending' }} />
+                    {source.label}{' '}
+                    {source.manual && <Badge badge={PAUSED} title={PAUSED_TITLE} />}{source.manual && latest && ' '}
+                    {(!source.manual || latest) && (
+                      <Badge badge={latest ? SCRAPE_STATUSES[latest.status] || { label: latest.status, tone: 'pending' } : { label: 'No report yet', tone: 'pending' }} />
+                    )}
                   </div>
+                  {source.manual && <p className="system-message">{PAUSED_TITLE}.</p>}
                   {latest && (
                     <div className="settings-company-meta">
-                      <span title={dateTime(latest.finished_at)}>{dateTime(latest.finished_at)}</span>
+                      <span title={dateTime(latest.finished_at)}>{source.manual ? 'Last run ' : ''}{dateTime(latest.finished_at)}</span>
                       <span>{count(latest.companies)} {source.key === 'linkedin' ? 'searches' : 'companies'}, {count(latest.failed)} failed</span>
                       <span>{count(latest.jobs_written)} jobs written{latest.jobs_scraped !== null && latest.jobs_scraped !== undefined ? ` of ${count(latest.jobs_scraped)} scraped` : ''}</span>
                     </div>

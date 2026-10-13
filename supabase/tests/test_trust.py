@@ -31,15 +31,21 @@ def days_ago(n):
     return {"posted_date": TODAY - dt.timedelta(days=n), "first_seen_at": NOW - dt.timedelta(days=n)}
 
 
+# app.c_job_delete_after_days() (= src/utils/job.js JOB_DELETE_AFTER_DAYS): a job this many days old is on its last day.
+# The fixture names date from the 2-day rule (t_exp_two: its last day, t_exp_five: overdue, t_exp_one: a day left).
+# Overdue is DELETE_DAYS + 2, not + 3: base.py's "old" (10 days) must stay the oldest expiring job.
+DELETE_DAYS = 7
+
 EXTRA = [
-    strong_job("t_exp_two", **days_ago(2)),                           # its last day: expiring
-    strong_job("t_exp_five", **days_ago(5)),                          # overdue: still expiring until the publish
-    strong_job("t_exp_nodate", posted_date=None, first_seen_at=NOW - dt.timedelta(days=3)),  # job date from first_seen_at
-    strong_job("t_exp_one", **days_ago(1)),                           # a day left: not expiring
-    strong_job("t_exp_muted", company_name=MUTED_CO, **days_ago(2)),  # muted (see setUp): not expiring
+    strong_job("t_exp_two", **days_ago(DELETE_DAYS)),                           # its last day: expiring
+    strong_job("t_exp_five", **days_ago(DELETE_DAYS + 2)),                      # overdue: still expiring until the publish
+    strong_job("t_exp_nodate", posted_date=None,
+               first_seen_at=NOW - dt.timedelta(days=DELETE_DAYS + 1)),         # job date from first_seen_at
+    strong_job("t_exp_one", **days_ago(DELETE_DAYS - 1)),                       # a day left: not expiring
+    strong_job("t_exp_muted", company_name=MUTED_CO, **days_ago(DELETE_DAYS)),  # muted (see setUp): not expiring
     strong_job("t_exp_weak", experience_min_years=None, experience_max_years=None, skills=[], skill_groups=[],
-               **days_ago(2)),                                        # For you, but not a strong fit
-    _job("t_exp_notforyou", role_title="Zz Fixture Unrelated", **days_ago(2)),  # not For you: never expiring
+               **days_ago(DELETE_DAYS)),                                        # For you, but not a strong fit
+    _job("t_exp_notforyou", role_title="Zz Fixture Unrelated", **days_ago(DELETE_DAYS)),  # not For you: never expiring
 ]
 T = {row["job_key"]: row for row in EXTRA}
 K = {name: fixture_key(name) for name in ("t_exp_two", "t_exp_five", "t_exp_nodate", "t_exp_one", "t_exp_muted",
@@ -225,7 +231,7 @@ class ExpiringTest(TrustTestCase):
         self.assertEqual(self.summary()["expiring"], len(left) + 1)
 
     def test_cap_total_and_sort(self):
-        self.insert_jobs([strong_job(f"t_cap_{w}", title=f"Zz Fixture Expiring {w.title()}", **days_ago(2 + i % 3))
+        self.insert_jobs([strong_job(f"t_cap_{w}", title=f"Zz Fixture Expiring {w.title()}", **days_ago(DELETE_DAYS + i % 3))
                           for i, w in enumerate(WORDS)])
         expected_total = len(self.EXPECTED) + len(WORDS)
         rows = self.jobs({"expiring": True})

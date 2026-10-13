@@ -1,0 +1,98 @@
+{
+ "_about": "Board URL -> companies columns. Pinned by databricks/tests/ats/test_base.py (adapter.source_columns) and by the form's test in src/ (same file). expect null = rejected.",
+ "cases": [
+  {
+   "input": "https://jpmc.fa.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1001/requisitions",
+   "expect": {
+    "slug": "CX_1001",
+    "api_url": "https://jpmc.fa.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1001"
+   }
+  },
+  {
+   "input": "https://jpmc.fa.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1001/job/210771474?utm_source=x",
+   "expect": {
+    "slug": "CX_1001",
+    "api_url": "https://jpmc.fa.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1001"
+   }
+  },
+  {
+   "input": "jpmc.fa.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1001",
+   "expect": {
+    "slug": "CX_1001",
+    "api_url": "https://jpmc.fa.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1001"
+   }
+  },
+  {
+   "input": "https://eeho.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/jobsearch/requisitions?location=India",
+   "expect": {
+    "slug": "jobsearch",
+    "api_url": "https://eeho.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/jobsearch"
+   }
+  },
+  {
+   "input": "https://ibqbjb.fa.ocs.oraclecloud.com:443/hcmUI/CandidateExperience/fr/sites/CX_1/requisitions",
+   "expect": {
+    "slug": "CX_1",
+    "api_url": "https://ibqbjb.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1"
+   }
+  },
+  {
+   "input": "https://fa-evmr-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/job/41278",
+   "expect": {
+    "slug": "CX_1",
+    "api_url": "https://fa-evmr-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1"
+   }
+  },
+  {
+   "input": "https://careers.honeywell.com/en/sites/Honeywell",
+   "expect": {
+    "slug": "",
+    "api_url": "https://careers.honeywell.com/en/sites/Honeywell"
+   }
+  },
+  {
+   "input": "https://jobs.nokia.com/en/sites/CX_1/requisitions?location=India",
+   "expect": {
+    "slug": "",
+    "api_url": "https://jobs.nokia.com/en/sites/CX_1/requisitions?location=India"
+   }
+  },
+  {
+   "input": "https://careers.oracle.com/en/sites/jobsearch/jobs",
+   "expect": {
+    "slug": "",
+    "api_url": "https://careers.oracle.com/en/sites/jobsearch/jobs"
+   }
+  },
+  {
+   "input": "https://jpmc.fa.oraclecloud.com",
+   "expect": {
+    "slug": "",
+    "api_url": "https://jpmc.fa.oraclecloud.com"
+   }
+  },
+  {
+   "input": "http://careers.honeywell.com/en/sites/Honeywell",
+   "expect": null
+  },
+  {
+   "input": "careers.honeywell.com",
+   "expect": null
+  },
+  {
+   "input": "CX_1001",
+   "expect": null
+  },
+  {
+   "input": "https://jobs.lever.co/paytm",
+   "expect": {
+    "slug": "",
+    "api_url": "https://jobs.lever.co/paytm"
+   }
+  },
+  {
+   "input": "",
+   "expect": null
+  }
+ ]
+}

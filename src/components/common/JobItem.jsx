@@ -8,7 +8,7 @@ import { Swipeable } from './Swipeable'
 // Statuses shown as a tag outside the Applied tab (plain "Applied" already shows as the date)
 const STAGE_TAGS = new Set(['interviewing', 'offer', 'rejected', 'withdrawn'])
 const MUTED_BY = { company: 'Company', title: 'Title word', level: 'Level' }
-const EXPIRY_TITLE = "Jobs you haven't saved or applied to disappear 2 days after posting. Save it to keep it."
+const EXPIRY_TITLE = "Jobs you haven't saved or applied to disappear 7 days after posting. Save it to keep it."
 
 // What a screen reader hears after the row's name (its title and company): "New. Fit 82, strong fit. Applied Oct 4.
 // Disappears in ~9h."

@@ -1,0 +1,331 @@
+{
+ "nextPage": "WzE3OTEyNDQ4MDAwMDAsNjE3NDIyNV0=",
+ "results": [
+  {
+   "id": 5970892,
+   "shortcode": "50642A332D",
+   "title": "Senior Analyst",
+   "remote": false,
+   "location": {
+    "city": "Bengaluru",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Karnataka"
+   },
+   "locations": [
+    {
+     "city": "Bengaluru",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Karnataka"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": null,
+   "published": "2026-10-09T00:00:00.000Z",
+   "language": "en",
+   "department": [
+    "Consultancy & BPO"
+   ],
+   "accountUid": "fea2761c-b6ac-4917-bd56-2e96ddefe357",
+   "approvalStatus": "approved",
+   "workplace": "on_site"
+  },
+  {
+   "id": 6040862,
+   "shortcode": "004B1B1144",
+   "title": "Manager",
+   "remote": false,
+   "location": {
+    "city": "Bengaluru",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Karnataka"
+   },
+   "locations": [
+    {
+     "city": "Bengaluru",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Karnataka"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-10-09T00:00:00.000Z",
+   "type": "full",
+   "language": "en",
+   "department": [
+    "On Demand"
+   ],
+   "accountUid": "fea2761c-b6ac-4917-bd56-2e96ddefe357",
+   "approvalStatus": "approved",
+   "workplace": "on_site"
+  },
+  {
+   "id": 6052285,
+   "shortcode": "883F7203C6",
+   "title": "Senior Analyst",
+   "remote": false,
+   "location": {
+    "city": "Mumbai",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Maharashtra"
+   },
+   "locations": [
+    {
+     "city": "Mumbai",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Maharashtra"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": null,
+   "published": "2026-10-09T00:00:00.000Z",
+   "language": "en",
+   "department": [
+    "Consultancy & BPO"
+   ],
+   "accountUid": "fea2761c-b6ac-4917-bd56-2e96ddefe357",
+   "approvalStatus": "approved",
+   "workplace": "on_site"
+  },
+  {
+   "id": 6074274,
+   "shortcode": "B8004E2AC4",
+   "title": "Senior Analyst",
+   "remote": false,
+   "location": {
+    "city": "Mumbai",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Maharashtra"
+   },
+   "locations": [
+    {
+     "city": "Mumbai",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Maharashtra"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": null,
+   "published": "2026-10-09T00:00:00.000Z",
+   "language": "en",
+   "department": [
+    "Consultancy & BPO"
+   ],
+   "accountUid": "fea2761c-b6ac-4917-bd56-2e96ddefe357",
+   "approvalStatus": "approved",
+   "workplace": "on_site"
+  },
+  {
+   "id": 5967945,
+   "shortcode": "9F69DCD491",
+   "title": "Software Engineer",
+   "remote": false,
+   "location": {
+    "city": "Mumbai",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Maharashtra"
+   },
+   "locations": [
+    {
+     "city": "Mumbai",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Maharashtra"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": null,
+   "published": "2026-10-08T00:00:00.000Z",
+   "type": "full",
+   "language": "en",
+   "department": [
+    "Development"
+   ],
+   "accountUid": "fea2761c-b6ac-4917-bd56-2e96ddefe357",
+   "approvalStatus": "approved",
+   "workplace": "on_site"
+  },
+  {
+   "id": 6028541,
+   "shortcode": "2AC01465C3",
+   "title": "SMSTR58 - Technical Consultant - DB IT",
+   "remote": false,
+   "location": {
+    "city": "Bengaluru",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Karnataka"
+   },
+   "locations": [
+    {
+     "city": "Bengaluru",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Karnataka"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": null,
+   "published": "2026-10-08T00:00:00.000Z",
+   "language": "en",
+   "department": [
+    "Managed Services"
+   ],
+   "accountUid": "fea2761c-b6ac-4917-bd56-2e96ddefe357",
+   "approvalStatus": "approved",
+   "workplace": "on_site"
+  },
+  {
+   "id": 6082509,
+   "shortcode": "90D20C4006",
+   "title": "Senior Analyst",
+   "remote": false,
+   "location": {
+    "city": "Mumbai",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Maharashtra"
+   },
+   "locations": [
+    {
+     "city": "Mumbai",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Maharashtra"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": null,
+   "published": "2026-10-08T00:00:00.000Z",
+   "language": "en",
+   "department": [
+    "Consultancy & BPO"
+   ],
+   "accountUid": "fea2761c-b6ac-4917-bd56-2e96ddefe357",
+   "approvalStatus": "approved",
+   "workplace": "on_site"
+  },
+  {
+   "id": 6069730,
+   "shortcode": "8F9CD1A74A",
+   "title": "Senior Software Engineer",
+   "remote": false,
+   "location": {
+    "city": "Pune",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Maharashtra"
+   },
+   "locations": [
+    {
+     "city": "Pune",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Maharashtra"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "SMSTR76",
+   "published": "2026-10-06T00:00:00.000Z",
+   "type": "full",
+   "language": "en",
+   "department": [
+    "Development"
+   ],
+   "accountUid": "fea2761c-b6ac-4917-bd56-2e96ddefe357",
+   "approvalStatus": "approved",
+   "workplace": "on_site"
+  },
+  {
+   "id": 6124467,
+   "shortcode": "150C30378C",
+   "title": "Support Analyst",
+   "remote": false,
+   "location": {
+    "city": "Mumbai",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Maharashtra"
+   },
+   "locations": [
+    {
+     "city": "Mumbai",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Maharashtra"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "SMSTR95",
+   "published": "2026-10-06T00:00:00.000Z",
+   "type": "full",
+   "language": "en",
+   "department": [
+    "Tech Services"
+   ],
+   "accountUid": "fea2761c-b6ac-4917-bd56-2e96ddefe357",
+   "approvalStatus": "approved",
+   "workplace": "hybrid"
+  },
+  {
+   "id": 6174225,
+   "shortcode": "1C6F8BD400",
+   "title": "SMSTR85 - Full Stack Developer",
+   "remote": false,
+   "location": {
+    "city": "Mumbai",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Maharashtra"
+   },
+   "locations": [
+    {
+     "city": "Mumbai",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Maharashtra"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-10-06T00:00:00.000Z",
+   "type": "full",
+   "language": "en",
+   "department": [
+    "Development"
+   ],
+   "accountUid": "fea2761c-b6ac-4917-bd56-2e96ddefe357",
+   "approvalStatus": "approved",
+   "workplace": "hybrid"
+  }
+ ],
+ "total": 35
+}

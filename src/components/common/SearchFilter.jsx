@@ -3,12 +3,13 @@ import { createPortal } from 'react-dom'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
 import { EMPLOYMENT_LABELS, WORK_MODE_LABELS } from '../../utils/gold'
 import { DEFAULT_FILTERS, PANEL_KEYS } from '../../utils/filters'
+import { SOURCE_LABELS } from '../../utils/sources'
 import { CloseIcon, FilterIcon } from './icons'
 
 // The filter definitions moved to utils/filters.js (the URL state uses them too); re-exported for older imports
 export { DEFAULT_FILTERS, EMPTY_FILTERS, FRESH_HOURS, PANEL_KEYS, POSTED_OPTIONS } from '../../utils/filters'
 
-// labels: value -> display text (work mode, employment); other facets show the value itself
+// labels: value -> display text (source, work mode, employment); other facets show the value itself
 function FacetSelect({ label, value, options, allLabel, onChange, labels }) {
   const id = useId()
   const text = (option) => labels?.[option] ?? option
@@ -149,7 +150,7 @@ export function SearchFilter({
             <FacetSelect label="Role" value={draft.role} options={options('role')} allLabel="All roles" onChange={v => set('role', v)} />
             <FacetSelect label="Category" value={draft.category} options={options('category')} allLabel="All categories" onChange={v => set('category', v)} />
             <FacetSelect label="Company" value={draft.company} options={options('company')} allLabel="All companies" onChange={v => set('company', v)} />
-            <FacetSelect label="Source" value={draft.source} options={options('source')} allLabel="All sources" onChange={v => set('source', v)} />
+            <FacetSelect label="Source" value={draft.source} options={options('source')} allLabel="All sources" labels={SOURCE_LABELS} onChange={v => set('source', v)} />
             <FacetSelect label="City" value={draft.city} options={options('city')} allLabel="All cities" onChange={v => set('city', v)} />
             <FacetSelect
               label="Work mode"

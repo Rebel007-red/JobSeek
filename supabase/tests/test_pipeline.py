@@ -9,7 +9,8 @@ import hashlib
 import json
 import re
 
-from base import (CR_MAPPED, CR_PENDING, JOB_BY_NAME, KEY, NOW, U_MAIN, U_OTHER, DbTestCase, _job, fixture_key)
+from base import (CR_MAPPED, CR_PENDING, JOB_BY_NAME, KEY, NOW, ROOT, U_ADMIN, U_MAIN, U_OTHER, DbTestCase, _job, fixture_key,
+                  psycopg)
 
 TS_RE = re.compile(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z$")
 SMALL_KINDS = ["skill_stats", "role_similarity", "ref_roles", "ref_skills", "ref_cities", "custom_roles", "custom_skills"]
@@ -482,6 +483,74 @@ class ScrapeReportTest(DbTestCase):
                     VALUES ('workday', 'zz fixture stale', 'Zz Fixture Stale', now() - interval '31 days')""")
         self.service("pipeline_record_scrape", report(run={"github_run_id": "fixture-r99"}, companies=[]))
         self.assertNotIn("zz fixture stale", self.companies())
+
+    def test_every_ats_source_is_recorded(self):
+        # app.c_scrape_sources() = databricks/ats/registry.py ALL_SOURCES (src/utils/sql_constants.test.js pins the list)
+        sources = self.value("SELECT app.c_scrape_sources()")
+        self.assertEqual(sources[:3], ["workday", "greenhouse", "linkedin"])
+        self.assertEqual(len(sources), 11)
+        for source in ("lever", "ashby", "smartrecruiters", "workable", "oracle", "successfactors", "darwinbox", "keka"):
+            with self.subTest(source=source):
+                self.assertEqual(self.service("pipeline_record_scrape", report(source=source)), {"recorded": True, "companies": 2})
+                self.assertEqual(self.value("SELECT status FROM app.scrape_runs WHERE source = %s AND github_run_id = 'fixture-77'",
+                                            [source]), "partial")
+                self.assertEqual(set(self.companies(source)), {"zz fixture acme", "zz fixture broken"})
+        # the admin views list them like workday (company health per source, the System tab's scrapes)
+        health = {(r["company"], r["source"]) for r in self.read("companyHealth", uid=U_ADMIN, admin=True)}
+        self.assertIn(("zz fixture acme", "keka"), health)
+        status = self.read("systemStatus", uid=U_ADMIN, admin=True)[0]
+        self.assertIn("successfactors", {row["source"] for row in status["scrapes"]})
+        with self.assertSqlError("Invalid source"):
+            self.service("pipeline_record_scrape", report(source="Lever"))  # names are lower case
+
+    def test_source_check_uses_the_constant(self):
+        definition = self.value("""SELECT pg_get_constraintdef(oid) FROM pg_constraint
+                                   WHERE conrelid = 'app.scrape_runs'::regclass AND conname = 'scrape_runs_source_check'""")
+        self.assertIn("c_scrape_sources()", definition)
+        self.sql("INSERT INTO app.scrape_runs (source, github_run_id, finished_at, status) VALUES ('keka', 'fixture-c1', now(), 'ok')")
+        with self.assertRaises(psycopg.errors.CheckViolation):
+            with self.conn.transaction():
+                self.sql("""INSERT INTO app.scrape_runs (source, github_run_id, finished_at, status)
+                            VALUES ('phenom', 'fixture-c2', now(), 'ok')""")
+
+    def test_schema_upgrade_replaces_the_old_checks(self):
+        # A database from before the ATS scrapers: the old inline CHECK on app.scrape_runs.source and an allow-list CHECK
+        # on public.companies.ats_type that, like the deployed one, also names retired types a row still uses
+        # ('indeed'). Re-running app_schema.sql replaces both (rolled back).
+        if self.value("SELECT to_regclass('public.companies') IS NOT NULL"):
+            self.skipTest("public.companies exists here; the upgrade is checked on a scratch database only")
+        self.sql("ALTER TABLE app.scrape_runs DROP CONSTRAINT scrape_runs_source_check")
+        self.sql("""ALTER TABLE app.scrape_runs ADD CONSTRAINT scrape_runs_source_check
+                    CHECK (source IN ('workday', 'greenhouse', 'linkedin'))""")
+        self.sql("""CREATE TABLE public.companies (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, name text NOT NULL,
+                      ats_type text CHECK (ats_type = ANY (ARRAY['workday', 'phenom', 'oracle', 'successfactors',
+                      'linkedin', 'greenhouse', 'indeed'])), slug text, api_url text,
+                      disabled boolean, CONSTRAINT companies_name_check CHECK (name <> ''),
+                      CONSTRAINT companies_ats_lower_check CHECK (ats_type = lower(ats_type)))""")
+        self.sql("INSERT INTO public.companies (name, ats_type) VALUES ('Zz Fixture Legacy Co', 'indeed')")
+        self.sql(SCHEMA_SQL)
+        replaced = self.value("""SELECT pg_get_constraintdef(oid) FROM pg_constraint
+                                 WHERE conrelid = 'public.companies'::regclass AND conname = 'companies_ats_type_check'""")
+        self.sql(SCHEMA_SQL)  # idempotent: the new allow-list names every source, so it stays as it is
+        self.assertIn("c_scrape_sources()", self.value("""SELECT pg_get_constraintdef(oid) FROM pg_constraint
+                      WHERE conrelid = 'app.scrape_runs'::regclass AND conname = 'scrape_runs_source_check'"""))
+        self.assertEqual(self.rows("""SELECT conname FROM pg_constraint
+                                      WHERE conrelid = 'public.companies'::regclass AND contype = 'c' ORDER BY conname"""),
+                         [("companies_ats_lower_check",), ("companies_ats_type_check",), ("companies_name_check",)])
+        self.assertEqual(self.value("""SELECT pg_get_constraintdef(oid) FROM pg_constraint
+                                       WHERE conrelid = 'public.companies'::regclass
+                                         AND conname = 'companies_ats_type_check'"""), replaced)
+        for name in ("keka", "smartrecruiters", "lever", "indeed"):  # every source, and the legacy value in use
+            self.sql("INSERT INTO public.companies (name, ats_type) VALUES (%s, %s)", (f"Zz Fixture {name} Co", name))
+        with self.assertRaises(Exception):
+            with self.conn.transaction():  # savepoint: the failed insert rolls back alone
+                self.sql("INSERT INTO public.companies (name, ats_type) VALUES ('Zz Fixture Typo Co', 'lver')")
+        with self.assertRaises(Exception):
+            with self.conn.transaction():
+                self.sql("INSERT INTO public.companies (name, ats_type) VALUES ('Zz Fixture Retired Co', 'phenom')")
+
+
+SCHEMA_SQL = (ROOT / "supabase" / "app_schema.sql").read_text(encoding="utf-8")
 
 
 class RunHistoryTest(DbTestCase):

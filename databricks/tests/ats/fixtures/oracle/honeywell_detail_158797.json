@@ -1,0 +1,140 @@
+{
+ "_request": "https://ibqbjb.fa.ocs.oraclecloud.com/hcmRestApi/resources/latest/recruitingCEJobRequisitionDetails?expand=all&onlyData=true&finder=ById%3BId%3D%22158797%22%2CsiteNumber%3DCX_1",
+ "items": [
+  {
+   "Id": "158797",
+   "Title": "Sr Channel Sales Rep",
+   "Category": "Sales",
+   "RequisitionType": "Professional",
+   "JobGrade": null,
+   "RequisitionId": 300003406415453,
+   "ExternalPostedStartDate": "2026-10-09T05:41:49+00:00",
+   "JobLevel": null,
+   "JobSchedule": "Full time",
+   "JobShift": null,
+   "StudyLevel": null,
+   "InternationalTravelRequired": null,
+   "ExternalContactName": null,
+   "ExternalContactEmail": null,
+   "ContractType": null,
+   "ExternalPostedEndDate": "2026-10-10T05:41:00+00:00",
+   "JobFamilyId": 300000017425595,
+   "GeographyId": 100000013402525,
+   "GeographyNodeId": 300000014471571,
+   "ExternalDescriptionStr": "",
+   "CorporateDescriptionStr": "Honeywell Technologies is a global, pure-play automation company with a legacy of innovating to help solve the world’s most mission-critical challenges, enhancing the quality of life for people and communities around the world. We serve the building, industrial and process sectors with a broad portf...[trimmed]",
+   "OrganizationDescriptionStr": "",
+   "ShortDescriptionStr": "As a Sr Channel Sales Rep here at Honeywell, you will drive sales growth through effective channel management, build and nurture relationships with partners, identify new business opportunities, and lead contract negotiations.",
+   "ContentLocale": "en",
+   "PrimaryLocation": "Gurugram, Haryana, India",
+   "PrimaryLocationCountry": "IN",
+   "ObjectVerNumberProfile": null,
+   "ApplyWhenNotPostedFlag": true,
+   "ExternalQualificationsStr": "",
+   "InternalQualificationsStr": "",
+   "InternalResponsibilitiesStr": "",
+   "ExternalResponsibilitiesStr": "",
+   "JobFunctionCode": "286",
+   "HotJobFlag": false,
+   "TrendingFlag": false,
+   "BeFirstToApplyFlag": true,
+   "WorkplaceTypeCode": "ORA_HYBRID",
+   "WorkplaceType": "Hybrid",
+   "OtherRequisitionTitle": null,
+   "NumberOfOpenings": null,
+   "HiringManager": null,
+   "Organization": null,
+   "BusinessUnitId": 300000002844360,
+   "LegalEmployerId": 300000002751393,
+   "OrganizationId": 300000003325289,
+   "WorkerType": null,
+   "JobType": null,
+   "WorkMonths": null,
+   "WorkYears": null,
+   "WorkHours": null,
+   "WorkDays": null,
+   "LegalEmployer": null,
+   "BusinessUnit": null,
+   "Department": null,
+   "DomesticTravelRequired": null,
+   "JobFunction": "Channel Sales",
+   "secondaryLocations": [],
+   "media": [],
+   "workLocation": [
+    {
+     "LocationId": 300000017420513,
+     "LocationName": "Gurgaon,Haryana,India",
+     "AddressLine1": "One-HON-UTC-GF ,Sushant Lok Phase I, Sector 43,",
+     "AddressLine2": "Gurugram",
+     "AddressLine3": null,
+     "AddressLine4": null,
+     "Building": " ",
+     "TownOrCity": "Gurgaon",
+     "PostalCode": "122022",
+     "Country": "IN",
+     "Region1": " ",
+     "Region2": "HR",
+     "Region3": null,
+     "Longitude": "",
+     "Latitude": ""
+    }
+   ],
+   "otherWorkLocations": [
+    {
+     "RequisitionWorkLocationId": 300003406415460,
+     "LocationId": 300001782695011,
+     "LocationName": "Gurgaon,India",
+     "AddressLine1": "DLF Phase 3",
+     "AddressLine2": null,
+     "AddressLine3": null,
+     "AddressLine4": null,
+     "Building": null,
+     "TownOrCity": "Gurugram",
+     "PostalCode": "122002",
+     "Country": "IN",
+     "Region1": null,
+     "Region2": "Haryana",
+     "Region3": null,
+     "Latitude": "28.47894",
+     "Longitude": "77.09193"
+    }
+   ],
+   "requisitionFlexFields": [
+    {
+     "Prompt": "Hire Eligibility",
+     "Value": "Internal and External",
+     "ControlType": "SingleChoiceList",
+     "SequenceNumber": 2
+    },
+    {
+     "Prompt": "Relocation Package",
+     "Value": "None",
+     "ControlType": "SingleChoiceList",
+     "SequenceNumber": 3
+    }
+   ],
+   "primaryLocationCoordinates": [
+    {
+     "GeographyNodeId": 300000014471571,
+     "GeographyId": 100000013402525,
+     "Latitude": "28.47717",
+     "Longitude": "77.06846",
+     "CountryCode": "IN"
+    }
+   ],
+   "skills": []
+  }
+ ],
+ "count": 1,
+ "hasMore": false,
+ "limit": 499,
+ "offset": 0,
+ "links": [
+  {
+   "rel": "self",
+   "href": "https://ibqbjb.fa.ocs.oraclecloud.com:443/hcmRestApi/resources/11.13.18.05/recruitingCEJobRequisitionDetails",
+   "name": "recruitingCEJobRequisitionDetails",
+   "kind": "collection"
+  }
+ ]
+}

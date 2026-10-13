@@ -1,12 +1,16 @@
-"""Offline tests for the scrape reports, the Greenhouse board token and the run history (no network, HTTP mocked).
+"""Offline tests for the scrape reports, the Greenhouse board token and the run history (no network, HTTP mocked), plus
+the pipeline constants that must agree across the scrapers and the notebooks (the 7-day lifetime, the ATS sources and
+the India aliases).
 
     python databricks/jobs/test_scrape_report.py
 """
+import ast
 import asyncio
 import contextlib
 import io
 import json
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -16,14 +20,16 @@ from unittest import mock
 HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(HERE), str(HERE.parent)]
 
+import ats_scrape  # noqa: E402
 import greenhouse  # noqa: E402
 import linkedin  # noqa: E402
 import publish_to_supabase  # noqa: E402
 import record_scrape_report  # noqa: E402
 import scraper_common  # noqa: E402
+from ats import base as ats_base, registry  # noqa: E402
 from scraper_common import ScrapeFailed, ScrapeReport, build_report, report_status, scrape_report  # noqa: E402
 
-GITHUB_ENV = {"GITHUB_RUN_ID": "987", "GITHUB_RUN_ATTEMPT": "2", "GITHUB_WORKFLOW": "Databricks Scrapers"}
+GITHUB_ENV = {"GITHUB_RUN_ID": "987", "GITHUB_RUN_ATTEMPT": "2", "GITHUB_WORKFLOW": "ATS Scrapers"}
 NO_GITHUB_ENV = {key: "" for key in GITHUB_ENV}
 
 
@@ -156,7 +162,7 @@ class ReportShapeTest(unittest.TestCase):
         self.assertEqual(set(doc), {"format", "source", "run", "totals", "linkedin", "companies"})
         run = doc["run"]
         self.assertEqual((run["github_run_id"], run["github_run_attempt"], run["workflow"]),
-                         ("987", 2, "Databricks Scrapers"))
+                         ("987", 2, "ATS Scrapers"))
         self.assertEqual(run["status"], "partial")
         self.assertRegex(run["finished_at"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
         self.assertEqual(doc["totals"], {"companies": 2, "failed": 1, "jobs_scraped": 3, "jobs_written": None,
@@ -394,6 +400,267 @@ class RunHistoryTest(unittest.TestCase):
         state = {"run_id": "77", "snapshot_at": "2026-10-07T00:00:00Z", "published_at": "2026-10-07T00:10:00Z"}
         with mock.patch.object(publish_to_supabase, "rpc", return_value=state):
             self.assertEqual(self.run_main(manifest=manifest), (0, 1))
+
+
+class RecordSourcesTest(unittest.TestCase):
+    def test_sources_match_the_registry(self):
+        self.assertEqual(record_scrape_report.SOURCES, registry.ALL_SOURCES)
+
+    def test_manifest_constants_match_ats_scrape(self):
+        self.assertEqual(record_scrape_report.MANIFEST_FORMAT, ats_scrape.MANIFEST_FORMAT)
+        self.assertEqual(record_scrape_report.MANIFEST_NAME, ats_scrape.MANIFEST_NAME)
+        self.assertEqual(record_scrape_report.ATS_SCRAPER, Path(ats_scrape.__file__).stem)
+
+    def test_a_new_source_report_is_sent_like_the_others(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        path = Path(tmp.name) / "lever_report.json"
+        with mock.patch.dict(os.environ, NO_GITHUB_ENV):
+            doc = build_report("lever", status="ok", totals={"companies": 1}, companies=[],
+                               started_at="2026-10-07T00:00:00Z")
+        path.write_text(json.dumps(doc), encoding="utf-8")
+        with mock.patch.object(record_scrape_report, "rpc", return_value={"companies": 0}) as rpc, \
+                mock.patch.dict(os.environ, NO_GITHUB_ENV):
+            code, output = quiet(record_scrape_report.main, ["--scraper", "lever", "--report", str(path)])
+        self.assertEqual(code, 0)
+        rpc.assert_called_once_with("pipeline_record_scrape", {"report": doc})
+        self.assertIn("[RECORDED] source=lever status=ok", output)
+
+
+class RecordAtsManifestTest(unittest.TestCase):
+    """--scraper databricks/ats_scrape.py: one report per source the run started, found through the manifest."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.dir = Path(self.tmp.name)
+        self.manifest_path = self.dir / ats_scrape.MANIFEST_NAME
+
+    def write_manifest(self, statuses, run_id="987"):
+        """A manifest written by ats_scrape.Manifest itself, so the two sides cannot drift apart."""
+        with mock.patch.dict(os.environ, {**GITHUB_ENV, "GITHUB_RUN_ID": run_id}):
+            manifest = ats_scrape.Manifest(self.manifest_path, list(statuses))
+            for name, status in statuses.items():
+                manifest.update(name, status=status)
+            manifest.finish("partial")
+
+    def write_report(self, source, status="ok", run_id="987"):
+        companies = [{"name": "A", "ok": status == "ok", "jobs_found": 3, "error": None}]
+        with mock.patch.dict(os.environ, {**GITHUB_ENV, "GITHUB_RUN_ID": run_id}):
+            doc = build_report(source, status=status, totals={"companies": 1}, companies=companies,
+                               started_at="2026-10-07T00:00:00Z")
+        (self.dir / f"{source}_report.json").write_text(json.dumps(doc), encoding="utf-8")
+        return doc
+
+    def record(self, *extra, rpc=None, env=GITHUB_ENV):
+        sent = []
+
+        def fake_rpc(name, payload, timeout=60):
+            sent.append(payload["report"])
+            if rpc:
+                return rpc(name, payload)
+            return {"recorded": True, "companies": len(payload["report"]["companies"])}
+
+        with mock.patch.object(record_scrape_report, "rpc", fake_rpc), mock.patch.dict(os.environ, env):
+            code, output = quiet(record_scrape_report.main, ["--scraper", "databricks/ats_scrape.py",
+                                                             "--manifest", str(self.manifest_path), *extra])
+        return code, output, sent
+
+    def test_records_every_source_that_ran(self):
+        self.write_manifest({"lever": "ok", "ashby": "skipped", "workable": "failed", "keka": "pending",
+                             "oracle": "partial"})
+        lever, workable, oracle = (self.write_report(name, status) for name, status in
+                                   (("lever", "ok"), ("workable", "failed"), ("oracle", "partial")))
+        code, output, sent = self.record()
+        self.assertEqual(code, 0)
+        self.assertEqual(sent, [lever, workable, oracle])  # manifest order; skipped / pending are not sent
+        self.assertIn("[RECORDED] source=workable status=failed", output)
+
+    def test_running_source_without_a_report_is_crashed(self):
+        self.write_manifest({"lever": "running", "ashby": "ok"})
+        ashby = self.write_report("ashby")
+        _, _, sent = self.record()
+        self.assertEqual([doc["source"] for doc in sent], ["lever", "ashby"])
+        self.assertEqual(sent[0]["run"]["status"], "crashed")
+        self.assertEqual(sent[0]["run"]["message"], "scraper wrote no report")
+        self.assertEqual(sent[1], ashby)
+
+    def test_report_of_another_run_is_crashed(self):
+        self.write_manifest({"lever": "ok"})
+        self.write_report("lever", run_id="111")
+        _, _, sent = self.record()
+        self.assertEqual(sent[0]["run"]["status"], "crashed")
+
+    def test_no_manifest_records_nothing(self):
+        code, output, sent = self.record()
+        self.assertEqual((code, sent), (0, []))
+        self.assertIn("::warning::Not recording the ATS scrape reports: no manifest", output)
+
+    def test_manifest_of_another_run_records_nothing(self):
+        self.write_manifest({"lever": "ok"}, run_id="111")
+        self.write_report("lever", run_id="111")
+        code, output, sent = self.record()
+        self.assertEqual((code, sent), (0, []))
+        self.assertIn("manifest of another run", output)
+
+    def test_invalid_manifest_records_nothing(self):
+        self.manifest_path.write_text("{oops", encoding="utf-8")
+        code, output, sent = self.record()
+        self.assertEqual((code, sent), (0, []))
+        self.assertIn("unreadable manifest: JSONDecodeError", output)
+        self.manifest_path.write_text(json.dumps({"format": "other", "sources": {}}), encoding="utf-8")
+        self.assertIn("invalid manifest", self.record()[1])
+
+    def test_all_skipped_records_nothing(self):
+        self.write_manifest({"lever": "skipped", "ashby": "skipped"})
+        code, output, sent = self.record()
+        self.assertEqual((code, sent), (0, []))
+        self.assertIn("No ATS source ran", output)
+
+    def test_unknown_source_is_skipped(self):
+        self.write_manifest({"lever": "ok"})
+        doc = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+        doc["sources"]["bogus"] = {"status": "ok"}
+        self.manifest_path.write_text(json.dumps(doc), encoding="utf-8")
+        self.write_report("lever")
+        _, output, sent = self.record()
+        self.assertEqual([report["source"] for report in sent], ["lever"])
+        self.assertIn("unknown source 'bogus'", output)
+
+    def test_one_failed_send_does_not_stop_the_others(self):
+        self.write_manifest({"lever": "ok", "ashby": "ok"})
+        self.write_report("lever")
+        self.write_report("ashby")
+
+        def failing_first(name, payload):
+            if payload["report"]["source"] == "lever":
+                raise RuntimeError("pipeline_record_scrape failed with 400: Invalid source")
+            return {"companies": 1}
+
+        code, output, sent = self.record(rpc=failing_first)
+        self.assertEqual(code, 0)
+        self.assertEqual([report["source"] for report in sent], ["lever", "ashby"])
+        self.assertIn("::warning::Could not record the scrape report: RuntimeError", output)
+        self.assertIn("(source=lever)", output)
+        self.assertIn("[RECORDED] source=ashby", output)
+
+    def test_dry_run_sends_nothing(self):
+        self.write_manifest({"lever": "ok"})
+        self.write_report("lever")
+        with mock.patch.object(record_scrape_report, "rpc") as rpc, mock.patch.dict(os.environ, GITHUB_ENV):
+            code, output = quiet(record_scrape_report.main, ["--scraper", "databricks/ats_scrape.py", "--manifest",
+                                                             str(self.manifest_path), "--dry-run"])
+        self.assertEqual(code, 0)
+        rpc.assert_not_called()
+        self.assertIn("[DRY RUN] would record source=lever status=ok", output)
+
+    def test_local_run_without_github_run_id_reads_the_manifest(self):
+        self.write_manifest({"lever": "ok"}, run_id="")
+        self.write_report("lever", run_id="")
+        _, _, sent = self.record(env=NO_GITHUB_ENV)
+        self.assertEqual(sent[0]["run"]["status"], "ok")
+
+
+class SeenJobKeysTest(unittest.TestCase):
+    def test_job_key_is_the_pipeline_key(self):
+        self.assertEqual(scraper_common.job_key("Workday", " Acme Corp ", "JR-1"),
+                         ats_base.job_key("workday", "acme corp", "JR-1"))
+        import hashlib
+        self.assertEqual(scraper_common.job_key("workday", "Acme", "JR-1"),
+                         hashlib.sha256(b"workday|acme|JR-1").hexdigest())
+
+    def test_seen_jobs_are_written_without_opening_their_page(self):
+        seen = {"ats_type": "workday", "company_name": "Acme", "job_id": "JR-1", "description": ""}
+        other_company = {"ats_type": "workday", "company_name": "Beta", "job_id": "JR-1", "description": ""}
+        keys = {scraper_common.job_key("workday", "Acme", "JR-1")}
+        self.assertTrue(scraper_common.is_seen(seen, skip_keys=keys))
+        self.assertFalse(scraper_common.is_seen(other_company, skip_keys=keys))  # same id, other company
+        self.assertTrue(scraper_common.is_seen(other_company, skip_ids={"JR-1"}))
+        with mock.patch.object(scraper_common, "async_playwright") as playwright:
+            jobs, _ = quiet(asyncio.run, scraper_common.fetch_descriptions([seen], "Workday", None, skip_keys=keys))
+        playwright.assert_not_called()
+        self.assertEqual(jobs, [seen])
+
+
+class WorkflowScheduleTest(unittest.TestCase):
+    """The ATS workflow is the only scheduled pipeline trigger (LinkedIn runs by hand) and matches src/utils/schedule.js."""
+    WORKFLOWS = HERE.parents[1] / ".github" / "workflows"
+
+    def text(self, name):
+        return (self.WORKFLOWS / name).read_text(encoding="utf-8")
+
+    def test_ats_workflow_runs_every_6_hours_and_triggers_the_pipeline(self):
+        text = self.text("databricks-scrapers.yml")
+        self.assertEqual(re.findall(r"cron: '([^']+)'", text), ["7 0,6,12,18 * * *"])
+        self.assertIn("python databricks/jobs/trigger_job.py", text)
+        self.assertIn("scraper: databricks/ats_scrape.py", text)
+        self.assertIn("csv-pattern: databricks/output/ats/*.csv", text)
+        self.assertIn("python databricks/jobs/publish_to_supabase.py", text)
+        schedule = (HERE.parents[1] / "src" / "utils" / "schedule.js").read_text(encoding="utf-8")
+        self.assertIn("hours: [0, 6, 12, 18], minute: 7", schedule)
+
+    def test_linkedin_runs_by_hand_only(self):
+        text = self.text("linkedin-databricks.yml")
+        self.assertNotIn("schedule:", text)
+        self.assertNotIn("cron:", text)
+        self.assertIn("workflow_dispatch:", text)
+
+    def test_csv_names_keep_the_source_before_the_first_underscore(self):
+        """02_ingest_silver takes _source_system from the file name up to the first '_'."""
+        for name in registry.ALL_SOURCES:
+            self.assertRegex(name, r"^[a-z]+$")
+
+
+NOTEBOOKS = HERE.parent / "notebooks"
+
+
+def notebook_source(name):
+    """The code cells of a notebook ('%run' magic lines dropped), so ast can parse it."""
+    cells = json.loads((NOTEBOOKS / f"{name}.ipynb").read_text(encoding="utf-8"))["cells"]
+    code = "\n".join("".join(cell["source"]) for cell in cells if cell["cell_type"] == "code")
+    return "\n".join(line for line in code.splitlines() if not line.lstrip().startswith("%"))
+
+
+def widget_default(source, widget):
+    match = re.search(rf'dbutils\.widgets\.text\("{widget}", "([^"]*)"', source)
+    if not match:
+        raise AssertionError(f"widget {widget} not found")
+    return int(match.group(1))
+
+
+def assigned_literal(source, name):
+    """The literal value of a `NAME = <literal>` assignment in notebook code."""
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Assign) and any(getattr(target, "id", None) == name for target in node.targets):
+            return ast.literal_eval(node.value)
+    raise AssertionError(f"{name} not assigned")
+
+
+class PipelineConstantsTest(unittest.TestCase):
+    def test_seven_day_lifetime_everywhere(self):
+        source = (HERE.parent / "scraper_common.py").read_text(encoding="utf-8")
+        self.assertEqual(int(re.search(r'os\.getenv\("MAX_POSTED_DAYS", "(\d+)"\)', source).group(1)), 7)
+        enrich, gold = notebook_source("03_enrich"), notebook_source("04_gold_cleanup")
+        self.assertEqual(widget_default(enrich, "job_max_age_days"), 7)
+        self.assertEqual(widget_default(gold, "job_expire_after_days"), 7)
+        self.assertEqual(widget_default(gold, "job_delete_after_days"), 7)
+
+    def test_gold_exports_seen_keys_for_every_ats_source(self):
+        gold = notebook_source("04_gold_cleanup")
+        self.assertEqual(assigned_literal(gold, "ATS_SOURCES"), tuple(registry.ADAPTERS))
+        self.assertTrue(ats_scrape.SEEN_KEYS_FILE.endswith("/config/ats_seen_keys.json"))
+        self.assertIn('ATS_SEEN_KEYS_FILE = f"{CONFIG_DIR}/ats_seen_keys.json"', gold)
+
+    def test_silver_knows_every_place_the_ats_scraper_counts_as_india(self):
+        """A location the scraper sees as naming an Indian place gets no 'India' segment, so silver must match it."""
+        ref = [alias for alias, _, _ in assigned_literal(notebook_source("01_setup"), "INDIA_LOCATIONS")]
+        extra = assigned_literal(notebook_source("02_ingest_silver"), "EXTRA_INDIA_ALIASES")
+        aliases = [alias.lower() for alias in ref + extra]
+        for place in ats_base.INDIA_PLACES:
+            with self.subTest(place=place):
+                self.assertTrue(any(re.search(rf"(^|[^a-z]){re.escape(alias)}([^a-z]|$)", place) for alias in aliases),
+                                f"{place!r} is India for databricks/ats/base.py but not for 02_ingest_silver")
+        self.assertEqual(sorted(set(extra) & set(ref)), [], "an extra alias is already in ops.ref_india_locations")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,330 @@
+{
+ "nextPage": "WzE3OTA2NDAwMDAwMDAsNjE2MDY5OF0=",
+ "results": [
+  {
+   "id": 6181984,
+   "shortcode": "30A575E7F4",
+   "title": "Marketing Head - SSO Hospitals",
+   "remote": false,
+   "location": {
+    "city": "Mumbai",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Maharashtra"
+   },
+   "locations": [
+    {
+     "city": "Mumbai",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Maharashtra"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-10-08T00:00:00.000Z",
+   "language": "en",
+   "department": [
+    "Portfolio Companies"
+   ],
+   "accountUid": "e8d5ab86-7d2f-44d7-b5a8-da6bce929c15",
+   "approvalStatus": "approved",
+   "workplace": "on_site"
+  },
+  {
+   "id": 6182485,
+   "shortcode": "882C433BD2",
+   "title": "Product Manager - Growth",
+   "remote": false,
+   "location": {
+    "city": "Bengaluru",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Karnataka"
+   },
+   "locations": [
+    {
+     "city": "Bengaluru",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Karnataka"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-10-08T00:00:00.000Z",
+   "language": "en",
+   "department": [],
+   "accountUid": "e8d5ab86-7d2f-44d7-b5a8-da6bce929c15",
+   "approvalStatus": "approved",
+   "workplace": "on_site"
+  },
+  {
+   "id": 6182636,
+   "shortcode": "C520EEF78F",
+   "title": "Software Development Engineer",
+   "remote": false,
+   "location": {
+    "city": "Bengaluru",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Karnataka"
+   },
+   "locations": [
+    {
+     "city": "Bengaluru",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Karnataka"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-10-08T00:00:00.000Z",
+   "language": "en",
+   "department": [],
+   "accountUid": "e8d5ab86-7d2f-44d7-b5a8-da6bce929c15",
+   "approvalStatus": "approved",
+   "workplace": "on_site"
+  },
+  {
+   "id": 6182720,
+   "shortcode": "A3DA4D24E6",
+   "title": "Medical Coding - Coding AI Assist (SME / Product Enablement)",
+   "remote": false,
+   "location": {
+    "city": "Bengaluru",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Karnataka"
+   },
+   "locations": [
+    {
+     "city": "Bengaluru",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Karnataka"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-10-08T00:00:00.000Z",
+   "language": "en",
+   "department": [
+    "Xponentiate",
+    "Contiinex"
+   ],
+   "accountUid": "e8d5ab86-7d2f-44d7-b5a8-da6bce929c15",
+   "approvalStatus": "approved",
+   "workplace": "on_site"
+  },
+  {
+   "id": 6182751,
+   "shortcode": "EE572DA4EC",
+   "title": "Business Development Lead",
+   "remote": false,
+   "location": {
+    "city": "Gurugram",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Haryana"
+   },
+   "locations": [
+    {
+     "city": "Gurugram",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Haryana"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-10-08T00:00:00.000Z",
+   "language": "en",
+   "department": [
+    "Portfolio Companies",
+    "Everhope Oncology"
+   ],
+   "accountUid": "e8d5ab86-7d2f-44d7-b5a8-da6bce929c15",
+   "approvalStatus": "approved",
+   "workplace": "on_site"
+  },
+  {
+   "id": 6176419,
+   "shortcode": "2A7CB6DE13",
+   "title": "Program Manager",
+   "remote": false,
+   "location": {
+    "city": "Mumbai",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Maharashtra"
+   },
+   "locations": [
+    {
+     "city": "Mumbai",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Maharashtra"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-10-06T00:00:00.000Z",
+   "language": "en",
+   "department": [
+    "Portfolio Companies",
+    "SSO Hospital"
+   ],
+   "accountUid": "e8d5ab86-7d2f-44d7-b5a8-da6bce929c15",
+   "approvalStatus": "approved",
+   "workplace": "on_site"
+  },
+  {
+   "id": 6177086,
+   "shortcode": "61F3B94F50",
+   "title": "Community Outreach Manager",
+   "remote": false,
+   "location": {
+    "city": "Mumbai",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Maharashtra"
+   },
+   "locations": [
+    {
+     "city": "Mumbai",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Maharashtra"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-10-06T00:00:00.000Z",
+   "language": "en",
+   "department": [
+    "Portfolio Companies",
+    "SSO Hospital"
+   ],
+   "accountUid": "e8d5ab86-7d2f-44d7-b5a8-da6bce929c15",
+   "approvalStatus": "approved",
+   "workplace": "on_site"
+  },
+  {
+   "id": 6173653,
+   "shortcode": "A13F838D63",
+   "title": "Senior Manager - Hospital Operations and Revenue",
+   "remote": false,
+   "location": {
+    "city": "Gurugram",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Haryana"
+   },
+   "locations": [
+    {
+     "city": "Gurugram",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Haryana"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-10-05T00:00:00.000Z",
+   "language": "en",
+   "department": [
+    "Portfolio Companies",
+    "Everhope Oncology"
+   ],
+   "accountUid": "e8d5ab86-7d2f-44d7-b5a8-da6bce929c15",
+   "approvalStatus": "approved",
+   "workplace": "on_site"
+  },
+  {
+   "id": 6166594,
+   "shortcode": "A1A97156B8",
+   "title": "Talent Acquisition Associate",
+   "remote": false,
+   "location": {
+    "city": "Bengaluru",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Karnataka"
+   },
+   "locations": [
+    {
+     "city": "Bengaluru",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Karnataka"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-10-01T00:00:00.000Z",
+   "type": "full",
+   "language": "en",
+   "department": [
+    "2070 Health",
+    "People"
+   ],
+   "accountUid": "e8d5ab86-7d2f-44d7-b5a8-da6bce929c15",
+   "approvalStatus": "approved",
+   "workplace": "on_site"
+  },
+  {
+   "id": 6160698,
+   "shortcode": "37CF3322D1",
+   "title": "Director, Hyderabad Office - Verr Financial",
+   "remote": false,
+   "location": {
+    "city": "Hyderabad",
+    "country": "India",
+    "countryCode": "IN",
+    "region": "Telangana"
+   },
+   "locations": [
+    {
+     "city": "Hyderabad",
+     "country": "India",
+     "countryCode": "IN",
+     "hidden": false,
+     "region": "Telangana"
+    }
+   ],
+   "state": "published",
+   "isInternal": false,
+   "code": "",
+   "published": "2026-09-29T00:00:00.000Z",
+   "type": "full",
+   "language": "en",
+   "department": [
+    "Xponentiate"
+   ],
+   "accountUid": "e8d5ab86-7d2f-44d7-b5a8-da6bce929c15",
+   "approvalStatus": "approved",
+   "workplace": "hybrid"
+  }
+ ],
+ "total": 97
+}

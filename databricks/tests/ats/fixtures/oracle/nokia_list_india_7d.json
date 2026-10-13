@@ -1,0 +1,345 @@
+{
+ "_request": "https://fa-evmr-saasfaprod1.fa.ocs.oraclecloud.com/hcmRestApi/resources/latest/recruitingCEJobRequisitions?onlyData=true&expand=requisitionList.secondaryLocations,flexFieldsFacet.values&finder=findReqs;siteNumber=CX_1,facetsList=LOCATIONS;POSTING_DATES;CATEGORIES;FLEX_FIELDS,limit=3,offset=0,sortBy=POSTING_DATES_DESC,location=India,selectedPostingDatesFacet=7",
+ "items": [
+  {
+   "SearchId": 1,
+   "Keyword": null,
+   "CorrectedKeyword": null,
+   "UseExactKeywordFlag": false,
+   "SuggestedKeyword": null,
+   "ExecuteSpellCheckFlag": true,
+   "Location": "India",
+   "LocationId": null,
+   "Radius": 0,
+   "RadiusUnit": "MI",
+   "SelectedTitlesFacet": null,
+   "SelectedCategoriesFacet": null,
+   "SelectedPostingDatesFacet": "7",
+   "SelectedLocationsFacet": null,
+   "LastSelectedFacet": null,
+   "Facets": "LOCATIONS;POSTING_DATES;CATEGORIES;FLEX_FIELDS",
+   "Offset": 0,
+   "Limit": 3,
+   "SortBy": "POSTING_DATES_DESC",
+   "TotalJobsCount": 80,
+   "Latitude": null,
+   "Longitude": null,
+   "SiteNumber": "CX_1",
+   "JobFamilyId": null,
+   "PostingStartDate": null,
+   "PostingEndDate": null,
+   "SelectedWorkLocationsFacet": null,
+   "RequisitionId": null,
+   "CandidateNumber": null,
+   "WorkLocationZipCode": null,
+   "WorkLocationCountryCode": null,
+   "SelectedFlexFieldsFacets": null,
+   "OrganizationId": null,
+   "SelectedOrganizationsFacet": null,
+   "UserTargetFacetName": null,
+   "UserTargetFacetInputTerm": null,
+   "HotJobFlag": null,
+   "WorkplaceType": null,
+   "SelectedWorkplaceTypesFacet": null,
+   "BotQRShortCode": null,
+   "requisitionList": [
+    {
+     "Id": "41278",
+     "Title": "Staff Project/Program Manager",
+     "PostedDate": "2026-10-09",
+     "PostingEndDate": null,
+     "Language": "US",
+     "PrimaryLocationCountry": "IN",
+     "GeographyId": 300000000471745,
+     "HotJobFlag": true,
+     "WorkplaceTypeCode": "ORA_ON_SITE",
+     "JobFamily": null,
+     "JobFunction": null,
+     "WorkerType": null,
+     "ContractType": null,
+     "ManagerLevel": null,
+     "JobSchedule": null,
+     "JobShift": null,
+     "JobType": null,
+     "StudyLevel": null,
+     "DomesticTravelRequired": null,
+     "InternationalTravelRequired": null,
+     "WorkDurationYears": null,
+     "WorkDurationMonths": null,
+     "WorkHours": null,
+     "WorkDays": null,
+     "LegalEmployer": null,
+     "BusinessUnit": null,
+     "Department": null,
+     "Organization": null,
+     "BusinessUnitId": 300000006664259,
+     "LegalEmployerId": 300000006349271,
+     "OrganizationId": 300000806570288,
+     "MediaThumbURL": null,
+     "ShortDescriptionStr": "Seeking experienced Project/Program Manager responsible for managing the design and development of optical line system products using Outside Design and Manufacturing (ODM) suppliers with support from Nokia’s Engineering teams",
+     "PrimaryLocation": "India",
+     "Distance": 1791504000000.0,
+     "TrendingFlag": false,
+     "BeFirstToApplyFlag": true,
+     "Relevancy": 16,
+     "WorkplaceType": "Onsite",
+     "ExternalQualificationsStr": null,
+     "ExternalResponsibilitiesStr": null,
+     "secondaryLocations": []
+    },
+    {
+     "Id": "41355",
+     "Title": "Project Management Office Manager",
+     "PostedDate": "2026-10-09",
+     "PostingEndDate": null,
+     "Language": "US",
+     "PrimaryLocationCountry": "IN",
+     "GeographyId": 300000000471745,
+     "HotJobFlag": true,
+     "WorkplaceTypeCode": "ORA_HYBRID",
+     "JobFamily": null,
+     "JobFunction": null,
+     "WorkerType": null,
+     "ContractType": null,
+     "ManagerLevel": null,
+     "JobSchedule": null,
+     "JobShift": null,
+     "JobType": null,
+     "StudyLevel": null,
+     "DomesticTravelRequired": null,
+     "InternationalTravelRequired": null,
+     "WorkDurationYears": null,
+     "WorkDurationMonths": null,
+     "WorkHours": null,
+     "WorkDays": null,
+     "LegalEmployer": null,
+     "BusinessUnit": null,
+     "Department": null,
+     "Organization": null,
+     "BusinessUnitId": 300000006664181,
+     "LegalEmployerId": 300000006387828,
+     "OrganizationId": 300001348233728,
+     "MediaThumbURL": null,
+     "ShortDescriptionStr": "We are seeking a detail-oriented and proactive PMO professional with experience in supporting end-to-end project lifecycle management. The ideal candidate will have a strong understanding of PMO methodologies, governance frameworks, project planning, reporting, and performance tracking. This role re...[trimmed]",
+     "PrimaryLocation": "India",
+     "Distance": 1791504000000.0,
+     "TrendingFlag": false,
+     "BeFirstToApplyFlag": false,
+     "Relevancy": 16,
+     "WorkplaceType": "Hybrid",
+     "ExternalQualificationsStr": null,
+     "ExternalResponsibilitiesStr": null,
+     "secondaryLocations": [
+      {
+       "RequisitionLocationId": 300002244850690,
+       "GeographyNodeId": 100002145190020,
+       "GeographyId": 300000000471982,
+       "Name": "Portugal",
+       "CountryCode": "PT",
+       "Latitude": 36.96541,
+       "Longitude": -25.11139
+      }
+     ]
+    },
+    {
+     "Id": "37671",
+     "Title": "Service Owner",
+     "PostedDate": "2026-10-09",
+     "PostingEndDate": null,
+     "Language": "US",
+     "PrimaryLocationCountry": "IN",
+     "GeographyId": 300000000471745,
+     "HotJobFlag": false,
+     "WorkplaceTypeCode": "ORA_HYBRID",
+     "JobFamily": null,
+     "JobFunction": null,
+     "WorkerType": null,
+     "ContractType": null,
+     "ManagerLevel": null,
+     "JobSchedule": null,
+     "JobShift": null,
+     "JobType": null,
+     "StudyLevel": null,
+     "DomesticTravelRequired": null,
+     "InternationalTravelRequired": null,
+     "WorkDurationYears": null,
+     "WorkDurationMonths": null,
+     "WorkHours": null,
+     "WorkDays": null,
+     "LegalEmployer": null,
+     "BusinessUnit": null,
+     "Department": null,
+     "Organization": null,
+     "BusinessUnitId": 300000006664181,
+     "LegalEmployerId": 300000006349271,
+     "OrganizationId": 300001348233743,
+     "MediaThumbURL": null,
+     "ShortDescriptionStr": "Working in Nokia IT Network Services Tower that manages globally the life cycle, delivery, quality and performance of the Wide Area Network, the internet connections, Network traffic management, (W)LAN, DNS/DHCP and all other aspects of connectivity of Nokia Networks offices and partners.",
+     "PrimaryLocation": "India",
+     "Distance": 1791504000000.0,
+     "TrendingFlag": true,
+     "BeFirstToApplyFlag": false,
+     "Relevancy": 10.0,
+     "WorkplaceType": "Hybrid",
+     "ExternalQualificationsStr": null,
+     "ExternalResponsibilitiesStr": null,
+     "secondaryLocations": []
+    }
+   ],
+   "categoriesFacet": [
+    {
+     "Id": 300000009357800,
+     "Name": "Customer Services",
+     "TotalCount": 34
+    },
+    {
+     "Id": 300000009357764,
+     "Name": "Applied R&D",
+     "TotalCount": 29
+    },
+    {
+     "Id": 300000009357755,
+     "Name": "Information Technology",
+     "TotalCount": 9
+    },
+    {
+     "Id": 300000009357752,
+     "Name": "Pre-Sales",
+     "TotalCount": 1
+    },
+    {
+     "Id": 300000009357758,
+     "Name": "Finance",
+     "TotalCount": 1
+    }
+   ],
+   "locationsFacet": [
+    {
+     "Id": 300000000471745,
+     "Name": "India",
+     "TotalCount": 80
+    },
+    {
+     "Id": 300000000471904,
+     "Name": "Malaysia",
+     "TotalCount": 5
+    },
+    {
+     "Id": 300000000480081,
+     "Name": "Thailand",
+     "TotalCount": 3
+    },
+    {
+     "Id": 300000000471982,
+     "Name": "Portugal",
+     "TotalCount": 2
+    }
+   ],
+   "postingDatesFacet": [
+    {
+     "Id": 7,
+     "Name": "Less than 7 days",
+     "TotalCount": 80
+    },
+    {
+     "Id": 30,
+     "Name": "Less than 30 days",
+     "TotalCount": 80
+    }
+   ],
+   "titlesFacet": [],
+   "workLocationsFacet": [],
+   "flexFieldsFacet": [
+    {
+     "Name": "AttributeChar12",
+     "Label": "Role Type",
+     "values": [
+      {
+       "Id": "Individual contributor",
+       "Name": "Individual contributor",
+       "TotalCount": 79
+      },
+      {
+       "Id": "People Manager",
+       "Name": "People Manager",
+       "TotalCount": 1
+      }
+     ]
+    },
+    {
+     "Name": "AttributeChar18",
+     "Label": "Laptop - support with ordering needed",
+     "values": [
+      {
+       "Id": "Yes",
+       "Name": "Yes",
+       "TotalCount": 55
+      },
+      {
+       "Id": "Don't know yet",
+       "Name": "Don't know yet",
+       "TotalCount": 9
+      },
+      {
+       "Id": "No",
+       "Name": "No",
+       "TotalCount": 6
+      }
+     ]
+    },
+    {
+     "Name": "AttributeChar15",
+     "Label": "Hot Job",
+     "values": [
+      {
+       "Id": "N",
+       "Name": "No",
+       "TotalCount": 55
+      },
+      {
+       "Id": "Y",
+       "Name": "Yes",
+       "TotalCount": 21
+      }
+     ]
+    },
+    {
+     "Name": "AttributeChar19",
+     "Label": "Incentive Bonus",
+     "values": []
+    },
+    {
+     "Name": "AttributeChar20",
+     "Label": "Salary Range PL",
+     "values": []
+    }
+   ],
+   "organizationsFacet": [],
+   "workplaceTypesFacet": []
+  }
+ ],
+ "count": 1,
+ "hasMore": false,
+ "limit": 200,
+ "offset": 0,
+ "links": [
+  {
+   "rel": "self",
+   "href": "https://fa-evmr-saasfaprod1.fa.ocs.oraclecloud.com:443/hcmRestApi/resources/11.13.18.05/recruitingCEJobRequisitions",
+   "name": "recruitingCEJobRequisitions",
+   "kind": "collection"
+  },
+  {
+   "rel": "action",
+   "href": "https://fa-evmr-saasfaprod1.fa.ocs.oraclecloud.com:443/hcmRestApi/resources/11.13.18.05/recruitingCEJobRequisitions/action/getRequisitionsLocationCoordinates",
+   "name": "getRequisitionsLocationCoordinates",
+   "kind": "other"
+  },
+  {
+   "rel": "action",
+   "href": "https://fa-evmr-saasfaprod1.fa.ocs.oraclecloud.com:443/hcmRestApi/resources/11.13.18.05/recruitingCEJobRequisitions/action/getRequisitionDetailsForMap",
+   "name": "getRequisitionDetailsForMap",
+   "kind": "other"
+  }
+ ]
+}

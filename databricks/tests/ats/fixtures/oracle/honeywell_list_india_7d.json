@@ -1,0 +1,304 @@
+{
+ "_request": "https://ibqbjb.fa.ocs.oraclecloud.com/hcmRestApi/resources/latest/recruitingCEJobRequisitions?onlyData=true&expand=requisitionList.secondaryLocations,flexFieldsFacet.values&finder=findReqs;siteNumber=CX_1,facetsList=LOCATIONS;POSTING_DATES;CATEGORIES;FLEX_FIELDS,limit=3,offset=0,sortBy=POSTING_DATES_DESC,location=India,selectedPostingDatesFacet=7",
+ "items": [
+  {
+   "SearchId": 1,
+   "Keyword": null,
+   "CorrectedKeyword": null,
+   "UseExactKeywordFlag": false,
+   "SuggestedKeyword": null,
+   "ExecuteSpellCheckFlag": true,
+   "Location": "India",
+   "LocationId": null,
+   "Radius": 0,
+   "RadiusUnit": "MI",
+   "SelectedTitlesFacet": null,
+   "SelectedCategoriesFacet": null,
+   "SelectedPostingDatesFacet": "7",
+   "SelectedLocationsFacet": null,
+   "LastSelectedFacet": null,
+   "Facets": "LOCATIONS;POSTING_DATES;CATEGORIES;FLEX_FIELDS",
+   "Offset": 0,
+   "Limit": 3,
+   "SortBy": "POSTING_DATES_DESC",
+   "TotalJobsCount": 52,
+   "Latitude": null,
+   "Longitude": null,
+   "SiteNumber": "CX_1",
+   "JobFamilyId": null,
+   "PostingStartDate": null,
+   "PostingEndDate": null,
+   "SelectedWorkLocationsFacet": null,
+   "RequisitionId": null,
+   "CandidateNumber": null,
+   "WorkLocationZipCode": null,
+   "WorkLocationCountryCode": null,
+   "SelectedFlexFieldsFacets": null,
+   "OrganizationId": null,
+   "SelectedOrganizationsFacet": null,
+   "UserTargetFacetName": null,
+   "UserTargetFacetInputTerm": null,
+   "HotJobFlag": null,
+   "WorkplaceType": null,
+   "SelectedWorkplaceTypesFacet": null,
+   "BotQRShortCode": null,
+   "requisitionList": [
+    {
+     "Id": "158797",
+     "Title": "Sr Channel Sales Rep",
+     "PostedDate": "2026-10-09",
+     "PostingEndDate": null,
+     "Language": "US",
+     "PrimaryLocationCountry": "IN",
+     "GeographyId": 100000013402525,
+     "HotJobFlag": false,
+     "WorkplaceTypeCode": "ORA_HYBRID",
+     "JobFamily": null,
+     "JobFunction": null,
+     "WorkerType": null,
+     "ContractType": null,
+     "ManagerLevel": null,
+     "JobSchedule": null,
+     "JobShift": null,
+     "JobType": null,
+     "StudyLevel": null,
+     "DomesticTravelRequired": null,
+     "InternationalTravelRequired": null,
+     "WorkDurationYears": null,
+     "WorkDurationMonths": null,
+     "WorkHours": null,
+     "WorkDays": null,
+     "LegalEmployer": null,
+     "BusinessUnit": null,
+     "Department": null,
+     "Organization": null,
+     "BusinessUnitId": 300000002844360,
+     "LegalEmployerId": 300000002751393,
+     "OrganizationId": 300000003325289,
+     "MediaThumbURL": null,
+     "ShortDescriptionStr": "As a Sr Channel Sales Rep here at Honeywell, you will drive sales growth through effective channel management, build and nurture relationships with partners, identify new business opportunities, and lead contract negotiations.",
+     "PrimaryLocation": "Gurugram, Haryana, India",
+     "Distance": 1791504000000.0,
+     "TrendingFlag": false,
+     "BeFirstToApplyFlag": true,
+     "Relevancy": 10.0,
+     "WorkplaceType": "Hybrid",
+     "ExternalQualificationsStr": null,
+     "ExternalResponsibilitiesStr": null,
+     "secondaryLocations": []
+    },
+    {
+     "Id": "158979",
+     "Title": "Sr IT Architect",
+     "PostedDate": "2026-10-09",
+     "PostingEndDate": null,
+     "Language": "US",
+     "PrimaryLocationCountry": "IN",
+     "GeographyId": 100000013406729,
+     "HotJobFlag": false,
+     "WorkplaceTypeCode": "ORA_HYBRID",
+     "JobFamily": null,
+     "JobFunction": null,
+     "WorkerType": null,
+     "ContractType": null,
+     "ManagerLevel": null,
+     "JobSchedule": null,
+     "JobShift": null,
+     "JobType": null,
+     "StudyLevel": null,
+     "DomesticTravelRequired": null,
+     "InternationalTravelRequired": null,
+     "WorkDurationYears": null,
+     "WorkDurationMonths": null,
+     "WorkHours": null,
+     "WorkDays": null,
+     "LegalEmployer": null,
+     "BusinessUnit": null,
+     "Department": null,
+     "Organization": null,
+     "BusinessUnitId": 300000002815135,
+     "LegalEmployerId": 300000002797605,
+     "OrganizationId": 300000003325289,
+     "MediaThumbURL": null,
+     "ShortDescriptionStr": "As a Sr Enterprise Architect here at Honeywell, you will design and evolve our technology landscape, aligning architecture with strategic goals and industry best practices. Drive innovation, scalability, security, and compliance.You will report directly to our [Title] and you’ll work out of our [Cit...[trimmed]",
+     "PrimaryLocation": "Hyderabad, Telangana, India",
+     "Distance": 1791504000000.0,
+     "TrendingFlag": false,
+     "BeFirstToApplyFlag": false,
+     "Relevancy": 10.0,
+     "WorkplaceType": "Hybrid",
+     "ExternalQualificationsStr": null,
+     "ExternalResponsibilitiesStr": null,
+     "secondaryLocations": [
+      {
+       "RequisitionLocationId": 300003424403759,
+       "GeographyNodeId": 300000014466551,
+       "GeographyId": 100000013395554,
+       "Name": "Bengaluru, Karnataka, India",
+       "CountryCode": "IN",
+       "Latitude": 12.96614,
+       "Longitude": 77.58694
+      },
+      {
+       "RequisitionLocationId": 300003424403760,
+       "GeographyNodeId": 300000014477244,
+       "GeographyId": 100000013394496,
+       "Name": "Pune, Maharashtra, India",
+       "CountryCode": "IN",
+       "Latitude": 18.50419,
+       "Longitude": 73.85286
+      },
+      {
+       "RequisitionLocationId": 300003424403761,
+       "GeographyNodeId": 300000014485290,
+       "GeographyId": 100000013402865,
+       "Name": "Chennai, Tamil Nadu, India",
+       "CountryCode": "IN",
+       "Latitude": 13.22624,
+       "Longitude": 80.11316
+      }
+     ]
+    },
+    {
+     "Id": "159260",
+     "Title": "Sr Product Management Specialist",
+     "PostedDate": "2026-10-09",
+     "PostingEndDate": null,
+     "Language": "US",
+     "PrimaryLocationCountry": "IN",
+     "GeographyId": 100000013394496,
+     "HotJobFlag": false,
+     "WorkplaceTypeCode": "ORA_HYBRID",
+     "JobFamily": null,
+     "JobFunction": null,
+     "WorkerType": null,
+     "ContractType": null,
+     "ManagerLevel": null,
+     "JobSchedule": null,
+     "JobShift": null,
+     "JobType": null,
+     "StudyLevel": null,
+     "DomesticTravelRequired": null,
+     "InternationalTravelRequired": null,
+     "WorkDurationYears": null,
+     "WorkDurationMonths": null,
+     "WorkHours": null,
+     "WorkDays": null,
+     "LegalEmployer": null,
+     "BusinessUnit": null,
+     "Department": null,
+     "Organization": null,
+     "BusinessUnitId": 300000002818522,
+     "LegalEmployerId": 300000002751393,
+     "OrganizationId": 300000003325289,
+     "MediaThumbURL": null,
+     "ShortDescriptionStr": "Your role will also include overseeing, supervising, and reviewing tasks performed by team members to ensure effective execution of work; managing end-to-end processes and projects for both internal and external clients with responsibility for timely and accurate delivery; issuing clear instructions...[trimmed]",
+     "PrimaryLocation": "Pune, Maharashtra, India",
+     "Distance": 1791504000000.0,
+     "TrendingFlag": false,
+     "BeFirstToApplyFlag": true,
+     "Relevancy": 10.0,
+     "WorkplaceType": "Hybrid",
+     "ExternalQualificationsStr": null,
+     "ExternalResponsibilitiesStr": null,
+     "secondaryLocations": []
+    }
+   ],
+   "categoriesFacet": [
+    {
+     "Id": 300000017425610,
+     "Name": "Engineering",
+     "TotalCount": 31
+    },
+    {
+     "Id": 300000017425619,
+     "Name": "Customer Experience",
+     "TotalCount": 6
+    },
+    {
+     "Id": 300000017425595,
+     "Name": "Sales",
+     "TotalCount": 3
+    },
+    {
+     "Id": 300000017425649,
+     "Name": "Finance",
+     "TotalCount": 3
+    },
+    {
+     "Id": 300000017425658,
+     "Name": "Offering Management",
+     "TotalCount": 2
+    }
+   ],
+   "locationsFacet": [
+    {
+     "Id": 300000000469485,
+     "Name": "India",
+     "TotalCount": 52
+    },
+    {
+     "Id": 100000013381548,
+     "Name": "Karnataka, India",
+     "TotalCount": 21
+    },
+    {
+     "Id": 100000013381552,
+     "Name": "Maharashtra, India",
+     "TotalCount": 21
+    },
+    {
+     "Id": 100000013395554,
+     "Name": "Bengaluru, Karnataka, India",
+     "TotalCount": 21
+    },
+    {
+     "Id": 100000013394496,
+     "Name": "Pune, Maharashtra, India",
+     "TotalCount": 16
+    }
+   ],
+   "postingDatesFacet": [
+    {
+     "Id": 7,
+     "Name": "Less than 7 days",
+     "TotalCount": 52
+    },
+    {
+     "Id": 30,
+     "Name": "Less than 30 days",
+     "TotalCount": 52
+    }
+   ],
+   "titlesFacet": [],
+   "workLocationsFacet": [],
+   "flexFieldsFacet": [],
+   "organizationsFacet": [],
+   "workplaceTypesFacet": []
+  }
+ ],
+ "count": 1,
+ "hasMore": false,
+ "limit": 200,
+ "offset": 0,
+ "links": [
+  {
+   "rel": "self",
+   "href": "https://ibqbjb.fa.ocs.oraclecloud.com:443/hcmRestApi/resources/11.13.18.05/recruitingCEJobRequisitions",
+   "name": "recruitingCEJobRequisitions",
+   "kind": "collection"
+  },
+  {
+   "rel": "action",
+   "href": "https://ibqbjb.fa.ocs.oraclecloud.com:443/hcmRestApi/resources/11.13.18.05/recruitingCEJobRequisitions/action/getRequisitionsLocationCoordinates",
+   "name": "getRequisitionsLocationCoordinates",
+   "kind": "other"
+  },
+  {
+   "rel": "action",
+   "href": "https://ibqbjb.fa.ocs.oraclecloud.com:443/hcmRestApi/resources/11.13.18.05/recruitingCEJobRequisitions/action/getRequisitionDetailsForMap",
+   "name": "getRequisitionDetailsForMap",
+   "kind": "other"
+  }
+ ]
+}

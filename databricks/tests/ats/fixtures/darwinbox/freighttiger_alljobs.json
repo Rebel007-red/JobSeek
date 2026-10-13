@@ -1,0 +1,223 @@
+{
+ "_request": "POST https://freighttiger.darwinbox.in/ms/candidateapi/job/alljobs?companyId=main body={\"page\":1,\"limit\":100} headers: sec-fetch-mode: cors",
+ "status": "success",
+ "job_counts": 15,
+ "data": [
+  {
+   "_id": "6ac71ce1eebd2a8a7600f8c3",
+   "id": "a6ac71ce13c900",
+   "parent_company_id": "5f3e61060c173",
+   "designation": "a6aa8e89351a15049654964",
+   "department_id": "a6891ddd2bf0f6",
+   "designation_display_name": "",
+   "internal_job_code": "",
+   "employee_type": "5f4359bc2a7aa",
+   "employee_sub_type": "",
+   "experience_from": "3",
+   "experience_to": "15",
+   "experience": "3 - 15 Years",
+   "salary_currency": "",
+   "salary_min": "",
+   "salary_max": "",
+   "salary_range": "",
+   "salary_timeframe": "Annual",
+   "jd": "",
+   "officelocation_arr": [
+    "a64a680c694a72"
+   ],
+   "officelocation_show_arr": "Gurugram, Haryana\r, India (120)",
+   "officelocations_area": [
+    "Gurugram, Haryana\r, India"
+   ],
+   "officelocations_without_area": [
+    "Gurugram, Haryana\r, India"
+   ],
+   "country": "India",
+   "designation_title": "",
+   "created_on": "2026-10-08T04:32:33.000Z",
+   "is_remote": 0,
+   "designation_name": "Manager, Collections",
+   "department_name": "Collections (CM_005)",
+   "department_name_only": "Collections",
+   "emp_type_name": "Full Time",
+   "emp_sub_type_name": "",
+   "functional_area_name": "Collections (FA_0011)",
+   "functional_area": "a67ecd3f1093d8",
+   "job_tags": [],
+   "jd_summary": "",
+   "legal_entity_ids": [],
+   "job_posting": {
+    "careers": {
+     "source": "careers",
+     "from": 1791397800,
+     "to": 1793471399
+    },
+    "refer": {
+     "source": "refer",
+     "from": null,
+     "to": null
+    },
+    "ijp": {
+     "source": "ijp",
+     "from": null,
+     "to": null
+    }
+   },
+   "posted_on": 1791397800,
+   "designation_name_id": "a6436e79d7b8a9",
+   "officelocation_show_arr_list": [
+    "Gurugram, Haryana, India "
+   ],
+   "locations": "Gurugram, Haryana\r, India",
+   "tool_tip_locations": [
+    "Gurugram, Haryana, India"
+   ],
+   "designation_title_name": "",
+   "title": "Manager, Collections"
+  },
+  {
+   "_id": "6ac4ee7b518bf4f98f09d2cd",
+   "id": "a6ac4ee7b4b031",
+   "parent_company_id": "5f3e61060c173",
+   "designation": "a6aa2755eb5aaa474902196",
+   "department_id": "a67efdb8f49678",
+   "designation_display_name": "",
+   "internal_job_code": "Gurgaon CM 26",
+   "employee_type": "5f4359bc2a7aa",
+   "employee_sub_type": "",
+   "experience_from": "0",
+   "experience_to": "5",
+   "experience": "0 - 5 Years",
+   "salary_currency": "",
+   "salary_min": "",
+   "salary_max": "",
+   "salary_range": "",
+   "salary_timeframe": "Annual",
+   "jd": "",
+   "officelocation_arr": [
+    "a64a680c694a72"
+   ],
+   "officelocation_show_arr": "Gurugram, Haryana\r, India (120)",
+   "officelocations_area": [
+    "Gurugram, Haryana\r, India"
+   ],
+   "officelocations_without_area": [
+    "Gurugram, Haryana\r, India"
+   ],
+   "country": "India",
+   "designation_title": "",
+   "created_on": "2026-10-06T12:50:03.000Z",
+   "is_remote": 0,
+   "designation_name": "Executive, Operations",
+   "department_name": "Operations Excellence (CM_006)",
+   "department_name_only": "Operations Excellence",
+   "emp_type_name": "Full Time",
+   "emp_sub_type_name": "",
+   "functional_area_name": "Operations (FA_0015)",
+   "functional_area": "a67efdc5d9c984",
+   "job_tags": [],
+   "jd_summary": "",
+   "legal_entity_ids": [],
+   "job_posting": {
+    "careers": {
+     "source": "careers",
+     "from": 1791225000,
+     "to": 1793471399
+    },
+    "refer": {
+     "source": "refer",
+     "from": 1791225000,
+     "to": 1793471399
+    },
+    "ijp": {
+     "source": "ijp",
+     "from": null,
+     "to": null
+    }
+   },
+   "posted_on": 1791225000,
+   "designation_name_id": "5f40c1ca7396b",
+   "officelocation_show_arr_list": [
+    "Gurugram, Haryana, India "
+   ],
+   "locations": "Gurugram, Haryana\r, India",
+   "tool_tip_locations": [
+    "Gurugram, Haryana, India"
+   ],
+   "designation_title_name": "",
+   "title": "Executive, Operations"
+  },
+  {
+   "_id": "6abce2d9016641e936092bdf",
+   "id": "a6abce2d99fbe3",
+   "parent_company_id": "5f3e61060c173",
+   "designation": "a6a9fba9f27075289507229",
+   "department_id": "a6a9fb28828790537702758",
+   "designation_display_name": "",
+   "internal_job_code": "",
+   "employee_type": "5f4359bc2a7aa",
+   "employee_sub_type": "",
+   "experience_from": "0",
+   "experience_to": "4",
+   "experience": "0 - 4 Years",
+   "salary_currency": "",
+   "salary_min": "",
+   "salary_max": "",
+   "salary_range": "",
+   "salary_timeframe": "Annual",
+   "jd": "",
+   "officelocation_arr": [
+    "a66e12650af9fc"
+   ],
+   "officelocation_show_arr": "Bawal, Haryana\r, India (131)",
+   "officelocations_area": [
+    "Bawal, Haryana\r, India"
+   ],
+   "officelocations_without_area": [
+    "Bawal, Haryana\r, India"
+   ],
+   "country": "India",
+   "designation_title": "",
+   "created_on": "2026-09-30T10:22:17.000Z",
+   "is_remote": 0,
+   "designation_name": "Operations Executive, Plant Operations",
+   "department_name": "Plant Operations (B) (PO_001)",
+   "department_name_only": "Plant Operations (B)",
+   "emp_type_name": "Full Time",
+   "emp_sub_type_name": "",
+   "functional_area_name": "Plant Ops Billed (F_012)",
+   "functional_area": "a6885f8a9e5655",
+   "job_tags": [],
+   "jd_summary": "",
+   "legal_entity_ids": [],
+   "job_posting": {
+    "careers": {
+     "source": "careers",
+     "from": 1790706600,
+     "to": 1793471399
+    },
+    "refer": {
+     "source": "refer",
+     "from": null,
+     "to": null
+    },
+    "ijp": {
+     "source": "ijp",
+     "from": null,
+     "to": null
+    }
+   },
+   "posted_on": 1790706600,
+   "designation_name_id": "a6a9fba6d52125411707184",
+   "officelocation_show_arr_list": [
+    "Bawal, Haryana, India "
+   ],
+   "locations": "Bawal, Haryana\r, India",
+   "tool_tip_locations": [
+    "Bawal, Haryana, India"
+   ],
+   "designation_title_name": "",
+   "title": "Operations Executive, Plant Operations"
+  }
+ ]
+}

@@ -1,0 +1,61 @@
+{
+ "search_url": "https://jobs.cargill.com/search/?q=&sortColumn=referencedate&sortDirection=desc&startrow=0&optionsFacetsDD_country=IN",
+ "total": 67,
+ "rows_parsed": [
+  {
+   "href": "/job/Bangalore-Sr_-Consultant%2C-Enterprise-Mobility-Karn-560087/1364525157/",
+   "title": "Sr. Consultant, Enterprise Mobility",
+   "location": "Bangalore, Karnataka, IN India, 560087",
+   "date": "Oct 9, 2026",
+   "dept": "Digital Technology"
+  },
+  {
+   "href": "/job/Bangalore-Trading-Engineer-%28Data%29-Karn-560087/1366572257/",
+   "title": "Trading Engineer (Data)",
+   "location": "Bangalore, Karnataka, IN India, 560087",
+   "date": "Oct 9, 2026",
+   "dept": "Digital Technology"
+  },
+  {
+   "href": "/job/Bangalore-Trading-Engineer-%28Full-Stack%29-Karn-560087/1366567257/",
+   "title": "Trading Engineer (Full Stack)",
+   "location": "Bangalore, Karnataka, IN India, 560087",
+   "date": "Oct 9, 2026",
+   "dept": "Digital Technology"
+  },
+  {
+   "href": "/job/Bangalore-Analyst-Accounting-Karn-560087/1374400857/",
+   "title": "Analyst Accounting",
+   "location": "Bangalore, Karnataka, IN India, 560087",
+   "date": "Oct 9, 2026",
+   "dept": "FINANCE"
+  },
+  {
+   "href": "/job/Bangalore-Sr_-Consultant%2C-Surface-Area-Management-Karn-560087/1369177557/",
+   "title": "Sr. Consultant, Surface Area Management",
+   "location": "Bangalore, Karnataka, IN India, 560087",
+   "date": "Oct 8, 2026",
+   "dept": "Digital Technology"
+  }
+ ],
+ "detail_url": "https://jobs.cargill.com/job/Bangalore-Sr_-Consultant%2C-Enterprise-Mobility-Karn-560087/1364525157/",
+ "detail_microdata": {
+  "jobLocation": "",
+  "address": "",
+  "addressLocality": "Bangalore",
+  "addressRegion": "Karn",
+  "postalCode": "560087",
+  "addressCountry": "IN",
+  "datePosted": "Fri Oct 09 02:00:00 UTC 2026",
+  "hiringOrganization": "cargill",
+  "title": "Sr. Consultant, Enterprise Mobility"
+ },
+ "detail_careersite_props": {
+  "title": "Sr. Consultant, Enterprise Mobility",
+  "customfield1": "328494",
+  "location": "Bangalore, Karnataka, IN India, 560087",
+  "department": "Digital Technology",
+  "description": "Job Purpose and Impact The Mobility Carrier & Services Analyst is responsible for defining, governing, and operationalizing global mobility policies and service frameworks. This role ensures consisten"
+ },
+ "detail_description_html_trimmed": "<div><div style=\"padding:10.0px 0.0px;border:1.0px solid transparent\"><div style=\"font-size:16.0px;word-wrap:break-word\"><h2 style=\"font-size:1.0em;margin:0.0px\">Job Purpose and Impact</h2> </div><div><ul>\n<li><span>The Mobility Carrier &amp; Services Analyst is responsible for defining, governing, and operationalizing global mobility policies and service frameworks. This role ensures consistent, ...[trimmed]"
+}

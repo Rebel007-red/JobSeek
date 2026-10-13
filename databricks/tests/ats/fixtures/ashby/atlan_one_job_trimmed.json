@@ -1,0 +1,34 @@
+{
+ "apiVersion": "1",
+ "jobs": [
+  {
+   "id": "254c1250-953b-4323-8d18-9fe5e41d8d7d",
+   "title": "Senior Security Engineer - Corporate Security",
+   "department": "IT & Security",
+   "team": "Security",
+   "employmentType": "FullTime",
+   "location": "India",
+   "shouldDisplayCompensationOnJobPostings": false,
+   "secondaryLocations": [],
+   "publishedAt": "2026-07-24T11:33:47.990+00:00",
+   "isListed": true,
+   "isRemote": true,
+   "workplaceType": "Remote",
+   "address": {
+    "postalAddress": {
+     "addressCountry": "India"
+    }
+   },
+   "jobUrl": "https://jobs.ashbyhq.com/atlan/254c1250-953b-4323-8d18-9fe5e41d8d7d",
+   "applyUrl": "https://jobs.ashbyhq.com/atlan/254c1250-953b-4323-8d18-9fe5e41d8d7d/application",
+   "descriptionHtml": "<h2><strong>Who We Are</strong></h2><p style=\"min-height:1.5em\">Atlan is building the context layer for enterprise AI. Enterprises are pouring money into AI and most of it dies in production because the AI does not understand the business context around the data. That is the problem Atlan solves.<br",
+   "descriptionPlain": "WHO WE ARE\n\nAtlan is building the context layer for enterprise AI. Enterprises are pouring money into AI and most of it dies in production because the AI does not understand the business context around the data. That is the problem Atlan solves.\n\nGartner has named context the defining issue in enter",
+   "compensation": {
+    "compensationTierSummary": null,
+    "scrapeableCompensationSalarySummary": null,
+    "compensationTiers": [],
+    "summaryComponents": []
+   }
+  }
+ ]
+}

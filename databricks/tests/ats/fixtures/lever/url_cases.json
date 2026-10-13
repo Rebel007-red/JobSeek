@@ -1,0 +1,77 @@
+{
+ "_about": "Board URL -> companies columns. Pinned by databricks/tests/ats/test_base.py (adapter.source_columns) and by the form's test in src/ (same file). expect null = rejected.",
+ "cases": [
+  {
+   "input": "https://jobs.lever.co/paytm",
+   "expect": {
+    "slug": "paytm",
+    "api_url": "https://api.lever.co/v0/postings/paytm?mode=json"
+   }
+  },
+  {
+   "input": "https://jobs.lever.co/paytm/9eed4fec-73f7-4114-a5d3-b2f689c92e8c/apply",
+   "expect": {
+    "slug": "paytm",
+    "api_url": "https://api.lever.co/v0/postings/paytm?mode=json"
+   }
+  },
+  {
+   "input": "https://jobs.lever.co/meesho?team=Engineering",
+   "expect": {
+    "slug": "meesho",
+    "api_url": "https://api.lever.co/v0/postings/meesho?mode=json"
+   }
+  },
+  {
+   "input": "https://jobs.eu.lever.co/mistral",
+   "expect": {
+    "slug": "mistral",
+    "api_url": "https://api.eu.lever.co/v0/postings/mistral?mode=json"
+   }
+  },
+  {
+   "input": "https://api.lever.co/v0/postings/zeta?mode=json",
+   "expect": {
+    "slug": "zeta",
+    "api_url": "https://api.lever.co/v0/postings/zeta?mode=json"
+   }
+  },
+  {
+   "input": "https://api.eu.lever.co/v0/postings/qonto",
+   "expect": {
+    "slug": "qonto",
+    "api_url": "https://api.eu.lever.co/v0/postings/qonto?mode=json"
+   }
+  },
+  {
+   "input": "jobs.lever.co/cred",
+   "expect": {
+    "slug": "cred",
+    "api_url": "https://api.lever.co/v0/postings/cred?mode=json"
+   }
+  },
+  {
+   "input": "cred",
+   "expect": {
+    "slug": "cred",
+    "api_url": "https://api.lever.co/v0/postings/cred?mode=json"
+   }
+  },
+  {
+   "input": "https://paytm.com/careers",
+   "expect": null
+  },
+  {
+   "input": "https://jobs.ashbyhq.com/sarvam",
+   "expect": null
+  },
+  {
+   "input": "https://api.lever.co/v0/postings/",
+   "expect": null
+  },
+  {
+   "input": "",
+   "expect": null
+  }
+ ]
+}

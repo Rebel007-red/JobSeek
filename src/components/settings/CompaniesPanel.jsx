@@ -2,100 +2,28 @@ import { useEffect, useId, useState } from 'react'
 import { api } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { SearchIcon } from '../common/icons'
+import { ATS_FIELDS, ATS_TYPES, describeSource, parseAtsSource, sourceKey, sourceValue } from '../../utils/atsSources'
+import { MANUAL_SOURCES, sourceLabel } from '../../utils/sources'
 
-// Only these types have a scraper (databricks/workday.py, greenhouse.py, linkedin.py). Rows of other types (added
-// before) show "not scraped" and can still be paused or deleted.
-const SCRAPED_TYPES = ['workday', 'greenhouse', 'linkedin']
-const ATS_LABELS = { workday: 'Workday', greenhouse: 'Greenhouse', linkedin: 'LinkedIn search' }
-const atsLabel = (type) => ATS_LABELS[type] || type
+// Every type with a scraper (databricks/workday.py, greenhouse.py, linkedin.py and databricks/ats_scrape.py for the
+// others). Rows of other types (added before) show "not scraped" and can still be paused or deleted. The field, its help
+// and the link -> columns parsers live in utils/atsSources.js (pinned to the scrapers' url_cases.json).
+const SCRAPED_TYPES = ATS_TYPES
+const BOARD_TYPES = ATS_TYPES.filter(type => !MANUAL_SOURCES.includes(type))
+// LinkedIn rows are search keywords, not a company board
+const atsLabel = (type) => (type === 'linkedin' ? 'LinkedIn search' : sourceLabel(type))
 
-// The one field each scraped type needs; parse(value) -> the columns to save ({ api_url }, plus slug for Greenhouse),
-// or { error }
-const SOURCE_FIELDS = {
-  workday: {
-    label: 'Workday jobs URL',
-    placeholder: 'https://company.wd1.myworkdayjobs.com/en-US/Careers',
-    help: 'The careers page on myworkdayjobs.com (or myworkdaysite.com) that lists the jobs (the scraper opens it like a browser).',
-    type: 'url',
-    // slug is left as it is (workday.py reads only api_url)
-    parse: (value) => (workdayUrlOk(value)
-      ? { api_url: value }
-      : { error: 'Paste the https:// link of the Workday jobs page, e.g. https://company.wd1.myworkdayjobs.com/en-US/Careers' }),
-  },
-  greenhouse: {
-    label: 'Greenhouse board',
-    placeholder: 'https://job-boards.greenhouse.io/stripe',
-    help: 'The board link, its API URL or just the board token (stripe).',
-    type: 'text',
-    parse: (value) => {
-      const token = greenhouseBoardToken(value)
-      return token
-        ? { slug: token, api_url: `https://boards-api.greenhouse.io/v1/boards/${token}/jobs` }
-        : { error: 'Paste the Greenhouse board link, e.g. https://job-boards.greenhouse.io/stripe' }
-    },
-  },
-  linkedin: {
-    label: 'Search keywords',
-    placeholder: 'e.g. Databricks',
-    help: 'Searched India-wide every 4 hours, newest first',
-    type: 'text',
-    parse: (value) => (value.length >= 2 && value.length <= 100
-      ? { api_url: value }
-      : { error: 'Search keywords: 2 to 100 characters' }),
-  },
-}
-
-// Board token of a Greenhouse board URL (job-boards.greenhouse.io/stripe[/jobs/<id>], boards.greenhouse.io/stripe,
-// the embed link with ?for=stripe), an API URL (boards-api.greenhouse.io/v1/boards/stripe/jobs) or a bare token;
-// null when the value is none of these. keep in sync: board_token() in databricks/greenhouse.py
-const BOARD_TOKEN_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/
-
-function greenhouseBoardToken(raw) {
-  const value = String(raw ?? '').trim()
-  if (!value) return null
-  const bare = value.replace(/^\/+|\/+$/g, '')
-  if (BOARD_TOKEN_RE.test(bare)) return bare
-  let url
-  try {
-    url = new URL(value.includes('://') ? value : `https://${value.replace(/^\/+/, '')}`)
-  } catch {
-    return null
-  }
-  const host = url.hostname.toLowerCase()
-  if (host !== 'greenhouse.io' && !host.endsWith('.greenhouse.io')) return null
-  const parts = url.pathname.split('/').filter(Boolean)
-  const first = (parts[0] || '').toLowerCase()
-  let token
-  if (first === 'v1') token = parts.length >= 3 && parts[1].toLowerCase() === 'boards' ? parts[2] : ''
-  else if (first === 'embed') token = url.searchParams.get('for') || ''
-  else token = parts[0] || ''
-  return BOARD_TOKEN_RE.test(token) ? token : null
-}
-
-// Workday hosts its career sites on myworkdayjobs.com and, for some tenants, myworkdaysite.com (two rows use it)
-const WORKDAY_HOSTS = ['myworkdayjobs.com', 'myworkdaysite.com']
-
-function workdayUrlOk(value) {
-  try {
-    const url = new URL(value)
-    const host = url.hostname.toLowerCase()
-    return url.protocol === 'https:' && WORKDAY_HOSTS.some(base => host === base || host.endsWith(`.${base}`))
-  } catch {
-    return false
-  }
-}
-
-// What makes two rows of one type the same source: the board token for Greenhouse, else the URL / keywords
-const normalise = (value) => String(value ?? '').trim().toLowerCase().replace(/\/+$/, '')
-function sourceKey(company) {
-  if (company.ats_type === 'greenhouse') return normalise(greenhouseBoardToken(company.slug) || greenhouseBoardToken(company.api_url))
-  return normalise(company.api_url) || normalise(company.slug)
-}
-
-// The value shown in (and edited back from) the source field of a row
-function sourceValue(company) {
-  if (company.ats_type === 'greenhouse') return company.slug || company.api_url || ''
-  return company.api_url || company.slug || ''
+// The row's source line: the keywords of a LinkedIn search, the URL / token for Workday and Greenhouse, else what the
+// scraper reads ("site “paytm”" next to the Lever chip; the stored value is the tooltip)
+function sourceText(company) {
+  const value = sourceValue(company)
+  if (company.ats_type === 'linkedin') return `“${value}”`
+  if (company.ats_type === 'workday' || company.ats_type === 'greenhouse' || !ATS_FIELDS[company.ats_type]) return value
+  const text = describeSource(company.ats_type, ATS_FIELDS[company.ats_type].parse(value) || company)
+  if (!text) return value
+  // the type chip already names the ATS: "Lever site “paytm”" -> "site “paytm”"
+  const label = `${atsLabel(company.ats_type)} `
+  return text.startsWith(label) ? text.slice(label.length) : text
 }
 
 const EMPTY_FORM = { name: '', ats_type: 'workday', source: '' }
@@ -121,6 +49,9 @@ function companyHealth(company, rows) {
       return { label: 'Failing', tone: 'danger', title: `${scrape.last_error || 'Scrape failed'} (${runs})` }
     }
     if (daysSince(scrape.last_scraped_at) > SCRAPE_STALE_DAYS) {
+      if (MANUAL_SOURCES.includes(company.ats_type)) {
+        return { label: 'By hand only', tone: 'muted', title: `Runs only when the LinkedIn workflow is started by hand; last searched ${whenText(scrape.last_scraped_at)}` }
+      }
       return { label: 'Not scraped', tone: 'warning', title: `Last scraped ${whenText(scrape.last_scraped_at)}` }
     }
     if (Number(scrape.jobs_found) === 0) return { label: 'No openings', tone: 'muted', title: `No jobs found ${whenText(scrape.last_scraped_at)}` }
@@ -131,6 +62,9 @@ function companyHealth(company, rows) {
     null,
   )
   const latest = pick?.latest_first_seen
+  if (!latest && MANUAL_SOURCES.includes(company.ats_type)) {
+    return { label: 'By hand only', tone: 'muted', title: 'Runs only when the LinkedIn workflow is started by hand' }
+  }
   if (!latest) return UNKNOWN_HEALTH
   return daysSince(latest) <= HEALTH_DAYS
     ? { label: 'Live', tone: 'success', title: `Newest job found ${whenText(latest)}` }
@@ -177,10 +111,10 @@ export function CompaniesPanel({ visible }) {
     if (!name) return 'Company name is required'
     const others = companies.filter(c => c.id !== self?.id)
     if (others.some(c => c.name.trim().toLowerCase() === name.toLowerCase())) return `A company named "${name}" already exists`
-    const field = SOURCE_FIELDS[type]
+    const field = ATS_FIELDS[type]
     if (!field) return ''
     if (!source) return `${field.label} is required`
-    const parsed = field.parse(source)
+    const parsed = parseAtsSource(type, source)
     if (parsed.error) return parsed.error
     const key = sourceKey({ ats_type: type, ...parsed })
     const twin = others.find(c => c.ats_type === type && key && sourceKey(c) === key)
@@ -199,7 +133,7 @@ export function CompaniesPanel({ visible }) {
     const { error, data } = await supabase.from('companies').insert([{
       name: draft.name,
       ats_type: draft.ats_type,
-      ...SOURCE_FIELDS[draft.ats_type].parse(draft.source),
+      ...parseAtsSource(draft.ats_type, draft.source),
       disabled: false,
     }]).select()
     setSaving(false)
@@ -230,7 +164,7 @@ export function CompaniesPanel({ visible }) {
   }
 
   async function deleteCompany(company) {
-    if (!confirm(`Delete "${company.name}"? It will no longer be scraped; jobs already found stay until they disappear (2 days after posting, unless someone saved or applied to them).`)) return
+    if (!confirm(`Delete "${company.name}"? It will no longer be scraped; jobs already found stay until they disappear (7 days after posting, unless someone saved or applied to them).`)) return
     setListError('')
     setCompanies(prev => prev.filter(c => c.id !== company.id))
     const { data, error } = await supabase.from('companies').delete().eq('id', company.id).select('id')
@@ -247,8 +181,7 @@ export function CompaniesPanel({ visible }) {
     const draft = { name: editing.name.trim(), ats_type: company.ats_type, source: editing.source.trim() }
     const problem = problemFor(draft, company)
     if (problem) return setEditing(prev => ({ ...prev, error: problem }))
-    const field = SOURCE_FIELDS[company.ats_type]
-    const patch = { name: draft.name, ...(field ? field.parse(draft.source) : {}) }
+    const patch = { name: draft.name, ...(ATS_FIELDS[company.ats_type] ? parseAtsSource(company.ats_type, draft.source) : {}) }
     setEditing(null)
     setListError('')
     replaceRow({ ...company, ...patch })
@@ -264,7 +197,8 @@ export function CompaniesPanel({ visible }) {
 
   if (!visible) return null
 
-  const field = SOURCE_FIELDS[form.ats_type]
+  const field = ATS_FIELDS[form.ats_type]
+  const derived = field && form.source.trim() ? describeSource(form.ats_type, parseAtsSource(form.ats_type, form.source)) : ''
   const needle = search.trim().toLowerCase()
   const shown = needle
     ? companies.filter(c => [c.name, c.ats_type, atsLabel(c.ats_type), c.slug, c.api_url].some(v => String(v ?? '').toLowerCase().includes(needle)))
@@ -275,8 +209,8 @@ export function CompaniesPanel({ visible }) {
     <div className="settings-panel settings-panel-animate">
       <div className="settings-summary-row">
         <p>
-          LinkedIn searches run every 4 hours. Workday and Greenhouse are scraped twice a day (07:37 and 19:37 IST);
-          their jobs appear after the next LinkedIn run.
+          Company boards are scraped every 6 hours (05:37, 11:37, 17:37 and 23:37 IST); new jobs appear about 2 hours
+          later. LinkedIn searches run only when started by hand.
         </p>
         <button
           type="button"
@@ -310,7 +244,12 @@ export function CompaniesPanel({ visible }) {
               <select id={`${ids}-type`} value={form.ats_type}
                 onChange={e => { setForm(f => ({ ...f, ats_type: e.target.value, source: '' })); setFormError('') }}
                 className="settings-input settings-select">
-                {SCRAPED_TYPES.map(t => <option key={t} value={t}>{atsLabel(t)}</option>)}
+                <optgroup label="Company careers boards">
+                  {BOARD_TYPES.map(t => <option key={t} value={t}>{atsLabel(t)}</option>)}
+                </optgroup>
+                <optgroup label="By hand only">
+                  {MANUAL_SOURCES.map(t => <option key={t} value={t}>{atsLabel(t)}</option>)}
+                </optgroup>
               </select>
             </div>
 
@@ -320,9 +259,13 @@ export function CompaniesPanel({ visible }) {
                 <input id={`${ids}-source`} type={field.type} required value={form.source}
                   onChange={e => { setForm(f => ({ ...f, source: e.target.value })); setFormError('') }}
                   placeholder={field.placeholder}
-                  aria-describedby={`${ids}-source-help`}
+                  aria-describedby={`${ids}-source-help ${ids}-source-derived`}
+                  autoComplete="off" spellCheck={false}
                   className="settings-input" />
                 <small id={`${ids}-source-help`}>{field.help}</small>
+                <small id={`${ids}-source-derived`} className="settings-derived" aria-live="polite">
+                  {derived ? `Will read: ${derived}` : null}
+                </small>
               </div>
             )}
           </div>
@@ -378,7 +321,7 @@ export function CompaniesPanel({ visible }) {
             {shown.map(company => {
               const status = companyHealth(company, healthRows)
               const scraped = SCRAPED_TYPES.includes(company.ats_type)
-              const rowField = SOURCE_FIELDS[company.ats_type]
+              const rowField = ATS_FIELDS[company.ats_type]
 
               if (editing?.id === company.id) {
                 return (
@@ -417,7 +360,7 @@ export function CompaniesPanel({ visible }) {
                       <span className="settings-chip">{atsLabel(company.ats_type)}</span>
                       {!scraped && <span className="settings-chip not-scraped" title="This type has no scraper">not scraped</span>}
                       {sourceValue(company)
-                        ? <span title={sourceValue(company)}>{company.ats_type === 'linkedin' ? `“${sourceValue(company)}”` : sourceValue(company)}</span>
+                        ? <span title={sourceValue(company)}>{sourceText(company)}</span>
                         : <span>details pending</span>}
                       <span className={`company-health ${status.tone}`} title={status.title}>{status.label}</span>
                     </div>

@@ -106,7 +106,7 @@ export function useUrlState() {
     setList(prev => (prev.scope === scope ? prev : { ...prev, scope }))
   }, [])
 
-  // The scope menu: scope ('match' | 'all') and time window (filters.postedWithin: '24' | '48' | '' = any date) together
+  // The scope menu: scope ('match' | 'all') and time window (filters.postedWithin: '24' | '72' | '' = last 7 days) together
   const setScopeWindow = useCallback(({ scope, postedWithin }) => {
     const span = String(postedWithin ?? '')
     if (!SCOPES.includes(scope) || (span && !POSTED_OPTIONS.some(option => option.value === span))) return

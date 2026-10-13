@@ -1,0 +1,65 @@
+{
+ "_request": "GET https://freighttiger.darwinbox.in/ms/candidateapi/job/a6ac71ce13c900?companyId=main",
+ "status": "success",
+ "message": {
+  "job": [
+   {
+    "id": "a6ac71ce13c900",
+    "designation": "a6aa8e89351a15049654964",
+    "designation_display_name": "",
+    "internal_job_code": "",
+    "employee_sub_type": "",
+    "experience": "3 - 15 Years",
+    "experience_from_num": 36,
+    "experience_to_num": 180,
+    "salary_currency": "",
+    "salary_min": "",
+    "salary_max": "",
+    "salary_range": "",
+    "salary_timeframe": "Annual",
+    "jd": "",
+    "officelocations_area": [
+     "Gurugram, Haryana\r, India"
+    ],
+    "officelocations_without_area": [
+     "Gurugram, Haryana\r, India"
+    ],
+    "designation_title": "",
+    "created_on": "2026-10-08T04:32:33.000Z",
+    "is_remote": 0,
+    "designation_name": "Manager, Collections",
+    "emp_sub_type_name": "",
+    "job_tags": [],
+    "legal_entity_ids": [],
+    "job_posting": {
+     "careers": {
+      "from": 1791397800
+     }
+    },
+    "officelocation_arr": [
+     "a64a680c694a72"
+    ],
+    "officelocation_show_arr": "Gurugram, Haryana, India",
+    "job_posting_on": 1791397800,
+    "department_id": "a6891ddd2bf0f6",
+    "tool_tip_locations": [
+     "Gurugram, Haryana, India"
+    ],
+    "designation_name_id": "a6436e79d7b8a9",
+    "posted_on": 1791397800,
+    "designation_title_name": "",
+    "timezone": "Asia/Kolkata",
+    "officelocation_show_arr_list": [
+     "Gurugram, Haryana, India"
+    ],
+    "locations": "Gurugram, Haryana\r, India",
+    "department": "Collections",
+    "emp_type": "Full Time",
+    "emp_type_id": "5f4359bc2a7aa",
+    "functional_area_id": "Collections",
+    "title": "Manager, Collections"
+   }
+  ],
+  "isSaved": false
+ }
+}

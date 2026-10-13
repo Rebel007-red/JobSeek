@@ -53,7 +53,7 @@ export function ApplicationPanel({ job, status, onStatus, onNoteSaved, notify, s
       if (mountedRef.current) setPhase({ state: 'saving', error: '' })
       try {
         const row = await api.setNote(jobKey, next.note || null, next.date || null)
-        // 0 rows: the last update deleted the job (it was over 2 days old and untracked), so nothing was saved
+        // 0 rows: the last update deleted the job (it was over 7 days old and untracked), so nothing was saved
         if (Number(row?.num_affected_rows) === 0) throw new Error('This job disappeared with the last update, so the note was not saved')
         savedRef.current = next
         if (mountedRef.current) setSaved(next)

@@ -6,7 +6,7 @@ import { isJobKey, jobLink, listStateToParams, parseListState } from './urlState
 
 const KEY = 'a'.repeat(64)
 
-test('an empty URL opens what this device remembers, else Inbox / For you / Best fit / last 24h', () => {
+test('an empty URL opens what this device remembers, else Inbox / For you / Best fit / last 7 days', () => {
   assert.deepEqual(parseListState(''), {
     tab: 'inbox', sort: 'fit', scope: 'match', filters: DEFAULT_FILTERS, jobKey: null, sheet: null,
   })
@@ -39,14 +39,20 @@ test('old links and remembered tabs (To apply, All) open the Inbox', () => {
 })
 
 test('the time window remembered with the scope is what a URL without posted means', () => {
-  const remembered = { scope: 'all', postedWithin: '' }
-  assert.equal(parseListState('', remembered).filters.postedWithin, '')
-  assert.equal(parseListState('posted=24', remembered).filters.postedWithin, '24')
-  assert.equal(listStateToParams({ scope: 'all', filters: { ...DEFAULT_FILTERS, postedWithin: '' } }, remembered).toString(), '')
-  assert.equal(listStateToParams({ scope: 'all', filters: DEFAULT_FILTERS }, remembered).toString(), 'posted=24')
-  assert.equal(listStateToParams({ filters: { ...DEFAULT_FILTERS, postedWithin: '' } }).toString(), 'posted=any')
-  // an invalid remembered window falls back to the last 24 hours
-  assert.equal(parseListState('', { postedWithin: '72' }).filters.postedWithin, '24')
+  // the default is no window (the last 7 days: untracked jobs are deleted after that)
+  assert.equal(DEFAULT_FILTERS.postedWithin, '')
+  assert.equal(listStateToParams({ filters: DEFAULT_FILTERS }).toString(), '')
+  assert.equal(listStateToParams({ filters: { ...DEFAULT_FILTERS, postedWithin: '72' } }).toString(), 'posted=72')
+  const remembered = { scope: 'all', postedWithin: '24' }
+  assert.equal(parseListState('', remembered).filters.postedWithin, '24')
+  assert.equal(parseListState('posted=72', remembered).filters.postedWithin, '72')
+  assert.equal(parseListState('posted=any', remembered).filters.postedWithin, '')
+  assert.equal(listStateToParams({ scope: 'all', filters: { ...DEFAULT_FILTERS, postedWithin: '24' } }, remembered).toString(), '')
+  assert.equal(listStateToParams({ scope: 'all', filters: DEFAULT_FILTERS }, remembered).toString(), 'posted=any')
+  // an invalid remembered window (the old '48' = last 2 days) falls back to the default
+  assert.equal(parseListState('', { postedWithin: '48' }).filters.postedWithin, '')
+  assert.equal(parseListState('posted=48').filters.postedWithin, '')
+  assert.equal(parseListState('posted=48', remembered).filters.postedWithin, '24')
 })
 
 test('Expiring first is an Inbox sort only', () => {
@@ -62,19 +68,19 @@ test('Expiring first is an Inbox sort only', () => {
 test('every filter is read, invalid values are dropped', () => {
   const state = parseListState(
     `q=data%20-intern&role=Data%20Engineer&company=Acme&city=Pune&workMode=remote&employment=unknown&maxYears=4&minFit=70`
-    + `&stage=interviewing&closed=only&posted=48&skills=1&myCities=1&followUp=1&muted=only&job=${KEY}&sheet=filters`,
+    + `&stage=interviewing&closed=only&posted=72&skills=1&myCities=1&followUp=1&muted=only&job=${KEY}&sheet=filters`,
   )
   assert.deepEqual(state.filters, {
     ...DEFAULT_FILTERS,
     q: 'data -intern', role: 'Data Engineer', company: 'Acme', city: 'Pune', workMode: 'remote', employment: 'unknown',
-    maxYears: '4', minFit: '70', stage: 'interviewing', closed: 'only', postedWithin: '48', matchedOnly: true,
+    maxYears: '4', minFit: '70', stage: 'interviewing', closed: 'only', postedWithin: '72', matchedOnly: true,
     myCities: true, followUp: true, muteView: 'only',
   })
   assert.equal(state.jobKey, KEY)
   assert.equal(state.sheet, 'filters')
 
   const bad = parseListState('tab=nope&sort=x&scope=me&workMode=moon&maxYears=99&minFit=0&stage=saved&closed=x'
-    + '&posted=72&skills=yes&muted=all&job=123&sheet=menu')
+    + '&posted=48&skills=yes&muted=all&job=123&sheet=menu')
   assert.deepEqual([bad.tab, bad.sort, bad.scope], ['inbox', 'fit', 'match'])
   assert.deepEqual(bad.filters, DEFAULT_FILTERS)
   assert.equal(bad.jobKey, null)
@@ -88,12 +94,12 @@ test('defaults are left out, in a stable order', () => {
   const params = listStateToParams({
     sheet: 'filters',
     jobKey: KEY,
-    filters: { ...DEFAULT_FILTERS, muteView: 'only', matchedOnly: true, city: 'Pune', q: 'spark', postedWithin: '' },
+    filters: { ...DEFAULT_FILTERS, muteView: 'only', matchedOnly: true, city: 'Pune', q: 'spark', postedWithin: '24' },
     scope: 'all',
     sort: 'recent',
     tab: 'saved',
   })
-  assert.equal(params.toString(), `tab=saved&sort=recent&scope=all&q=spark&city=Pune&posted=any&skills=1&muted=only&job=${KEY}&sheet=filters`)
+  assert.equal(params.toString(), `tab=saved&sort=recent&scope=all&q=spark&city=Pune&posted=24&skills=1&muted=only&job=${KEY}&sheet=filters`)
   // the sort is left out when it is the tab's default or the one remembered for it
   assert.equal(listStateToParams({ tab: 'applied', sort: 'applied' }).toString(), 'tab=applied')
   assert.equal(listStateToParams({ tab: 'applied', sort: 'fit' }, { tab: 'applied', sortFor: () => 'fit' }).toString(), '')
@@ -105,7 +111,7 @@ test('state round-trips through the URL', () => {
   const remembered = { tab: 'saved', scope: 'all', sortFor: tab => (tab === 'inbox' ? 'found' : undefined) }
   const states = [
     { tab: 'inbox', sort: 'fit', scope: 'match', filters: DEFAULT_FILTERS, jobKey: null, sheet: null },
-    { tab: 'inbox', sort: 'expiring', scope: 'match', filters: { ...DEFAULT_FILTERS, postedWithin: '48' }, jobKey: null, sheet: null },
+    { tab: 'inbox', sort: 'expiring', scope: 'match', filters: { ...DEFAULT_FILTERS, postedWithin: '72' }, jobKey: null, sheet: null },
     { tab: 'saved', sort: 'fit', scope: 'all', filters: { ...DEFAULT_FILTERS, postedWithin: '' }, jobKey: KEY, sheet: null },
     { tab: 'inbox', sort: 'found', scope: 'all', filters: { ...DEFAULT_FILTERS, workMode: 'unknown', minFit: '60' }, jobKey: null, sheet: 'filters' },
     {
@@ -118,7 +124,7 @@ test('state round-trips through the URL', () => {
     },
   ]
   for (const state of states) {
-    for (const memory of [undefined, remembered, { ...remembered, postedWithin: '' }, { postedWithin: '48' }]) {
+    for (const memory of [undefined, remembered, { ...remembered, postedWithin: '24' }, { postedWithin: '72' }, { postedWithin: '48' }]) {
       assert.deepEqual(parseListState(listStateToParams(state, memory), memory), state)
     }
   }

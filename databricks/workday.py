@@ -10,10 +10,12 @@ from playwright.async_api import async_playwright
 from scraper_common import (
     ScrapeFailed,
     fetch_companies,
+    fetch_seen_job_keys,
     first_text,
     format_calendar_date,
     format_days_ago,
     goto_settled,
+    is_seen,
     print_companies,
     relative_text_to_days,
     scrape_report,
@@ -215,16 +217,24 @@ async def main():
             sys.exit(1)
 
         jobs = await collect_workday_jobs(companies, report)
-        filtered_jobs_dataframe, output_file = await write_recent_jobs(jobs, "Workday", "workday", read_workday_description)
+        # Jobs the pipeline already has a description for (ats_seen_keys.json, written by 04_gold_cleanup) are still
+        # written, refreshing last_seen_at, but their page is not opened again: with the 7-day window and a run every
+        # 6 hours each job would otherwise be read up to 28 times
+        seen_keys = await fetch_seen_job_keys()
+        filtered_jobs_dataframe, output_file = await write_recent_jobs(
+            jobs, "Workday", "workday", read_workday_description, skip_keys=seen_keys
+        )
         failed_companies = report.failed_names
-        missing_descriptions = int((filtered_jobs_dataframe['description'] == '').sum())
+        rows = filtered_jobs_dataframe.to_dict(orient="records")
+        already_seen = sum(1 for row in rows if is_seen(row, skip_keys=seen_keys))
+        missing_descriptions = sum(1 for row in rows if not row["description"] and not is_seen(row, skip_keys=seen_keys))
         report.totals.update(jobs_scraped=len(jobs), jobs_written=len(filtered_jobs_dataframe),
-                             missing_descriptions=missing_descriptions)
+                             missing_descriptions=missing_descriptions, already_seen=already_seen)
 
         print(
             f"[SUMMARY] companies={len(companies)} failed={len(failed_companies)} "
             f"jobs_scraped={len(jobs)} jobs_written={len(filtered_jobs_dataframe)} "
-            f"missing_descriptions={missing_descriptions}"
+            f"already_seen={already_seen} missing_descriptions={missing_descriptions}"
         )
         if failed_companies:
             print(f"[SUMMARY] failed companies: {', '.join(failed_companies)}")

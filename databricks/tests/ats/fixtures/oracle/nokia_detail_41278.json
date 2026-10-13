@@ -1,0 +1,133 @@
+{
+ "_request": "https://fa-evmr-saasfaprod1.fa.ocs.oraclecloud.com/hcmRestApi/resources/latest/recruitingCEJobRequisitionDetails?expand=all&onlyData=true&finder=ById%3BId%3D%2241278%22%2CsiteNumber%3DCX_1",
+ "items": [
+  {
+   "Id": "41278",
+   "Title": "Staff Project/Program Manager",
+   "Category": "Applied R&D",
+   "RequisitionType": "Standard (Internal & External)",
+   "JobGrade": null,
+   "RequisitionId": 300002241342329,
+   "ExternalPostedStartDate": "2026-10-09T09:21:37+00:00",
+   "JobLevel": null,
+   "JobSchedule": "Full time",
+   "JobShift": null,
+   "StudyLevel": "Bachelor’s degree",
+   "InternationalTravelRequired": null,
+   "ExternalContactName": null,
+   "ExternalContactEmail": null,
+   "ContractType": "Regular",
+   "ExternalPostedEndDate": null,
+   "JobFamilyId": 300000009357764,
+   "GeographyId": 300000000471745,
+   "GeographyNodeId": 100002145190101,
+   "ExternalDescriptionStr": "<p style=\"line-height:normal;margin-bottom:0cm;text-autospace:none;\">This is a key position within the R&amp;D organization, a highly visible role with an opportunity to have an impact on Nokia’s growth and success. You will manage the design and development of optical line system products using Out...[trimmed]",
+   "CorporateDescriptionStr": "<div>\n <b>Advancing connectivity to secure a brighter world.</b>\n</div>\n<div>\n <p><span style=\"box-sizing: border-box;\">Nokia is a global leader in connectivity for the AI era. With expertise across fixed, mobile and transport networks, powered by the innovation of Nokia Bell Labs, we’re advancing c...[trimmed]",
+   "OrganizationDescriptionStr": "",
+   "ShortDescriptionStr": "Seeking experienced Project/Program Manager responsible for managing the design and development of optical line system products using Outside Design and Manufacturing (ODM) suppliers with support from Nokia’s Engineering teams",
+   "ContentLocale": "en",
+   "PrimaryLocation": "India",
+   "PrimaryLocationCountry": "IN",
+   "ObjectVerNumberProfile": null,
+   "ApplyWhenNotPostedFlag": false,
+   "ExternalQualificationsStr": "<p style=\"line-height: normal; margin-bottom: 0cm; margin-right: 0cm; margin-top: 0cm;\">&nbsp;</p><p style=\"line-height: normal; margin-bottom: 0cm; margin-right: 0cm; margin-top: 0cm;\"><strong>Must-Have-Skills</strong></p><ul><li><p style=\"line-height: normal; margin-bottom: 0cm; margin-right: 0cm;...[trimmed]",
+   "InternalQualificationsStr": "<p style=\"line-height: normal; margin-bottom: 0cm; margin-right: 0cm; margin-top: 0cm;\">&nbsp;</p><p style=\"line-height: normal; margin-bottom: 0cm; margin-right: 0cm; margin-top: 0cm;\"><strong>Must-Have-Skills</strong></p><ul><li><p style=\"line-height: normal; margin-bottom: 0cm; margin-right: 0cm;...[trimmed]",
+   "InternalResponsibilitiesStr": "<ul><li><p style=\"line-height:normal;margin-bottom:0cm;text-autospace:none;\">Within the product life cycle, your work starts with a product specification owned by you in collaboration with PLM, System Architecture, and Engineering.&nbsp;</p></li><li><p style=\"line-height:normal;margin-bottom:0cm;tex...[trimmed]",
+   "ExternalResponsibilitiesStr": "<ul><li><p style=\"line-height:normal;margin-bottom:0cm;text-autospace:none;\">Within the product life cycle, your work starts with a product specification owned by you in collaboration with PLM, System Architecture, and Engineering.&nbsp;</p></li><li><p style=\"line-height:normal;margin-bottom:0cm;tex...[trimmed]",
+   "JobFunctionCode": "GRM",
+   "HotJobFlag": true,
+   "TrendingFlag": false,
+   "BeFirstToApplyFlag": true,
+   "WorkplaceTypeCode": "ORA_ON_SITE",
+   "WorkplaceType": "Onsite",
+   "OtherRequisitionTitle": null,
+   "NumberOfOpenings": null,
+   "HiringManager": null,
+   "Organization": null,
+   "BusinessUnitId": 300000006664259,
+   "LegalEmployerId": 300000006349271,
+   "OrganizationId": 300000806570288,
+   "WorkerType": null,
+   "JobType": "Experienced",
+   "WorkMonths": null,
+   "WorkYears": null,
+   "WorkHours": null,
+   "WorkDays": null,
+   "LegalEmployer": null,
+   "BusinessUnit": null,
+   "Department": null,
+   "DomesticTravelRequired": null,
+   "JobFunction": "General R&D Management",
+   "secondaryLocations": [],
+   "media": [],
+   "workLocation": [
+    {
+     "LocationId": 300000892229126,
+     "LocationName": "Infinera Prestige Solitaire",
+     "AddressLine1": "Prestige Solitaire, 401, 6 Brunton Road",
+     "AddressLine2": null,
+     "AddressLine3": null,
+     "AddressLine4": null,
+     "Building": null,
+     "TownOrCity": "Bangalore",
+     "PostalCode": "560002",
+     "Country": "IN",
+     "Region1": null,
+     "Region2": "Karnataka",
+     "Region3": null,
+     "Longitude": "77.58024",
+     "Latitude": "12.96301"
+    }
+   ],
+   "otherWorkLocations": [],
+   "requisitionFlexFields": [
+    {
+     "Prompt": "Will NSA/CAPS approval be required? (E.g., accessing a US Customer Network?)",
+     "Value": "No",
+     "ControlType": "SingleChoiceList",
+     "SequenceNumber": 5
+    },
+    {
+     "Prompt": "Role Type",
+     "Value": "Individual contributor",
+     "ControlType": null,
+     "SequenceNumber": 8
+    },
+    {
+     "Prompt": "Laptop - support with ordering needed",
+     "Value": "Yes",
+     "ControlType": "SingleChoiceList",
+     "SequenceNumber": 10
+    },
+    {
+     "Prompt": "Experience level",
+     "Value": "Experienced",
+     "ControlType": "SingleChoiceList",
+     "SequenceNumber": 22
+    }
+   ],
+   "primaryLocationCoordinates": [
+    {
+     "GeographyNodeId": 100002145190101,
+     "GeographyId": 300000000471745,
+     "Latitude": "20.79519",
+     "Longitude": "79.00132",
+     "CountryCode": "IN"
+    }
+   ],
+   "skills": []
+  }
+ ],
+ "count": 1,
+ "hasMore": false,
+ "limit": 499,
+ "offset": 0,
+ "links": [
+  {
+   "rel": "self",
+   "href": "https://fa-evmr-saasfaprod1.fa.ocs.oraclecloud.com:443/hcmRestApi/resources/11.13.18.05/recruitingCEJobRequisitionDetails",
+   "name": "recruitingCEJobRequisitionDetails",
+   "kind": "collection"
+  }
+ ]
+}

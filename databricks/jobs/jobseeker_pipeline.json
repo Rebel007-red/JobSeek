@@ -1,6 +1,6 @@
 {
   "name": "JobSeeeker",
-  "description": "Scrapes volume -> ingest + silver -> enrich -> gold + cleanup. Started and awaited by the LinkedIn GitHub Actions workflow (databricks/jobs/trigger_job.py --wait) after uploading CSVs; databricks/jobs/publish_to_supabase.py then sends the publish files to Supabase. Needs the unscheduled 'JobSeeker setup' job (01_setup) to have run for the current setup version.",
+  "description": "Scrapes volume -> ingest + silver -> enrich -> gold + cleanup. Started and awaited by the ATS Scrapers GitHub Actions workflow every 6 hours (and by manual LinkedIn runs) via databricks/jobs/trigger_job.py --wait after uploading CSVs; databricks/jobs/publish_to_supabase.py then sends the publish files to Supabase. Needs the unscheduled 'JobSeeker setup' job (01_setup) to have run for the current setup version.",
   "max_concurrent_runs": 1,
   "queue": { "enabled": true },
   "timeout_seconds": 7200,
@@ -38,7 +38,7 @@
     },
     {
       "task_key": "Step_03_Gold_Cleanup",
-      "description": "LinkedIn config exports, MERGE -> gold.jobs, ops.skill_stats, expiry; daily retention, weekly OPTIMIZE/VACUUM; publish files for Supabase (publish/<run_id>/)",
+      "description": "Scraper config exports (LinkedIn roles + seen ids, ATS seen job keys), MERGE -> gold.jobs, ops.skill_stats, 7-day expiry; daily retention, weekly OPTIMIZE/VACUUM; publish files for Supabase (publish/<run_id>/)",
       "depends_on": [{ "task_key": "Step_02_Enrich" }],
       "notebook_task": { "notebook_path": "{{NOTEBOOK_DIR}}/04_gold_cleanup", "source": "WORKSPACE" },
       "timeout_seconds": 2700,

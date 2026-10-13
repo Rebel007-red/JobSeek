@@ -1,0 +1,107 @@
+{
+ "_request": "GET https://adda247.keka.com/careers/api/jobs/default/active",
+ "_note": "response is a bare JSON array of ALL active jobs (no pagination); trimmed to 3",
+ "_total": 16,
+ "jobs": [
+  {
+   "id": 143333,
+   "title": "Executive-Telesales",
+   "departmentIdentifier": "f2cbf50c-6619-4267-9db9-7e9cb4d08b9c",
+   "departmentName": "Telesales",
+   "jobLocations": [
+    {
+     "id": 23712,
+     "name": "Gurugram",
+     "city": "Haryana",
+     "state": "HR",
+     "countryCode": "IN",
+     "countryName": "India",
+     "locationIdentifier": "e740b814-5f13-4f83-8848-0f02cd99c689"
+    }
+   ],
+   "jobType": 2,
+   "jobNumber": "RRF0000003647",
+   "salaryRange": {
+    "maximum": 330000.0,
+    "currency": "INR",
+    "salaryPeriod": 0,
+    "cultureInfo": "en-IN"
+   },
+   "salaryRangeFormat": "",
+   "publishedOn": "2026-10-06T08:02:39.42Z",
+   "publishedSinceDays": 3,
+   "skillNames": [
+    "communication ",
+    "SALES"
+   ]
+  },
+  {
+   "id": 143087,
+   "title": "Intern-Youtube SEO",
+   "description": "<div>Job Description: YouTube SEO Intern</div><div><br></div><div>📌 About the Role</div><div>We are looking for a data-driven and creative <strong>YouTube SEO Intern</strong> to join our growth marketing team. In this role, you will be responsible for scaling our organic reach, optimizing educationa...[trimmed]",
+   "departmentIdentifier": "d99024e5-2898-499c-89de-45cd9559bed7",
+   "departmentName": "Strategy & Planning",
+   "excerpt": "Job Description: YouTube SEO Intern📌 About the RoleWe are looking for a data-driven and creative YouTube SEO Intern to join our growth marketing team. In this role, you will be responsible for scaling our organic reach, optimizing educational content, and helping Indian students discover our lecture...[trimmed]",
+   "jobLocations": [
+    {
+     "id": 23712,
+     "name": "Gurugram",
+     "city": "Haryana",
+     "state": "HR",
+     "countryCode": "IN",
+     "countryName": "India",
+     "locationIdentifier": "e740b814-5f13-4f83-8848-0f02cd99c689"
+    }
+   ],
+   "jobType": 2,
+   "jobNumber": "RRF0000003641",
+   "salaryRange": {
+    "maximum": 10000.0,
+    "currency": "INR",
+    "salaryPeriod": 3,
+    "cultureInfo": "en-IN"
+   },
+   "salaryRangeFormat": "",
+   "publishedOn": "2026-10-06T08:22:22.17Z",
+   "publishedSinceDays": 3,
+   "skillNames": [
+    "YOUTUBE",
+    "creative",
+    "Creativity & innovation"
+   ]
+  },
+  {
+   "id": 143067,
+   "title": "Content Writer",
+   "description": "<div style=\"text-align: center\"><strong> </strong></div><div>We are in the lookout for a talented Content Writer to create compelling blog posts, white papers, product descriptions, social media content and web copy. We’re looking for someone who can expand our digital footprint and drive more value...[trimmed]",
+   "departmentIdentifier": "af5dda73-9659-4bff-8ca1-95ee20c47b04",
+   "departmentName": "Content Development",
+   "excerpt": " We are in the lookout for a talented Content Writer to create compelling blog posts, white papers, product descriptions, social media content and web copy. We’re looking for someone who can expand our digital footprint and drive more value through online content. You should have had a proven track ...[trimmed]",
+   "jobLocations": [
+    {
+     "id": 23712,
+     "name": "Gurugram",
+     "city": "Haryana",
+     "state": "HR",
+     "countryCode": "IN",
+     "countryName": "India",
+     "locationIdentifier": "e740b814-5f13-4f83-8848-0f02cd99c689"
+    }
+   ],
+   "jobType": 2,
+   "experience": "1",
+   "jobNumber": "RRF0000003631",
+   "salaryRange": {
+    "minimum": 264000.0,
+    "maximum": 360000.0,
+    "currency": "INR",
+    "salaryPeriod": 4,
+    "cultureInfo": "en-IN"
+   },
+   "salaryRangeFormat": "INR 2,64,000.00 - 3,60,000.00",
+   "publishedOn": "2026-10-07T11:06:58.73Z",
+   "publishedSinceDays": 2,
+   "skillNames": []
+  }
+ ]
+}

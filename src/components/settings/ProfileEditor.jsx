@@ -7,7 +7,7 @@ import { PROFILE_LIMITS, alsoSkillProblem, entryProblem } from '../../utils/entr
 // Same limits as the API
 const { roles: MAX_ROLES, skills: MAX_SKILLS, cities: MAX_CITIES, alsoSkills: MAX_ALSO_SKILLS } = PROFILE_LIMITS
 const NOT_SUPPORTED = 'is outside the supported roles (data, full stack / backend, DevOps and cloud)'
-const CHECK_PENDING = 'custom · checked with the next update (every ~4 hours)'
+const CHECK_PENDING = 'custom · checked with the next update (every ~6 hours)'
 // The fields a link can open (/settings?tab=profile#roles): the hide toast's "Edit my roles" / "Set My cities", the
 // drawer's "Edit roles" / "Add a skill" / "Edit experience"
 const PROFILE_ANCHORS = ['roles', 'skills', 'also-skills', 'experience', 'cities']
@@ -210,8 +210,8 @@ export function ProfileEditor({ profile, onSave, onboarding = false, anchor = ''
           noteFor={roleNote}
           placeholder="e.g. Data Engineer"
           help={help(
-            'Data, full stack / backend, DevOps and cloud roles. LinkedIn is searched for them.',
-            'Data, full stack / backend, DevOps and cloud roles. Not in the list? Type it and add it as your own: it is checked with the next update (every ~4 hours), and until then jobs with it in the title count as your role. LinkedIn is also searched for these roles.',
+            'Data, full stack / backend, DevOps and cloud roles.',
+            'Data, full stack / backend, DevOps and cloud roles. Not in the list? Type it and add it as your own: it is checked with the next update (every ~6 hours), and until then jobs with it in the title count as your role. When the LinkedIn search is run (by hand only, for now), it searches for these roles too.',
           )}
           maxItems={MAX_ROLES}
           numbered
@@ -229,7 +229,7 @@ export function ProfileEditor({ profile, onSave, onboarding = false, anchor = ''
           placeholder="e.g. PySpark, Azure, SQL"
           help={help(
             'The skills you would lead on.',
-            'The skills you would lead on. Skill groups (e.g. Cloud) cover any skill in the group. Skills you add yourself are looked for in job descriptions from the next update (every ~4 hours).',
+            'The skills you would lead on. Skill groups (e.g. Cloud) cover any skill in the group. Skills you add yourself are looked for in job descriptions from the next update (every ~6 hours).',
           )}
           maxItems={MAX_SKILLS}
         />
@@ -269,8 +269,8 @@ export function ProfileEditor({ profile, onSave, onboarding = false, anchor = ''
           resolve={resolveCity}
           placeholder="e.g. Bengaluru"
           help={help(
-            'Optional: LinkedIn is also searched in these cities.',
-            'Widens the LinkedIn search: your roles are also searched in each city, from the next update (every ~4 hours). Leave empty to search all of India. Your job list is not limited to these cities.',
+            'Optional: the My cities chip shows jobs in these cities.',
+            'The My cities chip on the job list shows only jobs in these cities; your job list is not limited to them otherwise. When the LinkedIn search is run (by hand only, for now), your roles are also searched in each city. Leave empty for all of India.',
           )}
           maxItems={MAX_CITIES}
         />

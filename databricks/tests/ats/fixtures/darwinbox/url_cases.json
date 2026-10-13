@@ -1,0 +1,74 @@
+{
+ "_about": "Board URL -> companies columns. Pinned by databricks/tests/ats/test_base.py (adapter.source_columns) and by the form's test in src/ (same file). expect null = rejected.",
+ "cases": [
+  {
+   "input": "https://freighttiger.darwinbox.in/ms/candidatev2/main/careers/allJobs",
+   "expect": {
+    "slug": "main",
+    "api_url": "https://freighttiger.darwinbox.in/ms/candidateapi/"
+   }
+  },
+  {
+   "input": "https://porter.darwinbox.in/ms/candidatev2/main/careers/jobDetails/a6abe22eed80b3",
+   "expect": {
+    "slug": "main",
+    "api_url": "https://porter.darwinbox.in/ms/candidateapi/"
+   }
+  },
+  {
+   "input": "https://zepto.darwinbox.in/ms/candidate/careers",
+   "expect": {
+    "slug": "main",
+    "api_url": "https://zepto.darwinbox.in/ms/candidateapi/"
+   }
+  },
+  {
+   "input": "zepto.darwinbox.in",
+   "expect": {
+    "slug": "main",
+    "api_url": "https://zepto.darwinbox.in/ms/candidateapi/"
+   }
+  },
+  {
+   "input": "https://Porter.Darwinbox.in/ms/candidateapi/job/alljobs?companyId=main",
+   "expect": {
+    "slug": "main",
+    "api_url": "https://porter.darwinbox.in/ms/candidateapi/"
+   }
+  },
+  {
+   "input": "https://acme.darwinbox.in/ms/candidatev2/a664361beb2876/careers/home",
+   "expect": {
+    "slug": "a664361beb2876",
+    "api_url": "https://acme.darwinbox.in/ms/candidateapi/?companyId=a664361beb2876"
+   }
+  },
+  {
+   "input": "https://acme.darwinbox.com/ms/candidate/a6643611/careers",
+   "expect": {
+    "slug": "a6643611",
+    "api_url": "https://acme.darwinbox.com/ms/candidateapi/?companyId=a6643611"
+   }
+  },
+  {
+   "input": "https://porter.darwinbox.in/user/login",
+   "expect": null
+  },
+  {
+   "input": "https://darwinbox.com/careers",
+   "expect": null
+  },
+  {
+   "input": "https://porter.example.in/ms/candidatev2/main/careers/allJobs",
+   "expect": null
+  },
+  {
+   "input": "porter",
+   "expect": null
+  },
+  {
+   "input": "",
+   "expect": null
+  }
+ ]
+}
