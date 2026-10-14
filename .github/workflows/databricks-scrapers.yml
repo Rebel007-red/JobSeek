@@ -3,6 +3,10 @@ name: ATS Scrapers
 # Every 6 hours: scrape the company job boards -> upload the CSVs -> send app user data to Databricks -> run the pipeline
 # and wait -> publish the results to Supabase. This is the workflow that keeps the jobs feed fresh; LinkedIn only runs
 # when started by hand (linkedin-databricks.yml).
+# The pipeline (Databricks compute) runs only when an uploaded CSV has a job it does not have yet (upload_to_volume.py
+# counts them against config/ats_seen_keys.json), on a manual dispatch with force, or for its daily run (no run started
+# in the last 20 h, so expiry and retention still happen on a quiet day). Every decision is recorded for Settings >
+# System (record_trigger.py), and the app then says "Checked 1 h ago · no new jobs".
 #   workday     databricks/workday.py (Playwright)
 #   greenhouse  databricks/greenhouse.py (boards API)
 #   ats         databricks/ats_scrape.py --all-api: Lever, Ashby, SmartRecruiters, Workable, Oracle Recruiting,
@@ -15,6 +19,11 @@ on:
     # 00:07 / 06:07 / 12:07 / 18:07 UTC = 05:37 / 11:37 / 17:37 / 23:37 IST (keep in sync: src/utils/schedule.js)
     - cron: '7 0,6,12,18 * * *'
   workflow_dispatch:
+    inputs:
+      force:
+        description: Run the Databricks pipeline even when the scrapers found no new jobs
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}
@@ -29,6 +38,10 @@ env:
 jobs:
   workday:
     runs-on: ubuntu-latest
+    outputs:
+      uploaded: ${{ steps.scrape.outputs.uploaded }}
+      new_files: ${{ steps.scrape.outputs.new_files }}
+      new_jobs: ${{ steps.scrape.outputs.new_jobs }}
     # Within the ats job's 90 min, so it never delays the pipeline further. Descriptions of jobs the pipeline already
     # has are not fetched again (ats_seen_keys.json), so only the first run after a long pause comes near it.
     timeout-minutes: 90
@@ -37,6 +50,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Scrape Workday jobs to Databricks volume
+        id: scrape
         uses: ./.github/actions/scrape-to-volume
         with:
           scraper: databricks/workday.py
@@ -52,12 +66,17 @@ jobs:
 
   greenhouse:
     runs-on: ubuntu-latest
+    outputs:
+      uploaded: ${{ steps.scrape.outputs.uploaded }}
+      new_files: ${{ steps.scrape.outputs.new_files }}
+      new_jobs: ${{ steps.scrape.outputs.new_jobs }}
     timeout-minutes: 30
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Scrape Greenhouse jobs to Databricks volume
+        id: scrape
         uses: ./.github/actions/scrape-to-volume
         with:
           scraper: databricks/greenhouse.py
@@ -71,6 +90,10 @@ jobs:
 
   ats:
     runs-on: ubuntu-latest
+    outputs:
+      uploaded: ${{ steps.scrape.outputs.uploaded }}
+      new_files: ${{ steps.scrape.outputs.new_files }}
+      new_jobs: ${{ steps.scrape.outputs.new_jobs }}
     # The CSVs are uploaded only after the whole scrape, so a job timeout loses every ATS. Hence all 8 ATS run at once
     # (each on its own hosts, so no host gets more than one request at a time) and each stops starting companies after
     # 50 min: the slowest ATS then ends within about 70 min (its last company finishes), inside 90.
@@ -86,6 +109,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Scrape the API job boards to Databricks volume
+        id: scrape
         uses: ./.github/actions/scrape-to-volume
         with:
           scraper: databricks/ats_scrape.py
@@ -112,7 +136,48 @@ jobs:
     # The run waits up to 100 min (a run queued behind a running one included); a longer run ends as a warning and the
     # hourly publish-supabase workflow publishes it once it finishes
     timeout-minutes: 120
+    outputs:
+      decision: ${{ steps.trigger.outputs.decision }}
     steps:
+      # The scrape jobs' upload counters; a failed or timed-out scrape job has none (= 0). Values reach the script as
+      # environment variables, never pasted into it.
+      - name: Count new files
+        id: count
+        env:
+          WORKDAY_UPLOADED: ${{ needs.workday.outputs.uploaded }}
+          WORKDAY_NEW_FILES: ${{ needs.workday.outputs.new_files }}
+          WORKDAY_NEW_JOBS: ${{ needs.workday.outputs.new_jobs }}
+          GREENHOUSE_UPLOADED: ${{ needs.greenhouse.outputs.uploaded }}
+          GREENHOUSE_NEW_FILES: ${{ needs.greenhouse.outputs.new_files }}
+          GREENHOUSE_NEW_JOBS: ${{ needs.greenhouse.outputs.new_jobs }}
+          ATS_UPLOADED: ${{ needs.ats.outputs.uploaded }}
+          ATS_NEW_FILES: ${{ needs.ats.outputs.new_files }}
+          ATS_NEW_JOBS: ${{ needs.ats.outputs.new_jobs }}
+          EVENT_NAME: ${{ github.event_name }}
+          FORCE_INPUT: ${{ github.event.inputs.force }}
+        run: |
+          num() { case "$1" in ''|*[!0-9]*) echo 0 ;; *) echo "$1" ;; esac; }
+          uploaded=$(( $(num "$WORKDAY_UPLOADED") + $(num "$GREENHOUSE_UPLOADED") + $(num "$ATS_UPLOADED") ))
+          new_files=$(( $(num "$WORKDAY_NEW_FILES") + $(num "$GREENHOUSE_NEW_FILES") + $(num "$ATS_NEW_FILES") ))
+          new_jobs=$(( $(num "$WORKDAY_NEW_JOBS") + $(num "$GREENHOUSE_NEW_JOBS") + $(num "$ATS_NEW_JOBS") ))
+          force=false
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$FORCE_INPUT" = "true" ]; then force=true; fi
+          {
+            echo "uploaded=$uploaded"
+            echo "new_files=$new_files"
+            echo "new_jobs=$new_jobs"
+            echo "force=$force"
+          } >> "$GITHUB_OUTPUT"
+          if [ "$new_files" -gt 0 ]; then
+            line="$uploaded file(s) uploaded, $new_files with new jobs ($new_jobs new jobs)"
+          elif [ "$force" = "true" ]; then
+            line="$uploaded file(s) uploaded, no new jobs: forced by hand, the pipeline starts anyway"
+          else
+            line="$uploaded file(s) uploaded, no new jobs: the pipeline starts only for its daily run"
+          fi
+          echo "::notice::$line"
+          echo "**Scrapers:** $line" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -136,21 +201,57 @@ jobs:
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
         run: python databricks/jobs/sync_user_data.py
 
-      # Manual dispatches within 3 h of the last pipeline run don't start a second one (they wait for an active run, if
-      # any); scheduled runs always trigger (cron drift + scrape time can bring two scheduled triggers closer than 3 h)
+      # With new jobs: manual dispatches within 3 h of the last pipeline run don't start a second one (they wait for an
+      # active run, if any); scheduled and forced runs always trigger (cron drift + scrape time can bring two scheduled
+      # triggers closer than 3 h). Without new jobs (and no force): no run while one is active or the latest started
+      # under 20 h ago (keep in sync: app.c_daily_floor_hours()), else the daily run. FEATURE_DISABLED (Databricks
+      # paused new runs) is a warning, not a failure.
       - name: Run the Databricks pipeline and wait
+        id: trigger
         env:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-        run: >-
-          python databricks/jobs/trigger_job.py
-          --min-interval-hours "${{ github.event_name == 'schedule' && '0' || '3' }}"
-          --wait --wait-timeout-minutes 100
+          EVENT_NAME: ${{ github.event_name }}
+          FORCE: ${{ steps.count.outputs.force }}
+          NEW_FILES: ${{ steps.count.outputs.new_files }}
+        run: |
+          args=(--wait --wait-timeout-minutes 100)
+          if [ "$FORCE" = "true" ] || [ "$EVENT_NAME" = "schedule" ]; then
+            args+=(--min-interval-hours 0)
+          else
+            args+=(--min-interval-hours 3)
+          fi
+          if [ "$NEW_FILES" = "0" ] && [ "$FORCE" != "true" ]; then
+            args+=(--no-new-files --idle-hours 20)
+          fi
+          python databricks/jobs/trigger_job.py "${args[@]}"
+
+      # Settings > System "Pipeline decisions" and the app's "Checked · no new jobs" line. An empty decision (the step
+      # above failed before deciding, or never ran) is recorded as failed. Never fails the job.
+      - name: Record the pipeline decision
+        if: always()
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DECISION: ${{ steps.trigger.outputs.decision }}
+          RUN_ID: ${{ steps.trigger.outputs.run_id }}
+          RESULT: ${{ steps.trigger.outputs.result }}
+          UPLOADED: ${{ steps.count.outputs.uploaded }}
+          NEW_FILES: ${{ steps.count.outputs.new_files }}
+          NEW_JOBS: ${{ steps.count.outputs.new_jobs }}
+          FORCE: ${{ steps.count.outputs.force }}
+        run: |
+          args=(--decision "$DECISION" --uploaded "$UPLOADED" --new-files "$NEW_FILES" --new-jobs "$NEW_JOBS"
+                --run-id "$RUN_ID" --result "$RESULT")
+          if [ "$FORCE" = "true" ]; then args+=(--forced); fi
+          python databricks/jobs/record_trigger.py "${args[@]}"
 
   publish:
     needs: pipeline
     # Also after a failed run: the publisher picks the newest complete publish directory (a failed run writes none, so
-    # this is a quick no-op then, or it catches up on an earlier run whose publish failed)
+    # this is a quick no-op then, or it catches up on an earlier run whose publish failed). After a skipped pipeline
+    # (no new jobs) it finds nothing newer and ends in seconds; it still records the run history.
     if: always() && (needs.pipeline.result == 'success' || needs.pipeline.result == 'failure')
     runs-on: ubuntu-latest
     concurrency:

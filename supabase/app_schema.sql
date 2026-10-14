@@ -202,16 +202,32 @@ ALTER TABLE app.user_job_state ADD COLUMN IF NOT EXISTS next_action_at date;
 ALTER TABLE app.user_job_state ADD COLUMN IF NOT EXISTS hide_reason text
   CHECK (hide_reason IS NULL OR hide_reason IN ('too_senior', 'wrong_role', 'company', 'location', 'duplicate', 'other'));
 -- keep in sync: src/utils/gold.js APPLICATION_STATUSES. Added NOT VALID, then validated (no long lock on existing rows).
+-- Before the Track release the list had no 'no_response' (No reply): a constraint without it is replaced; one that has
+-- it is left alone, so a second apply changes nothing.
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint
-                 WHERE conrelid = 'app.user_job_state'::regclass AND conname = 'user_job_state_application_status_check') THEN
+                 WHERE conrelid = 'app.user_job_state'::regclass AND conname = 'user_job_state_application_status_check'
+                   AND pg_get_constraintdef(oid) LIKE '%''no_response''%') THEN
+    ALTER TABLE app.user_job_state DROP CONSTRAINT IF EXISTS user_job_state_application_status_check;
     ALTER TABLE app.user_job_state ADD CONSTRAINT user_job_state_application_status_check
-      CHECK (application_status IN ('not_applied', 'saved', 'applied', 'interviewing', 'offer', 'rejected', 'withdrawn')) NOT VALID;
+      CHECK (application_status IN ('not_applied', 'saved', 'applied', 'interviewing', 'offer', 'no_response', 'rejected', 'withdrawn')) NOT VALID;
     ALTER TABLE app.user_job_state VALIDATE CONSTRAINT user_job_state_application_status_check;
   END IF;
 END
 $$;
+
+-- When the application first got an answer (Interviewing, Offer or Rejected) and first reached an interview
+-- (Interviewing or Offer); kept through a later Rejected / Withdrawn, cleared when it goes back to Applied or earlier
+-- (app.write_set_status / write_set_applied). The personal funnel and the median reply time read them. Never exported.
+ALTER TABLE app.user_job_state ADD COLUMN IF NOT EXISTS replied_at timestamptz;
+ALTER TABLE app.user_job_state ADD COLUMN IF NOT EXISTS interviewed_at timestamptz;
+-- One-time backfill (idempotent: afterwards the writes keep both columns, so nothing matches again): rows that already
+-- moved on get their status time
+UPDATE app.user_job_state SET replied_at = coalesce(status_updated_at, applied_at)
+  WHERE replied_at IS NULL AND application_status IN ('interviewing', 'offer', 'rejected');
+UPDATE app.user_job_state SET interviewed_at = coalesce(status_updated_at, applied_at)
+  WHERE interviewed_at IS NULL AND application_status IN ('interviewing', 'offer');
 
 -- Why a user hid a job (Too senior, Wrong role, ...), kept for later calibration of the fit rules. Not removed with the
 -- job; rows older than 180 days are deleted by pipeline_publish_finish.
@@ -415,6 +431,8 @@ COMMENT ON COLUMN app.scrape_companies.failures IS 'Consecutive failed scrapes (
 
 -- When the user last looked at the job list (the throttled ping; "new since your last visit"). Never exported.
 ALTER TABLE app.user_profile ADD COLUMN IF NOT EXISTS last_list_seen_at timestamptz;
+-- The weekly "How did last week go?" sheet was last shown (app_write markCheckin). Never exported.
+ALTER TABLE app.user_profile ADD COLUMN IF NOT EXISTS last_checkin_at timestamptz;
 
 -- The fit score at the moment a job became tracked (saved / applied), see app.record_triage "fit_at_action". NULL for
 -- rows tracked before this column existed.
@@ -444,6 +462,39 @@ CREATE TABLE IF NOT EXISTS app.user_activity_day (
          AND prompt_no >= 0 AND prompt_saved >= 0 AND acted_strong >= 0 AND missed_strong >= 0)
 );
 COMMENT ON TABLE app.user_activity_day IS 'Daily activity counters per user and UTC day (counters only); rows older than 180 days are deleted by pipeline_publish_finish';
+
+-- ---------------------------------------------------------------------------------------------------------------------
+-- Pipeline decisions of the ATS Scrapers workflow (written by pipeline_record_trigger)
+-- ---------------------------------------------------------------------------------------------------------------------
+
+-- keep in sync: databricks/jobs/record_trigger.py DECISIONS (pinned by databricks/jobs/test_trigger.py). Defined in
+-- app_api.sql too (with the same body); here because the CHECK on app.pipeline_triggers.decision calls it.
+CREATE OR REPLACE FUNCTION app.c_trigger_decisions() RETURNS text[] LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT ARRAY[
+  'started', 'started_daily', 'waiting', 'recent', 'paused', 'no_new', 'failed'
+]::text[] $$;
+
+-- One row per pipeline decision of the ATS Scrapers workflow (databricks/jobs/record_trigger.py; newest 50 kept):
+-- whether it started the Databricks pipeline and why not. Settings → System and the app's "no new jobs" line read it.
+CREATE TABLE IF NOT EXISTS app.pipeline_triggers (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  github_run_id text,
+  github_run_attempt int,
+  workflow text,
+  event text,                       -- schedule | workflow_dispatch | ...
+  decided_at timestamptz NOT NULL,
+  decision text NOT NULL CONSTRAINT pipeline_triggers_decision_check CHECK (decision = ANY (app.c_trigger_decisions())),
+  forced boolean NOT NULL DEFAULT false,
+  uploaded_files int CHECK (uploaded_files IS NULL OR uploaded_files >= 0),
+  new_files int CHECK (new_files IS NULL OR new_files >= 0),
+  new_jobs int CHECK (new_jobs IS NULL OR new_jobs >= 0),
+  run_id text,                      -- Databricks run started or waited for
+  result text,                      -- the wait's result: SUCCESS / FAILED / TIMEOUT / SKIPPED / NONE / PAUSED ...
+  message text,
+  recorded_at timestamptz NOT NULL DEFAULT now(),
+  -- NULLS NOT DISTINCT: a local run (no GitHub ids) re-recorded replaces its row instead of adding one
+  UNIQUE NULLS NOT DISTINCT (github_run_id, github_run_attempt)
+);
+CREATE INDEX IF NOT EXISTS pipeline_triggers_decided_at_idx ON app.pipeline_triggers (decided_at DESC, id DESC);
 
 -- ---------------------------------------------------------------------------------------------------------------------
 -- Privileges: nothing for client roles. Row level security on everywhere with no policies (defense in depth; the

@@ -1,8 +1,9 @@
-import { useRef } from 'react'
+import { Fragment, useRef } from 'react'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
 import { CloseIcon } from './icons'
 
-// Every key the jobs page handles (JobsPage useHotkeys)
+// Every key the jobs page handles (JobsPage useHotkeys) and the weekly check-in sheet's own keys. A third item joins the
+// keys of a range ('1-5') or a pair ('j / k')
 const GROUPS = [
   {
     title: 'Navigate',
@@ -21,7 +22,7 @@ const GROUPS = [
       [['o'], 'Open the posting in a new tab'],
       [['a'], 'Mark applied / Undo applied'],
       [['s'], 'Save / Unsave'],
-      [['t'], 'Change status'],
+      [['t'], 'Stage of the open job'],
       [['x'], 'Hide'],
       [['u'], 'Undo (up to 5 steps)'],
     ],
@@ -32,6 +33,15 @@ const GROUPS = [
       [['a'], 'Yes, applied'],
       [['s'], 'Save for later'],
       [['Esc'], 'Not yet'],
+    ],
+  },
+  {
+    title: 'Weekly check-in',
+    keys: [
+      [['1', '5'], 'Answer', '-'],
+      [['j', 'k'], 'Move', '/'],
+      [['u'], 'Undo the last answer'],
+      [['Esc'], 'Close'],
     ],
   },
   {
@@ -76,9 +86,16 @@ export function ShortcutHelp({ onClose }) {
             <section key={group.title}>
               <h3>{group.title}</h3>
               <dl>
-                {group.keys.map(([keys, label]) => (
+                {group.keys.map(([keys, label, joiner]) => (
                   <div key={label}>
-                    <dt>{keys.map(key => <kbd key={key}>{key}</kbd>)}</dt>
+                    <dt>
+                      {keys.map((key, index) => (
+                        <Fragment key={key}>
+                          {joiner && index > 0 && <span className="kbd-joiner">{joiner}</span>}
+                          <kbd>{key}</kbd>
+                        </Fragment>
+                      ))}
+                    </dt>
                     <dd>{label}</dd>
                   </div>
                 ))}

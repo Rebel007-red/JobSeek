@@ -1,6 +1,7 @@
 """Apply the app schema and RPC API to the Supabase database.
 
     python supabase/apply.py            apply app_schema.sql then app_api.sql in one transaction
+    python supabase/apply.py --file scheduler.sql    apply one file instead (the pg_cron scheduler)
     python supabase/apply.py --check    only report whether SUPABASE_DB_URL is set
 
 SUPABASE_DB_URL (Supabase dashboard -> Connect -> connection string, session pooler or direct) comes from the
@@ -36,6 +37,7 @@ def main(argv=None):
     parser.add_argument("--check", action="store_true", help="only report whether the database URL is set")
     parser.add_argument("--url-env", default="SUPABASE_DB_URL", help="environment variable with the database URL")
     parser.add_argument("--local-stub", action="store_true", help="apply tests/local_stub.sql first (local PostgreSQL only)")
+    parser.add_argument("--file", action="append", help="apply only this file (relative to supabase/), e.g. scheduler.sql; repeatable")
     args = parser.parse_args(argv)
 
     url = env(args.url_env)
@@ -48,7 +50,7 @@ def main(argv=None):
 
     import psycopg
 
-    files = (["tests/local_stub.sql"] if args.local_stub else []) + FILES
+    files = (["tests/local_stub.sql"] if args.local_stub else []) + (args.file or FILES)
     with psycopg.connect(url, prepare_threshold=None, connect_timeout=20) as conn:
         server = conn.execute("SELECT current_setting('server_version')").fetchone()[0]
         print(f"Connected (PostgreSQL {server})")

@@ -53,6 +53,19 @@ inputs:
     required: false
     default: 'false'
 
+# upload_to_volume.py's counters (the ATS Scrapers workflow starts the pipeline only when new_files > 0, a forced
+# dispatch or the daily run); '0' when the upload step did not run (the scrape failed)
+outputs:
+  uploaded:
+    description: CSV files uploaded to the volume (files without data rows are not uploaded)
+    value: ${{ steps.upload.outputs.uploaded || '0' }}
+  new_files:
+    description: Uploaded files with at least one job the pipeline does not have yet (not in config/ats_seen_keys.json)
+    value: ${{ steps.upload.outputs.new_files || '0' }}
+  new_jobs:
+    description: Jobs in the uploaded files that the pipeline does not have yet
+    value: ${{ steps.upload.outputs.new_jobs || '0' }}
+
 runs:
   using: composite
   steps:
@@ -107,8 +120,10 @@ runs:
         python "$SCRAPER" $SCRAPER_ARGS
 
     # upload_to_volume.py uploads the newest match of each --pattern; with upload-all every matching file is passed as
-    # its own pattern (an exact path matches only itself), and no match at all is not an error
+    # its own pattern (an exact path matches only itself), and no match at all is not an error. It writes its counters
+    # (uploaded, new_files, new_jobs) to $GITHUB_OUTPUT, also when an upload fails.
     - name: Upload CSV to Databricks volume
+      id: upload
       shell: bash
       env:
         CSV_PATTERN: ${{ inputs.csv-pattern }}
@@ -124,6 +139,7 @@ runs:
           shopt -u nullglob
           if [ "${#files[@]}" -eq 0 ]; then
             echo "[INFO] no files for $CSV_PATTERN"
+            { echo "uploaded=0"; echo "new_files=0"; echo "new_jobs=0"; } >> "$GITHUB_OUTPUT"
             exit 0
           fi
           for file in "${files[@]}"; do args+=(--pattern "$file"); done

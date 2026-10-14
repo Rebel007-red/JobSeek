@@ -64,17 +64,39 @@ export function sinceLabel(since, now = Date.now()) {
 // A publish older than this means the updates are delayed: the "Updated …" label turns amber and the page shows a banner
 export const STALE_DATA_MS = 6 * HOUR_MS
 
-// "Updated 2 h ago" for the last pipeline publish, with { stale, hours } (whole hours since it); null when there is none
-// (or the date is invalid).
-export function dataFreshness(publishedAt, now = Date.now()) {
-  if (!publishedAt) return null
-  const date = new Date(publishedAt)
-  if (Number.isNaN(date.getTime())) return null
+// "2 h ago" and the whole hours since `date`
+function ageOf(date, now) {
   const ageMs = Math.max(now - date.getTime(), 0)
   const minutes = Math.floor(ageMs / 60_000)
   const hours = Math.floor(minutes / 60)
   const days = Math.floor(hours / 24)
   const ago = minutes < 1 ? 'just now' : minutes < 60 ? `${minutes} min ago` : hours < 48 ? `${hours} h ago` : `${days} d ago`
+  return { ago, ageMs, hours }
+}
+
+const validDate = (value) => {
+  const date = value ? new Date(value) : null
+  return date && !Number.isNaN(date.getTime()) ? date : null
+}
+
+// "Updated 2 h ago" for the last pipeline publish, with { stale, hours } (whole hours since it); null when there is none
+// (or the date is invalid). checkedAt (status.checked_at): the newest ATS Scrapers check that found no new jobs. When it
+// is later than the publish, nothing was missed since: the label says "Checked 1 h ago · no new jobs" and stale / hours
+// follow the check, so a quiet day does not turn into the "Job updates are delayed" banner.
+export function dataFreshness(publishedAt, now = Date.now(), checkedAt = null) {
+  const date = validDate(publishedAt)
+  if (!date) return null
+  const checked = validDate(checkedAt)
+  if (checked && checked > date) {
+    const { ago, ageMs, hours } = ageOf(checked, now)
+    return {
+      label: `Checked ${ago} · no new jobs`,
+      stale: ageMs > STALE_DATA_MS,
+      hours,
+      title: `Last update: ${date.toLocaleString()}. Last check: ${checked.toLocaleString()}, no new jobs.`,
+    }
+  }
+  const { ago, ageMs, hours } = ageOf(date, now)
   return { label: `Updated ${ago}`, stale: ageMs > STALE_DATA_MS, hours, title: `Last update: ${date.toLocaleString()}` }
 }
 

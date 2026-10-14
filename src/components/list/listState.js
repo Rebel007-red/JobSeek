@@ -1,5 +1,7 @@
 // The jobs page's list bookkeeping: summary parameters, optimistic status edits and their counter changes.
-import { APPLIED_STATUSES, HIDE_REASONS, STATUS_LABELS, STRONG_FIT, isApplied, isTracked } from '../../utils/gold'
+import {
+  APPLIED_STATUSES, FINISHED_STATUSES, HIDE_REASONS, OPEN_STATUSES, STATUS_LABELS, STRONG_FIT, isApplied, isTracked,
+} from '../../utils/gold'
 import { groupKeys, isExpiring, isNewJob } from '../../utils/job'
 
 // The hide reasons offered in the toast after a hide (app.c_hide_reasons; Other needs no button)
@@ -8,11 +10,23 @@ export const TOAST_REASONS = HIDE_REASONS.filter(reason => reason.value !== 'oth
 export const PROFILE_ANCHORS = { roles: '/settings?tab=profile#roles', cities: '/settings?tab=profile#cities' }
 // Mute rule kind of a row's muted_by
 export const MUTE_KINDS = { company: 'companies', title: 'titleWords', level: 'levels' }
-// Filters only the Applied tab offers (its stage chips); left behind when you switch tabs
-export const APPLIED_TAB_FILTERS = { stage: '', followUp: false, closed: '' }
+// Filters only the Applied tab offers (its stage chips; followUp and closed only from older links); left behind when you
+// switch tabs
+export const APPLIED_TAB_FILTERS = { stage: '', followUp: false, closed: '', needsAction: false }
 // The summary ignores these (it counts every tab, stage and the muted jobs at once): left out, so the cached counts
 // are shared and a stage chip does not re-read them
-const SUMMARY_IGNORES = ['stage', 'followUp', 'closed', 'muteView']
+const SUMMARY_IGNORES = ['stage', 'followUp', 'closed', 'needsAction', 'muteView']
+
+// Whether one of the Applied tab's chips narrows the list (Needs action, a stage, or an older link's Follow up / Older
+// postings). Without one, the Applied tab lists the open applications and folds the finished ones at the bottom.
+export const hasStageChip = (filters) => Boolean(filters?.needsAction || filters?.stage || filters?.followUp || filters?.closed)
+
+// The stageGroup of a list of the Applied tab: 'open' (the main list) or 'finished' (the fold) while no chip is set;
+// null otherwise (and on the other tabs)
+export function stageGroupFor(tab, filters, fold = false) {
+  if (tab !== 'applied' || hasStageChip(filters)) return null
+  return fold ? 'finished' : 'open'
+}
 
 // since: the ISO time of your last visit (useVisit), sent once it is known (new_since); undefined / null leave it out
 export function summaryParams(filters, scope, since) {
@@ -23,9 +37,16 @@ export function summaryParams(filters, scope, since) {
 }
 
 // Keeps the counters right after a write until the summary is read again.
+// A change key 'stage:<status>' moves the stage chips' count (summary.stages[status]).
 export function adjustSummary(summary, changes) {
   const next = { ...summary }
   Object.entries(changes).forEach(([key, delta]) => {
+    if (key.startsWith('stage:')) {
+      const stage = key.slice(6)
+      if (!next.stages || next.stages[stage] === undefined || next.stages[stage] === null) return
+      next.stages = { ...next.stages, [stage]: Math.max(Number(next.stages[stage]) + delta, 0) }
+      return
+    }
     if (next[key] !== undefined && next[key] !== null) next[key] = Math.max(Number(next[key]) + delta, 0)
   })
   return next
@@ -91,6 +112,12 @@ export function statusChanges(job, status, since, postedWithin) {
     changes.pending = nowApplied ? -1 : 1
   }
   if ((statusOf(job) === 'saved') !== (status === 'saved')) changes.saved = status === 'saved' ? 1 : -1
+  // The stage chips, and Needs action: any stage change (or a snooze) clears the row's to-do until the server says again
+  if (wasApplied) changes[`stage:${statusOf(job)}`] = -1
+  if (nowApplied) changes[`stage:${status}`] = (changes[`stage:${status}`] || 0) + 1
+  const hadAction = Number(job.action_rank) > 0
+  const hasAction = rankAfterStatus(job, status) > 0
+  if (hadAction !== hasAction) changes.needs_action = hasAction ? 1 : -1
   const wasTracked = isTracked(job)
   const nowTracked = status !== 'not_applied'
   if (wasTracked !== nowTracked) {
@@ -104,7 +131,9 @@ export function statusChanges(job, status, since, postedWithin) {
 // of the old To apply), saved and applied ones leave their tab
 export function hideChanges(jobs, since, postedWithin) {
   return jobs.reduce((total, job) => {
-    if (isApplied(job)) return addChanges(total, { applied: -1 })
+    if (isApplied(job)) {
+      return addChanges(total, { applied: -1, [`stage:${statusOf(job)}`]: -1, ...(Number(job.action_rank) > 0 ? { needs_action: -1 } : {}) })
+    }
     if (isTracked(job)) return addChanges(total, statusOf(job) === 'saved' ? { saved: -1 } : {})
     const changes = { ...inboxCounters(job, since, postedWithin) }
     if (!job.muted_by) changes.pending = 1
@@ -118,6 +147,18 @@ export function belongsToTab(job, tab) {
   if (tab === 'saved') return statusOf(job) === 'saved' && !isApplied(job)
   if (tab === 'applied') return isApplied(job)
   return !isTracked(job)
+}
+
+// Whether a row still belongs on the list on screen: its tab, and on the Applied tab the chip (Needs action, a stage)
+// or the stageGroup ('open' main list, 'finished' fold). followUp / closed of older links are left to the server.
+export function belongsToList(job, tab, filters = {}, group = null) {
+  if (!belongsToTab(job, tab)) return false
+  if (tab !== 'applied') return true
+  if (filters.needsAction) return Number(job.action_rank) > 0
+  if (filters.stage) return statusOf(job) === filters.stage
+  if (group === 'open') return OPEN_STATUSES.includes(statusOf(job))
+  if (group === 'finished') return FINISHED_STATUSES.includes(statusOf(job))
+  return true
 }
 
 // The stage a right swipe moves an application on to (none after an offer or a final answer)
@@ -146,15 +187,28 @@ export function swipeActions(job, tab, rightApplies = false) {
   }
 }
 
+// Stages whose follow-up date makes them Needs action (rank 1) once it comes (app.user_jobs action_rank)
+const DUE_STAGES = ['applied', 'interviewing', 'offer', 'no_response']
+
+// The row's Needs action rank right after a stage change, as app.user_jobs computes it: the stage was just updated, so
+// staleness (ranks 2 and 3) starts again and only a follow-up date that has come still counts (1). A stage change keeps
+// the date, so a due date on an application moved to Interviewing keeps it under Needs action.
+export function rankAfterStatus(job, status) {
+  const date = /^\d{4}-\d{2}-\d{2}/.exec(String(job?.next_action_at || ''))?.[0]
+  return DUE_STAGES.includes(status) && date && date <= todayKey() ? 1 : 0
+}
+
 // The row fields a status write changes (as the server sets them), and their values before it
 export function statusPatch(job, status, now) {
   const applied = APPLIED_STATUSES.includes(status)
+  const rank = rankAfterStatus(job, status)
   return {
     application_status: status,
     is_applied: applied,
     applied_at: applied ? job.applied_at || now : null,
     status_updated_at: now,
-    follow_up: false,
+    follow_up: status === 'applied' && rank === 1,
+    action_rank: rank,
   }
 }
 
@@ -164,6 +218,7 @@ export const statusFields = (job) => ({
   applied_at: job.applied_at ?? null,
   status_updated_at: job.status_updated_at ?? null,
   follow_up: Boolean(job.follow_up),
+  action_rank: job.action_rank ?? null,
 })
 
 export const todayKey = () => new Date().toISOString().slice(0, 10) // trend days are UTC dates

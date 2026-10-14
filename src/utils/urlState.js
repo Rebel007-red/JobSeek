@@ -17,8 +17,9 @@ const CHOICES = {
   closed: ['only', 'hide'],
 }
 const RANGES = { maxYears: [0, 40], minFit: [1, 100] }
-// Boolean filters, written as "<param>=1"
-const FLAGS = { matchedOnly: 'skills', myCities: 'myCities', followUp: 'followUp' }
+// Boolean filters, written as "<param>=1" (needs=1: the Applied tab's Needs action chip; followUp=1 and closed=only are
+// older links that keep working)
+const FLAGS = { matchedOnly: 'skills', myCities: 'myCities', followUp: 'followUp', needsAction: 'needs' }
 // posted=<hours>; no window is written posted=any ('' is the default, so it is written only when this device remembers
 // another window)
 const POSTED_VALUES = new Set(POSTED_HOURS)

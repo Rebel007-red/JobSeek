@@ -18,7 +18,7 @@ NEUTRAL_SKILLS = 0.3
 UNSEEN_SKILL_IDF = 3.0
 EXPERIENCE_HIDE_GAP = 2
 ALSO_SKILL_WEIGHT = 0.5
-APPLIED_STATUSES = ("applied", "interviewing", "offer", "rejected", "withdrawn")
+APPLIED_STATUSES = ("applied", "interviewing", "offer", "no_response", "rejected", "withdrawn")
 
 LEVEL_YEARS = {
     "Intern": 0, "Entry": 0, "Junior": 1, "Mid": 3, "Mid-Senior": 3,

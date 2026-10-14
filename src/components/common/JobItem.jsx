@@ -6,7 +6,7 @@ import { CheckIcon, NoteIcon } from './icons'
 import { Swipeable } from './Swipeable'
 
 // Statuses shown as a tag outside the Applied tab (plain "Applied" already shows as the date)
-const STAGE_TAGS = new Set(['interviewing', 'offer', 'rejected', 'withdrawn'])
+const STAGE_TAGS = new Set(['interviewing', 'offer', 'no_response', 'rejected', 'withdrawn'])
 const MUTED_BY = { company: 'Company', title: 'Title word', level: 'Level' }
 const EXPIRY_TITLE = "Jobs you haven't saved or applied to disappear 7 days after posting. Save it to keep it."
 
@@ -26,7 +26,7 @@ function rowSummary(job, since) {
   const expiry = expiryHint(job)
   if (expiry) parts.push(expiry.label)
   if (job.follow_up) parts.push(followUpTitle(job))
-  if (job.dup_applied_at) parts.push('You applied to a near-identical posting')
+  if (job.dup_applied_at && !isApplied(job)) parts.push('You applied to a near-identical posting')
   if (Number(job.dup_count) > 0) parts.push(`${job.dup_count} similar ${Number(job.dup_count) === 1 ? 'posting' : 'postings'}`)
   if (job.muted_by) parts.push(`Muted by your rule: ${job.muted_value}`)
   if (job.has_note) parts.push('Has a note')
@@ -35,16 +35,17 @@ function rowSummary(job, since) {
 
 // Shared shell of a list row / card: click or Enter opens the drawer; swipes follow the tab (listState swipeActions:
 // Inbox right = Save, or Mark applied with rightApplies, left = Hide; Saved right = Mark applied, left = Unsave; Applied
-// right = the next stage). className is the base class ('job-row' | 'job-card'); data-job-key lets the page scroll the
+// right = the next stage). className is the base class ('job-row' | 'job-card' | 'app-row'); data-job-key lets the page scroll the
 // selection into view.
 // actions: the page's stable handlers ({ open, applied, save, hide, swipe, status, select, toggleGroup, unmute, opened,
 // focus, peekDone }); focus makes a row the keyboard shortcuts' current job when it (or one of its buttons) takes focus.
 // selectMode: taps select instead of opening (phones); Shift+click always extends the selection.
 // labelledBy: the ids of the title and company elements, which name the row for screen readers.
 // since: your last visit (new dot); peek: the one-time swipe demo on this row; leaving: the exit animation.
+// summary: what a screen reader hears after the row's name, when the row has its own words (ApplicationRow).
 export function JobItem({
   job, className, active, selected = false, selectMode = false, child = false, labelledBy, actions, since, tab = 'inbox',
-  rightApplies = false, peek = false, leaving = false, children,
+  rightApplies = false, peek = false, leaving = false, summary = null, children,
 }) {
   const applied = isApplied(job)
   const summaryId = useId()
@@ -88,7 +89,7 @@ export function JobItem({
         aria-describedby={summaryId}
       >
         {children}
-        <span id={summaryId} className="sr-only">{rowSummary(job, since)}</span>
+        <span id={summaryId} className="sr-only">{summary ?? rowSummary(job, since)}</span>
       </article>
     </Swipeable>
   )
@@ -142,7 +143,8 @@ export function JobPlace({ job, fallback = null, group, actions }) {
   )
 }
 
-// State badges: expiry, follow-up, applied to a duplicate, muted, a stage, a note
+// State badges: expiry, follow-up, applied to a duplicate (only on a row you have not applied to yourself), muted, a
+// stage, a note
 export function JobFlags({ job, showStage = true }) {
   const expiry = expiryHint(job)
   const followUpDate = !job.follow_up && job.next_action_at ? followUpDateLabel(job.next_action_at) : null
@@ -153,7 +155,7 @@ export function JobFlags({ job, showStage = true }) {
   if (expiry) flags.push(<span key="expiry" className="flag warning" title={EXPIRY_TITLE}>{expiry.label}</span>)
   if (job.follow_up) flags.push(<span key="follow" className="flag warning" title={followUpTitle(job)}>Follow up</span>)
   else if (followUpDate) flags.push(<span key="follow" className="flag" title="Your follow-up date">{followUpDate}</span>)
-  if (job.dup_applied_at) {
+  if (job.dup_applied_at && !isApplied(job)) {
     flags.push(
       <span key="dup" className="flag warning" title={`You applied to a near-identical posting on ${formatDate(job.dup_applied_at) || 'an earlier date'}`}>
         Applied to a duplicate

@@ -2,8 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { api } from '../../lib/api'
 import { NOTE_MAX_LENGTH } from '../../utils/entries'
 import { isTracked } from '../../utils/gold'
-import { formatDate, localDay } from '../../utils/job'
-import { StatusPicker } from './StatusPicker'
+import { localDay } from '../../utils/job'
 
 const NOTE_WARN_AT = NOTE_MAX_LENGTH - 200 // the counter turns to the warning tone from here
 const DATE_RANGE_DAYS = 366 // setNote accepts follow-up dates within this many days of today
@@ -12,15 +11,20 @@ const shiftDay = (days) => localDay(new Date(Date.now() + days * 86_400_000))
 const sameValues = (a, b) => a.note === b.note && a.date === b.date
 const cleanValues = (values) => ({ note: values.note.trim(), date: values.date || '' })
 
-// The drawer's "Your application" section: status picker, a private note and a follow-up date for one job. Mount it
-// with key={job.job_key}. The note saves on blur, with "Save note", and when the drawer moves on or closes with
-// unsaved text. Saves run one after another, so the last edit always wins.
-// onStatus(status) changes the status; onNoteSaved({ has_note, next_action_at, application_status }) reports a saved note
-// (a note or date on an untracked job saves the job); notify(message) reports errors once the panel is gone.
-export function ApplicationPanel({ job, status, onStatus, onNoteSaved, notify, statusRef }) {
+// The drawer's private note and follow-up date for one job (the stage is the drawer's StageStepper). Mount it with
+// key={job.job_key}. It starts as one row, "+ Add a note or follow-up date", unless the job has a note or a date (then
+// open). The note saves on blur, with "Save note", and when the drawer moves on or closes with unsaved text. Saves run
+// one after another, so the last edit always wins.
+// onNoteSaved({ has_note, next_action_at, application_status }) reports a saved note (a note or date on an untracked
+// job saves the job); notify(message) reports errors once the panel is gone.
+export function ApplicationPanel({ job, onNoteSaved, notify }) {
   const jobKey = job.job_key
-  const ids = { status: useId(), note: useId(), date: useId(), help: useId() }
+  const ids = { note: useId(), date: useId(), help: useId() }
   const knownEmpty = job.has_note === false && !job.next_action_at
+  // An older row may not say whether there is a note (has_note missing): the panel opens once a loaded note says so
+  const [open, setOpen] = useState(Boolean(job.has_note) || Boolean(job.next_action_at))
+  const noteRef = useRef(null)
+  const focusNoteRef = useRef(false) // "+ Add a note" was pressed: focus the note once it renders
   const initial = { note: '', date: job.next_action_at ? String(job.next_action_at).slice(0, 10) : '' }
   const [values, setValues] = useState(initial)
   const [saved, setSaved] = useState(initial) // what the server has (savedRef for the save queue)
@@ -84,6 +88,7 @@ export function ApplicationPanel({ job, status, onStatus, onNoteSaved, notify, s
         valuesRef.current = loaded
         setSaved(loaded)
         setValues(loaded)
+        if (loaded.note || loaded.date) setOpen(true)
       })
       .catch(err => { if (!cancelled) setLoadError(`Could not load the note: ${err.message}`) })
       .finally(() => { if (!cancelled) setLoading(false) })
@@ -102,7 +107,14 @@ export function ApplicationPanel({ job, status, onStatus, onNoteSaved, notify, s
       valuesRef.current = { ...valuesRef.current, date: outsideDate }
       setValues(valuesRef.current)
     }
+    if (outsideDate) setOpen(true)
   }, [outsideDate])
+
+  useEffect(() => {
+    if (!open || !focusNoteRef.current) return
+    focusNoteRef.current = false
+    noteRef.current?.focus()
+  }, [open])
 
   // Unsaved text is saved when the drawer moves to another job or closes (set again on mount: StrictMode remounts)
   useEffect(() => {
@@ -116,19 +128,25 @@ export function ApplicationPanel({ job, status, onStatus, onNoteSaved, notify, s
   const locked = loading || Boolean(loadError)
   const dirty = !sameValues(cleanValues(values), saved)
   const length = values.note.length
-  const promotes = !isTracked(job) && status === 'not_applied'
+  const promotes = !isTracked(job)
+
+  if (!open) {
+    return (
+      <section className="drawer-section note-row">
+        <button
+          type="button"
+          className="text-button note-add"
+          onClick={() => { focusNoteRef.current = true; setOpen(true) }}
+          aria-expanded="false"
+        >
+          + Add a note or follow-up date
+        </button>
+      </section>
+    )
+  }
 
   return (
-    <section className="drawer-section application-panel" aria-labelledby={`${ids.status}-heading`}>
-      <h3 id={`${ids.status}-heading`}>Your application</h3>
-      <div className="application-status-row">
-        <label htmlFor={ids.status}>Status</label>
-        <StatusPicker id={ids.status} ref={statusRef} status={status} onChange={onStatus} />
-        {status !== 'not_applied' && job.status_updated_at && (
-          <span className="application-since">since {formatDate(job.status_updated_at)}</span>
-        )}
-      </div>
-
+    <section className="drawer-section application-panel" aria-label="Note and follow-up date">
       <div className="note-field">
         <div className="note-label-row">
           <label htmlFor={ids.note}>Note</label>
@@ -138,6 +156,7 @@ export function ApplicationPanel({ job, status, onStatus, onNoteSaved, notify, s
           </span>
         </div>
         <textarea
+          ref={noteRef}
           id={ids.note}
           className="input note-input"
           rows={3}

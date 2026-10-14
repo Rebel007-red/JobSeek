@@ -14,7 +14,7 @@ import { SignOutButton } from '../components/settings/SignOutButton'
 import { StatusPanel } from '../components/settings/StatusPanel'
 import { Toast } from '../components/common/Toast'
 import { ChevronLeftIcon, GridIcon, ListIcon, SearchIcon } from '../components/common/icons'
-import { readView, saveView } from '../utils/viewPref'
+import { readView, saveFirstFivePending, saveView } from '../utils/viewPref'
 import { JOB_DELETE_AFTER_DAYS, formatDate } from '../utils/job'
 import { HIDE_REASONS } from '../utils/gold'
 
@@ -243,7 +243,11 @@ export function SettingsPage() {
             anchor={profileAnchor}
             onSave={async (next) => {
               await saveProfile(next)
-              if (onboarding || !profile) navigate('/', { replace: true })
+              if (onboarding || !profile) {
+                // The Inbox opens with the "Your first 5" card (this device, until it is closed)
+                saveFirstFivePending(true)
+                navigate('/', { replace: true })
+              }
             }}
           />
         </div>

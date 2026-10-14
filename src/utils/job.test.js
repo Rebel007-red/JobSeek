@@ -70,6 +70,28 @@ test('dataFreshness labels the publish age and flags data older than 6 hours', (
   assert.equal(dataFreshness('not a date', now), null)
 })
 
+test('dataFreshness: a newer check that found no new jobs counts as fresh data', () => {
+  const now = Date.parse('2026-10-06T12:00:00Z')
+  const published = '2026-10-06T03:00:00Z' // 9 h ago
+  const checked = '2026-10-06T11:00:00Z' // 1 h ago, no new jobs
+  const fresh = dataFreshness(published, now, checked)
+  assert.equal(fresh.label, 'Checked 1 h ago · no new jobs')
+  assert.equal(fresh.stale, false)
+  assert.equal(fresh.hours, 1)
+  assert.match(fresh.title, /^Last update: .+\. Last check: .+, no new jobs\.$/)
+  assert.equal(staleBannerText(fresh), null)
+  // the check itself gets old: stale again, with its own age
+  assert.equal(dataFreshness(published, Date.parse('2026-10-06T18:00:00Z'), checked).stale, true)
+  assert.equal(dataFreshness(published, Date.parse('2026-10-06T18:00:00Z'), checked).hours, 7)
+  // a check older than the publish, an invalid one or none: exactly as before
+  for (const old of ['2026-10-06T02:00:00Z', '2026-10-06T03:00:00Z', 'nope', null, undefined]) {
+    assert.deepEqual(dataFreshness(published, now, old), dataFreshness(published, now))
+  }
+  assert.equal(dataFreshness(published, now).label, 'Updated 9 h ago')
+  // no publish yet: nothing to show, whatever the check says
+  assert.equal(dataFreshness(null, now, checked), null)
+})
+
 test('staleBannerText shows only for a stale publish', () => {
   const now = Date.parse('2026-10-06T12:00:00Z')
   assert.equal(staleBannerText(dataFreshness('2026-10-06T05:00:00Z', now)),

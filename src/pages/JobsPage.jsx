@@ -7,19 +7,26 @@ import { JobDrawer } from '../components/common/JobDrawer'
 import { Metrics } from '../components/common/Metrics'
 import { ShortcutHelp } from '../components/common/ShortcutHelp'
 import { Toast } from '../components/common/Toast'
-import { SearchIcon } from '../components/common/icons'
+import { ChevronDownIcon, ChevronUpIcon, SearchIcon } from '../components/common/icons'
 import { SearchFilter } from '../components/common/SearchFilter'
+import { CheckinSheet } from '../components/job/CheckinSheet'
+import { ApplicationRow } from '../components/list/ApplicationRow'
 import { BulkBar } from '../components/list/BulkBar'
 import { ExpiringStrip } from '../components/list/ExpiringStrip'
+import { FirstFiveCard } from '../components/list/FirstFiveCard'
+import { FunnelLine } from '../components/list/FunnelLine'
 import { ReturnPrompt } from '../components/list/ReturnPrompt'
 import { ScopeMenu } from '../components/list/ScopeMenu'
 import { StageChips } from '../components/list/StageChips'
 import {
-  APPLIED_TAB_FILTERS, MUTE_KINDS, PROFILE_ANCHORS, TOAST_REASONS, addChanges, adjustSummary, belongsToTab, bumpAppliedToday,
-  hideChanges, hideKeys, negate, plural, statusChanges, statusFields, statusOf, statusPatch, summaryParams, swipeActions, todayKey,
+  APPLIED_TAB_FILTERS, MUTE_KINDS, PROFILE_ANCHORS, TOAST_REASONS, addChanges, adjustSummary, belongsToList, bumpAppliedToday,
+  hasStageChip, hideChanges, hideKeys, negate, plural, stageGroupFor, statusChanges, statusFields, statusOf, statusPatch,
+  summaryParams, swipeActions, todayKey,
 } from '../components/list/listState'
+import { readFoldOpen, saveFoldOpen, useFoldList } from '../components/list/useFoldList'
 import { api, onAccessDenied } from '../lib/api'
 import { sessionUser } from '../lib/session'
+import { useCheckin } from '../hooks/useCheckin'
 import { useProfile } from '../hooks/useProfile'
 import { useHotkeys } from '../hooks/useHotkeys'
 import { useJobList } from '../hooks/useJobList'
@@ -30,19 +37,21 @@ import { useToast } from '../hooks/useToast'
 import { useUrlState } from '../hooks/useUrlState'
 import { useVisit } from '../hooks/useVisit'
 import {
-  APPLIED_STATUSES, EMPLOYMENT_LABELS, MATCH_MIN_FIT, STRONG_FIT, WORK_MODE_LABELS, buildTrend, facetOptions, companyKey, isApplied,
+  APPLIED_STATUSES, EMPLOYMENT_LABELS, FINISHED_STATUSES, MATCH_MIN_FIT, STRONG_FIT, WORK_MODE_LABELS, buildTrend, facetOptions, companyKey, isApplied,
   isTracked, jobUrl, statusLabel,
 } from '../utils/gold'
 import { dataFreshness, formatDate, isNewJob, parseDay, sinceLabel, staleBannerText } from '../utils/job'
-import { DEFAULT_FILTERS, EMPTY_FILTERS, LIST_TABS, PANEL_KEYS, TAB_LABELS, defaultSortFor, sortAllowed } from '../utils/filters'
+import { DEFAULT_FILTERS, EMPTY_FILTERS, LIST_TABS, PANEL_KEYS, TAB_LABELS, defaultSortFor, scopeLabel, sortAllowed } from '../utils/filters'
 import { TRACKED_CSV_COLUMNS, downloadCsv, toCsv, trackedCsvFilename } from '../utils/csv'
 import { PROFILE_LIMITS } from '../utils/entries'
 import { skillCounts as countSkills } from '../utils/fit'
 import { caughtUpText, endOfListText } from '../utils/schedule'
 import { sourceLabel } from '../utils/sources'
+import { SNOOZE_STAGES, liveCount, relaxations } from '../utils/tracker'
 import {
-  countOpenWithoutSwipe, readAutoAdvance, readExpiringCollapsed, readSwipePeekDone, readSwipeRightApplies, readSwipeTipShown,
-  readSwipeUsed, readView, recordOpened, saveExpiringCollapsed, saveSwipePeekDone, saveSwipeTipShown, saveView,
+  countOpenWithoutSwipe, readAutoAdvance, readExpiringCollapsed, readFirstFivePending, readSwipePeekDone, readSwipeRightApplies,
+  readSwipeTipShown, readSwipeUsed, readView, recordOpened, saveExpiringCollapsed, saveFirstFivePending, saveSwipePeekDone,
+  saveSwipeTipShown, saveView,
 } from '../utils/viewPref'
 
 const TREND_WINDOW_DAYS = 14
@@ -54,8 +63,10 @@ const AUTO_REFRESH_MS = 60 * 60_000 // an open page also refetches data older th
 const PEEK_MS = 1400 // the one-time swipe demo on the first row (the CSS animation takes about 1.2 s)
 const SWIPE_TIP_OPENS = 5 // drawer opens without a swipe before the one-off swipe tip
 
-// 'expiring' ("Expiring first") is offered on the Inbox only (sortAllowed)
+// 'expiring' ("Expiring first") is offered on the Inbox only, 'action' ("Needs action first", the default there) on
+// Applied only (sortAllowed)
 const SORTS = [
+  { value: 'action', label: 'Needs action first' },
   { value: 'fit', label: 'Best fit' },
   { value: 'recent', label: 'Newest posted' },
   { value: 'found', label: 'Recently found' },
@@ -63,6 +74,7 @@ const SORTS = [
   { value: 'expiring', label: 'Expiring first' },
 ]
 const sortsFor = (tab) => SORTS.filter(option => sortAllowed(option.value, tab))
+const RELAX_MAX = 3 // an empty list offers at most this many one-filter relaxations (one summary read each)
 
 // Inbox · Saved · Applied (disjoint), keys 1-3
 const TABS = LIST_TABS.map((value, index) => ({ value, label: TAB_LABELS[value], key: String(index + 1) }))
@@ -93,18 +105,26 @@ function chipValue(key, value) {
   return value
 }
 
-// { title, text, action } for an empty list (action: 'muted' | 'clear' | 'older' | 'everything' | null). narrowed: filters
-// are hiding jobs. caughtUp: the Inbox had jobs in this scope (or you triaged some today) and none is left.
-function emptyMessage({ tab, narrowed, scope, postedWithin, muteOnly, caughtUp, expiring, rightApplies, triaged, appliedToday }) {
+// { title, text, action, relax } for an empty list (action: 'muted' | 'clear' | 'older' | 'everything' | null). narrowed:
+// filters are hiding jobs (the title names the search, else "your filters", and on the Inbox the scope menu's choice).
+// relax: the one-filter relaxations with jobs behind them ("Any work mode · 12") take the action's place once their
+// counts are known. caughtUp: the Inbox had jobs in this scope (or you triaged some today) and none is left.
+function emptyMessage({ tab, narrowed, q, scope, postedWithin, muteOnly, caughtUp, expiring, rightApplies, triaged, appliedToday }) {
   if (muteOnly) return { title: 'No muted jobs here', text: 'Nothing in this view matches your mute rules.', action: 'muted' }
-  if (!narrowed && tab === 'saved') {
+  if (narrowed) {
+    const quoted = q ? `“${q}”` : null
+    const title = tab === 'inbox'
+      ? `No jobs match ${quoted || 'your filters'} in ${scopeLabel({ scope, postedWithin })}`
+      : `No ${tab} jobs match ${quoted || 'your filters'}`
+    return { title, text: 'Try removing a filter or switching tabs.', action: 'clear', relax: true }
+  }
+  if (tab === 'saved') {
     const how = rightApplies ? 'press s or tap the bookmark' : 'swipe right, press s or tap the bookmark'
     return { title: 'No saved jobs', text: `Save a job (${how}) to keep it after it would disappear.` }
   }
-  if (!narrowed && tab === 'applied') {
+  if (tab === 'applied') {
     return { title: 'No applied jobs yet', text: 'Mark a job applied (press a or tap the check) to track it here.' }
   }
-  if (narrowed) return { title: 'No matching jobs', text: 'Try removing a filter or switching tabs.', action: 'clear' }
   if (caughtUp) return { title: "You're caught up", text: caughtUpText({ triaged, applied: appliedToday }), caughtUp: true }
   if (postedWithin) {
     const e = Number(expiring) || 0
@@ -112,6 +132,7 @@ function emptyMessage({ tab, narrowed, scope, postedWithin, muteOnly, caughtUp, 
       title: postedWithin === '72' ? 'Nothing new in the last 3 days' : 'Nothing new in the last 24 hours',
       text: e > 0 ? `Older jobs are hidden (${e} disappear tonight).` : 'Older jobs are hidden.',
       action: 'older',
+      relax: true,
     }
   }
   if (scope === 'match') {
@@ -119,6 +140,7 @@ function emptyMessage({ tab, narrowed, scope, postedWithin, muteOnly, caughtUp, 
       title: 'No jobs for your roles yet',
       text: `Nothing in your roles with fit ${MATCH_MIN_FIT}+ right now. New jobs arrive with the next update (every ~6 hours).`,
       action: 'everything',
+      relax: true,
     }
   }
   return { title: 'No jobs yet', text: 'Jobs appear here after the next update (every ~6 hours).' }
@@ -149,10 +171,13 @@ export function JobsPage() {
   const [searchInput, setSearchInput] = useState(filters.q)
   const [view, setView] = useState(readView)
   const [rightApplies] = useState(readSwipeRightApplies) // Settings → Account; the page remounts after Settings
+  // The Applied tab without a chip lists the open applications (stageGroup 'open'); the finished ones fold at the bottom
+  const mainGroup = stageGroupFor(tab, filters)
+  const listFilters = useMemo(() => (mainGroup ? { ...filters, stageGroup: mainGroup } : filters), [filters, mainGroup])
   const {
     jobs, page, listKey, totalCount, hasMore, loading, refreshing, error,
-    reload: reloadJobs, loadMore, retry, updateJob, leaveJob, leaving, sentinelRef,
-  } = useJobList({ filters, scope, sort, tab })
+    reload: reloadMain, loadMore, retry, updateJob, leaveJob, leaving, sentinelRef,
+  } = useJobList({ filters: listFilters, scope, sort, tab })
   // Start from the cached counters (as the list does), so the header doesn't paint 0s and then widen to the real numbers
   const [summary, setSummary] = useState(() => api.cachedRows('summary', summaryParams(filters, scope, since))?.[0] || {})
   const [trendRows, setTrendRows] = useState(() => api.cachedRows('trend', { scope }))
@@ -181,7 +206,7 @@ export function JobsPage() {
   const swipeTipRef = useRef(false) // the swipe tip is due when the drawer closes
   const peekTimersRef = useRef([])
   const [scrollTick, setScrollTick] = useState(0) // bumped to bring the Expiring strip into view
-  const { toast, showToast, runUndo, undoCount } = useToast()
+  const { toast, showToast, hideToast, runUndo, undoCount } = useToast()
   const summaryRequestRef = useRef(0)
   const searchRef = useRef(null)
   const filtersRef = useRef(filters)
@@ -194,6 +219,60 @@ export function JobsPage() {
   useEffect(() => {
     if (!profileLoading && !profileError && !profile) navigate('/settings?tab=profile&welcome=1', { replace: true })
   }, [profileLoading, profileError, profile, navigate])
+
+  // "Finished · N" at the bottom of the Applied tab (Rejected, Withdrawn, No reply), with Any stage only. Only with an API
+  // that knows the stage groups (its summary counts No reply): an older one lists every stage in the main list.
+  const stages = summary.stages || {}
+  const foldActive = mainGroup === 'open' && stages.no_response !== undefined && stages.no_response !== null
+  const [foldOpen, setFoldOpen] = useState(readFoldOpen)
+  const foldParams = useMemo(() => ({ ...filters, stageGroup: 'finished', scope, sort, tab: 'applied' }), [filters, scope, sort])
+  const fold = useFoldList(foldParams, foldActive && foldOpen)
+  const { updateRows: updateFoldRows, removeRows: removeFoldRows, reload: reloadFold } = fold
+  const finishedCount = foldActive ? FINISHED_STATUSES.reduce((sum, stage) => sum + (Number(stages[stage]) || 0), 0) : 0
+  const foldShown = foldActive && (finishedCount > 0 || fold.rows.length > 0)
+  const foldRows = useMemo(() => (foldShown && foldOpen ? fold.rows : []), [foldShown, foldOpen, fold.rows])
+  const toggleFold = () => {
+    saveFoldOpen(!foldOpen)
+    setFoldOpen(!foldOpen)
+  }
+  // Both lists of the tab come back from the server (after a failed write, an undo, a hide that needs a new group row)
+  const reloadJobs = useCallback(() => {
+    reloadMain()
+    reloadFold()
+  }, [reloadMain, reloadFold])
+
+  // "Your first 5" after the welcome save (viewPref, per device): the five best For-you fits at the top of the Inbox.
+  // rows: null until read; hidden: the ones you hid from the card (they leave the lists, the card keeps them in place)
+  const [firstFivePending, setFirstFivePending] = useState(readFirstFivePending)
+  const [firstFiveRows, setFirstFiveRows] = useState(null)
+  const [firstFiveHidden, setFirstFiveHidden] = useState(() => new Set())
+  const firstFiveWanted = firstFivePending && Boolean(profile)
+  useEffect(() => {
+    if (!firstFiveWanted) return undefined
+    let cancelled = false
+    api.firstFive()
+      .then((rows) => { if (!cancelled) setFirstFiveRows(prev => prev ?? (rows || [])) })
+      .catch((err) => {
+        console.error('Failed to load your first 5:', err)
+        if (!cancelled) setFirstFiveRows(prev => prev ?? [])
+      })
+    return () => { cancelled = true }
+  }, [firstFiveWanted])
+  const closeFirstFive = useCallback(() => {
+    saveFirstFivePending(false)
+    setFirstFivePending(false)
+  }, [])
+
+  // The weekly "How did last week go?" sheet: due once a week (useCheckin), shown on the Applied tab only so it never
+  // interrupts triage in the Inbox; opened by hand from the Applied tab's "Weekly check-in" too
+  const checkin = useCheckin({ enabled: Boolean(profile) && !accessDenied })
+  // It waits while the drawer, the Your first 5 card or the filter sheet is open
+  const checkinVisible = checkin.open && tab === 'applied' && !selectedJob && !firstFiveWanted && !sheetOpen
+  // The week counts as checked only once the sheet is really on screen
+  const { shown: checkinShown } = checkin
+  useEffect(() => {
+    if (checkinVisible) checkinShown()
+  }, [checkinVisible, checkinShown])
 
   const summaryArgs = useMemo(() => summaryParams(filters, scope, since), [filters, scope, since])
   useEffect(() => {
@@ -282,12 +361,18 @@ export function JobsPage() {
 
   useEffect(() => () => clearTimeout(countsTimerRef.current), [])
 
+  // "Your first 5" lists its jobs above the Inbox: while it shows, the list below leaves them out (no job twice)
+  const firstFiveKeys = useMemo(() => (firstFiveWanted && tab === 'inbox' && !muteOnly
+    ? new Set((firstFiveRows || []).map(job => job.job_key))
+    : null), [firstFiveWanted, tab, muteOnly, firstFiveRows])
+
   // Rows on screen in order: each list row, then the postings of its group when expanded. A posting that is also a
   // list row (a tracked one of the group, loaded by a later page) shows only as that row: one key, one row.
   const displayRows = useMemo(() => {
     const listed = new Set(jobs.map(job => job.job_key))
     const rows = []
     for (const job of jobs) {
+      if (firstFiveKeys?.has(job.job_key)) continue
       const group = groups[job.job_key]
       rows.push({ job, group: group ? group.status : 'collapsed', child: false })
       if (group?.status !== 'expanded') continue
@@ -297,8 +382,14 @@ export function JobsPage() {
         rows.push({ job: child, group: null, child: true, parent: job.job_key })
       })
     }
+    // The open Finished fold's rows come last (j / k go on into them)
+    foldRows.forEach((job) => {
+      if (listed.has(job.job_key)) return
+      listed.add(job.job_key)
+      rows.push({ job, group: null, child: false, fold: true })
+    })
     return rows
-  }, [jobs, groups])
+  }, [jobs, groups, foldRows, firstFiveKeys])
   const displayJobs = useMemo(() => displayRows.map(row => row.job), [displayRows])
   // How often the listed jobs ask for each skill: the drawer's "Not in your profile" puts the common ones first
   const skillCounts = useMemo(() => countSkills(jobs), [jobs])
@@ -326,7 +417,11 @@ export function JobsPage() {
     setExpiringRows(prev => (prev.some(row => patches.has(row.job_key))
       ? prev.map(row => (patches.has(row.job_key) ? { ...row, ...patches.get(row.job_key) } : row))
       : prev))
-  }, [updateJob])
+    updateFoldRows(patches)
+    setFirstFiveRows(prev => (prev?.some(row => patches.has(row.job_key))
+      ? prev.map(row => (patches.has(row.job_key) ? { ...row, ...patches.get(row.job_key) } : row))
+      : prev))
+  }, [updateJob, updateFoldRows])
 
   const patchJob = useCallback((jobKey, patch) => patchJobs(new Map([[jobKey, patch]])), [patchJobs])
 
@@ -342,6 +437,7 @@ export function JobsPage() {
     const drop = new Set(keys)
     const listed = new Set(pageRef.current.jobs.map(job => job.job_key))
     keys.forEach(key => { if (listed.has(key)) leaveJob(key) })
+    removeFoldRows(drop)
     setExpiringRows(prev => (prev.some(row => drop.has(row.job_key)) ? prev.filter(row => !drop.has(row.job_key)) : prev))
     setGroups(prev => {
       const next = {}
@@ -351,7 +447,7 @@ export function JobsPage() {
       }
       return next
     })
-  }, [leaveJob])
+  }, [leaveJob, removeFoldRows])
 
   const refreshLists = useCallback(() => {
     const { reloadJobs: reload, fetchSummary: summaryNow, fetchFacets: facetsNow, fetchExpiring: stripNow, stripWanted: strip } = pageRef.current
@@ -401,7 +497,11 @@ export function JobsPage() {
       const ahead = list[next + 1]
       if (ahead) api.prefetchJob(ahead.job_key)
     }
-    if (more && !busy && next >= list.length - LOAD_AHEAD_ROWS) pageRef.current.loadMore()
+    // The open Finished fold's rows come after the main list's: each list loads its next page near its own end
+    const { foldRows: folded, fold: foldList } = pageRef.current
+    const mainEnd = list.length - folded.length
+    if (more && !busy && next < mainEnd && next >= mainEnd - LOAD_AHEAD_ROWS) pageRef.current.loadMore()
+    if (folded.length && next >= mainEnd && next >= list.length - LOAD_AHEAD_ROWS && foldList.hasMore) foldList.loadMore()
     return job
   }, [pushJobUrl, recordOpen])
 
@@ -420,12 +520,15 @@ export function JobsPage() {
 
   // ---- writes ----
 
+  // Resolves to whether something was undone (the weekly check-in puts the row's buttons back only then)
   const runUndoStep = useCallback(async () => {
     try {
       const label = await runUndo()
       if (label !== null) showToast('Undone')
+      return label !== null
     } catch (err) {
       showToast(`Could not undo: ${err.message}`)
+      return false
     }
   }, [runUndo, showToast])
 
@@ -455,12 +558,16 @@ export function JobsPage() {
   }, [closeDrawer, pushJobUrl])
 
   // Sets status on jobs (optimistic), with one undo that puts each job back to its own previous status. Rows that no
-  // longer belong on this tab (Inbox = untracked, Saved, Applied) leave the list, unless the drawer is open (its job
-  // stays where it is until the list is read again).
+  // longer belong on the list (the tab: Inbox = untracked, Saved, Applied; on Applied also the chip, or the open list /
+  // Finished fold) leave it, unless the drawer is open (its job stays where it is until the list is read again). A row
+  // that moves between the open list and the fold shows up in the other one when that is read again after the write.
   const changeStatus = useCallback(async (list, status, { message, tone } = {}) => {
     const targets = list.filter(job => statusOf(job) !== status)
     if (!targets.length) return false
-    const { since: visitSince, postedWithin, tab: currentTab, jobs: listed, selectedJob: open } = pageRef.current
+    const {
+      since: visitSince, postedWithin, tab: currentTab, jobs: listed, selectedJob: open, filters: currentFilters, mainGroup: group,
+      foldRows: folded,
+    } = pageRef.current
     const now = new Date().toISOString()
     const before = new Map(targets.map(job => [job.job_key, statusFields(job)]))
     const changes = targets.reduce((total, job) => addChanges(total, statusChanges(job, status, visitSince, postedWithin)), {})
@@ -469,8 +576,17 @@ export function JobsPage() {
     const keys = targets.map(job => job.job_key)
     const patches = new Map(targets.map(job => [job.job_key, statusPatch(job, status, now)]))
     const onList = new Set(listed.map(job => job.job_key))
-    const left = open ? [] : targets.filter(job => onList.has(job.job_key) && !belongsToTab({ ...job, ...patches.get(job.job_key) }, currentTab))
-      .map(job => job.job_key)
+    const inFold = new Set(folded.map(job => job.job_key))
+    const leaves = (job) => {
+      const next = { ...job, ...patches.get(job.job_key) }
+      if (onList.has(job.job_key)) return !belongsToList(next, currentTab, currentFilters, group)
+      return inFold.has(job.job_key) && !belongsToList(next, currentTab, currentFilters, 'finished')
+    }
+    const left = open ? [] : targets.filter(leaves).map(job => job.job_key)
+    // Moved between the open list and the fold (or into the fold from the check-in sheet): the other list is read again
+    const finished = FINISHED_STATUSES.includes(status)
+    const intoFold = group === 'open' && finished && targets.some(job => !inFold.has(job.job_key))
+    const outOfFold = group === 'open' && !finished && targets.some(job => inFold.has(job.job_key))
     patchJobs(patches)
     setSummary(prev => adjustSummary(prev, changes))
     if (appliedDelta) setTrendRows(prev => bumpAppliedToday(prev || [], appliedDelta))
@@ -492,7 +608,9 @@ export function JobsPage() {
       showToast(`Could not update: ${err.message}`)
       return false
     }
-    showToast(message || `Status: ${statusLabel(status)}`, async () => {
+    if (intoFold) pageRef.current.reloadFold()
+    if (outOfFold) pageRef.current.reloadMain()
+    showToast(message || `Moved to ${statusLabel(status)}`, async () => {
       restore()
       // One write per previous status and times (an undo also puts back when you applied and when the stage changed)
       const groups = new Map()
@@ -508,7 +626,7 @@ export function JobsPage() {
         }
         // The rows that left the list come back (also the ones that left when the drawer closed)
         const listedNow = new Set(pageRef.current.jobs.map(job => job.job_key))
-        if (left.length || keys.some(key => onList.has(key) && !listedNow.has(key))) pageRef.current.reloadJobs()
+        if (left.length || intoFold || outOfFold || keys.some(key => onList.has(key) && !listedNow.has(key))) pageRef.current.reloadJobs()
       } catch (err) {
         pageRef.current.reloadJobs() // the rows were put back on screen only: show what the server has
         throw err
@@ -537,7 +655,8 @@ export function JobsPage() {
     changeStatus([job], saved ? 'not_applied' : 'saved', saved ? { message: 'Unsaved' } : { message: 'Saved', tone: 'primary' })
   }, [changeStatus, showToast])
 
-  // The status picker (rows, drawer), the drawer's Save button and its AgeNotice stages
+  // The stage pill (Applied rows), the drawer's stage stepper, Save button and AgeNotice answers, the weekly check-in.
+  // A stage change says "Moved to Interviewing" (green when it is good news).
   const setJobStatus = useCallback((job, status) => {
     const was = statusOf(job)
     let message
@@ -546,6 +665,7 @@ export function JobsPage() {
     else if (status === 'not_applied' && was === 'saved') message = 'Unsaved'
     else if (status === 'not_applied') message = 'Applied undone'
     else if (status === 'applied' && !isApplied(job)) [message, tone] = ['Marked applied', 'success']
+    else [message, tone] = [`Moved to ${statusLabel(status)}`, status === 'interviewing' || status === 'offer' ? 'success' : undefined]
     return changeStatus([job], status, { message, tone })
   }, [changeStatus])
 
@@ -607,7 +727,8 @@ export function JobsPage() {
   // Hides rows (a collapsed row with its near-duplicates); the highlight and an open drawer move on to the next job.
   // Without a reason, the toast offers the reasons (kept as feedback) and then a matching mute rule. A reason is feedback
   // on the jobs you judged, so their near-duplicates are hidden without one (one feedback row per judged job).
-  const hideJobs = useCallback(async (list, reason) => {
+  // onRevert: called when the hide did not happen after all (the write failed, or Undo), e.g. Your first 5's "Hidden"
+  const hideJobs = useCallback(async (list, reason, { onRevert } = {}) => {
     const { groups: open } = pageRef.current
     const keys = [...new Set(list.flatMap(job => hideKeys(job, open[job.job_key]?.status === 'expanded')))]
     if (!keys.length) return
@@ -630,6 +751,7 @@ export function JobsPage() {
     try {
       await hideWithReason(reason)
     } catch (err) {
+      onRevert?.()
       showToast(`Could not hide: ${err.message}`)
       pageRef.current.reloadJobs()
       scheduleCounts()
@@ -667,13 +789,14 @@ export function JobsPage() {
     showToast(message, async () => {
       try {
         await api.setHidden(target, false)
+        onRevert?.()
       } finally {
         pageRef.current.refreshLists()
       }
     }, 'danger', reason ? undefined : TOAST_REASONS.map(item => ({ label: item.label, onClick: () => giveReason(item.value) })))
   }, [dropJobs, navigate, stepOff, scheduleCounts, showToast])
 
-  const hideJob = useCallback((job, reason) => hideJobs([job], reason), [hideJobs])
+  const hideJob = useCallback((job, reason, options) => hideJobs([job], reason, options), [hideJobs])
 
   // Near-duplicate postings under a row (#11)
   const toggleGroup = useCallback(async (job) => {
@@ -742,6 +865,16 @@ export function JobsPage() {
 
   const bulkHide = useCallback(() => runBulk(list => hideJobs(list)), [runBulk, hideJobs])
 
+  // The Applied tab's "Move to…": every selected application to one stage (one Undo puts each back)
+  const bulkMove = useCallback((status) => runBulk(async (list) => {
+    const targets = list.filter(job => isApplied(job) && statusOf(job) !== status)
+    if (!targets.length) {
+      showToast(`Already ${statusLabel(status)}`)
+      return
+    }
+    await changeStatus(targets, status, { message: `Moved ${targets.length} to ${statusLabel(status)}` })
+  }), [runBulk, changeStatus, showToast])
+
   const selectJob = useCallback((job, { range = false } = {}) => {
     const { currentKey: current, selection: picked } = pageRef.current
     if (range) picked.extendTo(job.job_key, current ?? undefined)
@@ -757,6 +890,7 @@ export function JobsPage() {
     hide: job => pageRef.current.hideJob(job),
     swipe: (job, direction) => pageRef.current.swipeJob(job, direction),
     status: (job, next) => pageRef.current.setJobStatus(job, next),
+    snooze: (job, nextActionAt) => pageRef.current.snoozeJob(job, nextActionAt),
     select: (job, options) => pageRef.current.selectJob(job, options),
     toggleGroup: job => pageRef.current.toggleGroup(job),
     unmute: job => pageRef.current.unmute(job),
@@ -874,25 +1008,75 @@ export function JobsPage() {
     return true
   }, [profile, saveProfile, rescoreOpenJob, showToast])
 
-  // The AgeNotice's "No reply yet": the follow-up date moves (the note is kept), with Undo
+  // "No reply yet" / "Still waiting" / "Still interviewing" (the AgeNotice, the weekly check-in): the follow-up date moves
+  // (the note is kept), with Undo. A date ahead means nothing needs doing until then: Needs action drops at once.
   const snoozeJob = useCallback(async (job, nextActionAt) => {
-    const before = { next_action_at: job.next_action_at ?? null, follow_up: Boolean(job.follow_up) }
-    patchJob(job.job_key, { next_action_at: nextActionAt, follow_up: false })
+    const before = { next_action_at: job.next_action_at ?? null, follow_up: Boolean(job.follow_up), action_rank: job.action_rank ?? null }
+    const changes = Number(job.action_rank) > 0 && isApplied(job) ? { needs_action: -1 } : {}
+    patchJob(job.job_key, { next_action_at: nextActionAt, follow_up: false, action_rank: 0 })
+    setSummary(prev => adjustSummary(prev, changes))
     try {
       const row = await api.snoozeFollowUp(job.job_key, nextActionAt)
       if (row && 'next_action_at' in row) patchJob(job.job_key, { next_action_at: row.next_action_at })
     } catch (err) {
       patchJob(job.job_key, before)
+      setSummary(prev => adjustSummary(prev, negate(changes)))
       showToast(`Could not save the date: ${err.message}`)
-      return
+      return false
     }
     scheduleCounts()
     showToast(`OK. We'll ask again on ${formatDate(parseDay(nextActionAt)) || nextActionAt}`, async () => {
       await api.snoozeFollowUp(job.job_key, before.next_action_at)
       patchJob(job.job_key, before)
+      setSummary(prev => adjustSummary(prev, negate(changes)))
       pageRef.current.scheduleCounts()
     })
+    return true
   }, [patchJob, scheduleCounts, showToast])
+
+  // The Applied tab's bulk "Followed up · ask again in 7 days": each selected application's follow-up date moves to
+  // nextActionAt (notes kept), with one Undo that puts every date back. Finished ones have nothing to follow up.
+  const bulkSnooze = useCallback((nextActionAt) => runBulk(async (list) => {
+    const targets = list.filter(job => isApplied(job) && SNOOZE_STAGES.includes(statusOf(job)))
+    if (!targets.length) {
+      showToast('Nothing to follow up: these applications are finished')
+      return
+    }
+    const before = new Map(targets.map(job => [job.job_key, {
+      next_action_at: job.next_action_at ?? null, follow_up: Boolean(job.follow_up), action_rank: job.action_rank ?? null,
+    }]))
+    const due = targets.filter(job => Number(job.action_rank) > 0).length
+    const changes = due ? { needs_action: -due } : {}
+    patchJobs(new Map(targets.map(job => [job.job_key, { next_action_at: nextActionAt, follow_up: false, action_rank: 0 }])))
+    setSummary(prev => adjustSummary(prev, changes))
+    const putBack = () => {
+      patchJobs(before)
+      setSummary(prev => adjustSummary(prev, negate(changes)))
+    }
+    try {
+      await Promise.all(targets.map(job => api.snoozeFollowUp(job.job_key, nextActionAt)))
+    } catch (err) {
+      putBack()
+      pageRef.current.reloadJobs() // some dates may have been saved: show what the server has
+      showToast(`Could not save the dates: ${err.message}`)
+      return
+    }
+    scheduleCounts()
+    showToast(`OK. We'll ask again on ${formatDate(parseDay(nextActionAt)) || nextActionAt} (${plural(targets.length, 'job')})`, async () => {
+      await Promise.all(targets.map(job => api.snoozeFollowUp(job.job_key, before.get(job.job_key).next_action_at)))
+      putBack()
+      pageRef.current.scheduleCounts()
+    })
+  }), [runBulk, patchJobs, scheduleCounts, showToast])
+
+  // The weekly check-in's answers: a stage ("Moved to Interviewing") or ask again later (a snooze), each with its toast and
+  // Undo. Rejects when it was not saved (the toast says why), so the sheet keeps the item's buttons.
+  const answerCheckin = useCallback(async (job, answer) => {
+    let saved = false
+    if (answer?.kind === 'snooze') saved = await snoozeJob(job, answer.nextActionAt)
+    else if (answer?.kind === 'status' && answer.status) saved = await pageRef.current.setJobStatus(job, answer.status)
+    if (!saved) throw new Error('Not saved. Please try again')
+  }, [snoozeJob])
 
   const changeView = (next) => {
     setView(next)
@@ -900,10 +1084,17 @@ export function JobsPage() {
   }
 
   const changeTab = (next) => {
-    if (next !== 'applied' && (filters.stage || filters.followUp || filters.closed)) setFilters(prev => ({ ...prev, ...APPLIED_TAB_FILTERS }))
+    if (next !== 'applied' && hasStageChip(filters)) setFilters(prev => ({ ...prev, ...APPLIED_TAB_FILTERS }))
     selection.clear()
     setTab(next)
   }
+
+  // The filter sheet (the toolbar's and the bottom bar's Filters, f): opening it clears a toast, which would sit over its
+  // footer
+  const openSheet = useCallback((open) => {
+    if (open) hideToast()
+    setSheetOpen(open)
+  }, [hideToast, setSheetOpen])
 
   const fetchStatus = useCallback(() => {
     api.status().then(setStatus).catch(err => console.error('Failed to load data status:', err))
@@ -929,7 +1120,7 @@ export function JobsPage() {
   const { pulling, armed, indicatorRef } = usePullToRefresh(() => {
     setPullBusy(true)
     refreshAll()
-  }, !selectedJob && !helpOpen && !sheetOpen)
+  }, !selectedJob && !helpOpen && !sheetOpen && !checkinVisible)
 
   useEffect(() => {
     if (!loading) setPullBusy(false)
@@ -996,7 +1187,8 @@ export function JobsPage() {
   }), [facetRows])
 
   const trend = useMemo(() => buildTrend(trendRows || [], TREND_WINDOW_DAYS), [trendRows])
-  const freshness = dataFreshness(status.published_at)
+  // "Checked 1 h ago · no new jobs" when the newest scrape found nothing new after the last publish (status.checked_at)
+  const freshness = dataFreshness(status.published_at, Date.now(), status.checked_at)
 
   // '–' until the first summary arrives (a "0" that turns into "171" also widens the tabs and shifts the toolbar)
   // A key the server does not send yet (an older API) also reads '–'
@@ -1090,12 +1282,19 @@ export function JobsPage() {
     { key: 'workMode', value: 'remote', label: 'Remote', title: 'Jobs that say they are remote' },
   ]
 
-  // Quick-chip values are shown as toggles, so they are not repeated as removable chips
+  // The Applied tab is a tracker: no fit quick chips there (they stay in the Filters panel), so its stage chips start
+  // higher; one already set shows as a removable chip instead. Elsewhere quick-chip values are shown as toggles, so they
+  // are not repeated as removable chips.
+  const showQuickChips = tab !== 'applied'
   const activeChips = ['q', ...PANEL_KEYS]
-    .filter(key => filters[key] && !quickChips.some(chip => chip.key === key && chip.value === filters[key]))
+    .filter(key => filters[key] && !(showQuickChips && quickChips.some(chip => chip.key === key && chip.value === filters[key])))
     .map(key => ({ key, text: `${FILTER_LABELS[key]}: ${chipValue(key, filters[key])}` }))
+  if (!showQuickChips) {
+    if (filters.matchedOnly) activeChips.push({ key: 'matchedOnly', text: 'Has my skills' })
+    if (filters.myCities) activeChips.push({ key: 'myCities', text: 'My cities' })
+  }
   const hasCustomFilters = activeChips.length > 0 || filters.matchedOnly || filters.minFit || filters.maxYears || filters.myCities
-    || filters.workMode || filters.stage || filters.followUp || filters.closed
+    || filters.workMode || hasStageChip(filters)
 
   // Keyboard selection: the drawer's job wins, otherwise the highlighted row
   const currentKey = selectedJob?.job_key ?? activeKey
@@ -1105,9 +1304,9 @@ export function JobsPage() {
   useLayoutEffect(() => {
     Object.assign(pageRef.current, {
       jobs, displayJobs, groups, selectedJob, currentKey, currentIndex, hasMore, loading, selectedJobs, selection, tab, since,
-      postedWithin: filters.postedWithin, toast,
-      stripWanted, loadMore, reloadJobs, fetchSummary, fetchFacets, fetchExpiring, scheduleCounts, refreshLists, showToast,
-      openJob, toggleApplied, toggleSaved, hideJob, swipeJob, setJobStatus, selectJob, toggleGroup, unmute, addRule,
+      postedWithin: filters.postedWithin, toast, filters, mainGroup, foldRows, fold,
+      stripWanted, loadMore, reloadJobs, reloadMain, reloadFold, fetchSummary, fetchFacets, fetchExpiring, scheduleCounts, refreshLists, showToast,
+      openJob, toggleApplied, toggleSaved, hideJob, swipeJob, setJobStatus, snoozeJob, selectJob, toggleGroup, unmute, addRule,
     })
   })
 
@@ -1135,7 +1334,7 @@ export function JobsPage() {
   useEffect(() => () => peekTimersRef.current.forEach(clearTimeout), [])
 
   // Rows changed while the drawer was open stay in place until it closes (stable j / k); then the ones that no longer
-  // belong on this tab (e.g. saved on the Inbox) leave, and the highlight moves on
+  // belong on this list (e.g. saved on the Inbox, rejected under Needs action) leave, and the highlight moves on
   const drawerOpenRef = useRef(false)
   useEffect(() => {
     if (selectedJob) {
@@ -1144,8 +1343,11 @@ export function JobsPage() {
     }
     if (!drawerOpenRef.current) return
     drawerOpenRef.current = false
-    const { jobs: listed, tab: current } = pageRef.current
-    const stale = listed.filter(job => !belongsToTab(job, current)).map(job => job.job_key)
+    const { jobs: listed, tab: current, filters: shown, mainGroup: group, foldRows: folded } = pageRef.current
+    const stale = [
+      ...listed.filter(job => !belongsToList(job, current, shown, group)),
+      ...folded.filter(job => !belongsToList(job, current, shown, 'finished')),
+    ].map(job => job.job_key)
     if (!stale.length) return
     stepOff(new Set(stale))
     dropJobs(stale)
@@ -1187,7 +1389,8 @@ export function JobsPage() {
   const promptOpen = Boolean(prompt && !promptAnswered && (!selectedJob || selectedJob.job_key === prompt.job_key))
 
   // The filter sheet is modal and handles its own Esc: no list keys act behind it
-  useHotkeys(sheetOpen ? {} : helpOpen
+  // The weekly check-in is modal too and has its own keys (1-5, j / k, Esc)
+  useHotkeys(sheetOpen || checkinVisible ? {} : helpOpen
     ? { '?': () => setHelpOpen(false), Escape: () => setHelpOpen(false) }
     : {
       j: () => { moveSelection(1) },
@@ -1228,7 +1431,7 @@ export function JobsPage() {
       }),
       u: () => (undoCount > 0 ? runUndoStep() : false),
       '/': () => openSearch(),
-      f: () => (selectedJob ? false : setSheetOpen(true)),
+      f: () => (selectedJob ? false : openSheet(true)),
       r: () => refreshAll(),
       v: () => changeView(view === 'list' ? 'grid' : 'list'),
       '?': () => setHelpOpen(true),
@@ -1273,19 +1476,77 @@ export function JobsPage() {
 
   // The header toggle updates at once; the (heavier) list <-> grid re-render runs in the background
   const listView = useDeferredValue(view)
-  const ItemComponent = listView === 'grid' ? JobCard : JobRow
-  const listClass = listView === 'grid' ? 'jobs-grid' : 'jobs-list'
+  // The Applied tab is a tracker: dense application rows in both views
+  const ItemComponent = tab === 'applied' ? ApplicationRow : listView === 'grid' ? JobCard : JobRow
+  const listClass = tab === 'applied' ? 'jobs-list app-list' : listView === 'grid' ? 'jobs-grid' : 'jobs-list'
   const metrics = <Metrics items={metricItems} trend={trend} onSelect={onMetric} />
   // Caught up: the Inbox had jobs in this scope (or you triaged some today) and none is left to look at
   const caughtUp = tab === 'inbox' && (Number(summary.total) > 0 || Number(summary.triaged_today) > 0)
+  const windowShown = sort === 'expiring' ? '' : filters.postedWithin // "Expiring first" lists whatever the window
   const empty = emptyMessage({
-    tab, narrowed: hasCustomFilters, scope, postedWithin: sort === 'expiring' ? '' : filters.postedWithin, muteOnly, caughtUp, expiring: summary.expiring,
+    tab, narrowed: hasCustomFilters, q: filters.q, scope, postedWithin: windowShown, muteOnly, caughtUp, expiring: summary.expiring,
     rightApplies, triaged: summary.triaged_today, appliedToday,
   })
+  // The empty state (the open list empty with no finished ones folded below it either)
+  const listEmpty = !loading && !error && jobs.length === 0 && !foldShown
+
+  // An empty list that filters (or the Inbox's time window / scope) narrow: up to RELAX_MAX one-filter relaxations, each
+  // counted with one summary read (cached; only while the list is empty, an older state's answer is dropped)
+  const relaxSpecs = useMemo(() => {
+    if (!listEmpty || !empty.relax) return []
+    const view = sort === 'expiring' ? { ...filters, postedWithin: '' } : filters
+    return relaxations(view, scope, tab).slice(0, RELAX_MAX).map((item) => {
+      const relaxed = { ...view, ...item.patch.filters }
+      const relaxedScope = item.patch.scope || scope
+      return { ...item, relaxed, params: summaryParams(relaxed, relaxedScope) }
+    })
+  }, [listEmpty, empty.relax, filters, scope, sort, tab])
+  const relaxKey = JSON.stringify([tab, relaxSpecs.map(item => [item.key, item.params])])
+  const [relaxCounts, setRelaxCounts] = useState({ key: null, counts: [] })
+  const relaxRequestRef = useRef(0)
+  const relaxSpecsRef = useRef(relaxSpecs)
+  useLayoutEffect(() => {
+    relaxSpecsRef.current = relaxSpecs
+  })
+  useEffect(() => {
+    const specs = relaxSpecsRef.current
+    const requestId = ++relaxRequestRef.current
+    if (!specs.length) return
+    Promise.all(specs.map(item => api.summary(item.params)
+      .then(row => liveCount(row, tab, item.relaxed))
+      .catch(() => null)))
+      .then((counts) => { if (requestId === relaxRequestRef.current) setRelaxCounts({ key: relaxKey, counts }) })
+  }, [relaxKey, tab])
+  const relaxReady = relaxSpecs.length > 0 && relaxCounts.key === relaxKey
+  const relaxHits = relaxReady ? relaxSpecs.map((item, index) => ({ ...item, count: relaxCounts.counts[index] })).filter(item => item.count > 0) : []
+  // A relaxation's button goes away with the empty state: once the list it opens is on screen, its first job takes the
+  // focus (unless the focus went somewhere else meanwhile)
+  const relaxFocusRef = useRef(false)
+  useEffect(() => {
+    if (!relaxFocusRef.current || loading || !displayJobs.length) return
+    relaxFocusRef.current = false
+    const active = document.activeElement
+    if (active && active !== document.body && active.isConnected) return
+    document.querySelector('article[data-job-key]')?.focus({ preventScroll: true })
+  }, [loading, displayJobs])
+  const applyRelaxation = (item) => {
+    relaxFocusRef.current = true
+    const patch = item.patch
+    if (patch.scope) setScopeWindow({ scope: patch.scope, postedWithin: filters.postedWithin })
+    else if (patch.filters && 'postedWithin' in patch.filters) setScopeWindow({ scope, postedWithin: patch.filters.postedWithin })
+    else {
+      if (patch.filters && 'q' in patch.filters) setSearchInput('')
+      setFilters(prev => ({ ...prev, ...patch.filters }))
+    }
+  }
+
   const selecting = selectMode || selection.count > 0
   const stripRows = useMemo(() => expiringRows.filter(job => !isTracked(job) && !job.is_hidden), [expiringRows])
-  const showStrip = stripWanted && (stripRows.length > 0 || stripCollapsed)
+  // "Your first 5" takes the Expiring strip's place while it shows (both are a short list above the Inbox)
+  const firstFiveShown = firstFiveWanted && tab === 'inbox' && !muteOnly
+  const showStrip = stripWanted && !firstFiveShown && (stripRows.length > 0 || stripCollapsed)
   const sorts = sortsFor(tab)
+  const sortLabel = (sorts.find(option => option.value === sort) || sorts[0])?.label || ''
 
   // "12 new since your last visit" between the last new row and the first older one (Recently found sort only)
   const dividerKey = useMemo(() => {
@@ -1305,9 +1566,39 @@ export function JobsPage() {
     <span className={`data-freshness ${freshness.stale ? 'stale' : ''} ${className}`} title={freshness.title}>{freshness.label}</span>
   )
   const stageChips = tab === 'applied' && (
-    <StageChips summary={summary} filters={filters} onChange={setFilterValues} onExport={exportCsv} exporting={exporting} />
+    <>
+      {summary.funnel && (
+        <FunnelLine
+          funnel={summary.funnel}
+          checkinTotal={checkin.total}
+          checkinBusy={checkin.loading && checkin.open}
+          onCheckin={() => { if (checkin.total > 0) checkin.show() }}
+        />
+      )}
+      <StageChips summary={summary} filters={filters} onChange={setFilterValues} onExport={exportCsv} exporting={exporting} />
+    </>
   )
   const sheetExtra = (stageChips || freshness) ? <>{stageChips}{freshnessNote()}</> : null
+
+  // One row of displayRows (the main list's, or the open Finished fold's)
+  const renderItem = ({ job, group, child }) => (
+    <ItemComponent
+      job={job}
+      profile={profile}
+      active={job.job_key === currentKey}
+      selected={selection.isSelected(job.job_key)}
+      selecting={selecting}
+      selectMode={selectMode}
+      group={group}
+      child={child}
+      actions={rowActions}
+      since={since}
+      tab={tab}
+      rightApplies={rightApplies}
+      peek={job.job_key === peekKey}
+      leaving={leaving.has(job.job_key)}
+    />
+  )
 
   return (
     <div className={`page-shell ${selection.count ? 'has-bulk' : ''}`}>
@@ -1351,16 +1642,17 @@ export function JobsPage() {
             />
             {!searchInput && <kbd className="search-kbd" aria-hidden="true">/</kbd>}
           </label>
+          {/* Live: every change applies at once; "Show N jobs" (count = this tab's summary count) closes the sheet */}
           <SearchFilter
             filters={filters}
             facets={facets}
             onChange={setFilters}
-            sorts={sorts}
-            sort={sort}
-            onSortChange={setSort}
             open={sheetOpen}
-            onOpenChange={setSheetOpen}
+            onOpenChange={openSheet}
             extra={sheetExtra}
+            count={liveCount(summary, tab, filters)}
+            profile={profile}
+            onReset={clearAll}
           />
           <select className="sort-select" value={sort} onChange={e => setSort(e.target.value)} aria-label="Sort jobs">
             {sorts.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -1385,8 +1677,15 @@ export function JobsPage() {
 
         <section className="chip-row" aria-label="Quick filters">
           {tab === 'inbox' && <ScopeMenu value={scopeValue} onChange={setScopeWindow} />}
+          {/* Phones: the sort as a pill (a native picker); the toolbar's select is desktop only */}
+          <label className="sort-chip pill-toggle hide-desktop">
+            <span aria-hidden="true">{sortLabel} ▾</span>
+            <select value={sort} onChange={e => setSort(e.target.value)} aria-label={`Sort: ${sortLabel}`}>
+              {sorts.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
           {/* A chip that cannot apply stays focusable (aria-disabled), so keyboard and screen-reader users reach its reason */}
-          {quickChips.map(chip => {
+          {showQuickChips && quickChips.map(chip => {
             const active = !chip.disabled && chip.value !== '' && filters[chip.key] === chip.value
             const reasonId = `chip-reason-${chip.key}`
             return (
@@ -1436,6 +1735,30 @@ export function JobsPage() {
 
         {stageChips && <div className="on-page">{stageChips}</div>}
 
+        {firstFiveShown && (
+          <FirstFiveCard
+            rows={firstFiveRows}
+            hidden={firstFiveHidden}
+            noCities={cities.length === 0}
+            busy={bulkBusy}
+            onOpen={openJob}
+            onSave={job => changeStatus([job], 'saved', { message: 'Saved', tone: 'primary' })}
+            onApplied={job => toggleApplied(job, true)}
+            onHide={(job) => {
+              setFirstFiveHidden(prev => new Set(prev).add(job.job_key))
+              // A failed hide or its Undo gives the row its buttons back
+              hideJob(job, undefined, {
+                onRevert: () => setFirstFiveHidden((prev) => {
+                  const next = new Set(prev)
+                  next.delete(job.job_key)
+                  return next
+                }),
+              })
+            }}
+            onClose={closeFirstFive}
+          />
+        )}
+
         {showStrip && (
           <ExpiringStrip
             ref={stripRef}
@@ -1458,8 +1781,8 @@ export function JobsPage() {
 
         {loading && jobs.length === 0 && (
           <section className={listClass} aria-busy="true">
-            {Array.from({ length: listView === 'grid' ? 6 : 10 }, (_, index) => (
-              <div key={index} className={`${listView === 'grid' ? 'job-card' : 'job-row'} skeleton`} aria-hidden="true" />
+            {Array.from({ length: listClass === 'jobs-grid' ? 6 : 10 }, (_, index) => (
+              <div key={index} className={`${listClass === 'jobs-grid' ? 'job-card' : 'job-row'} skeleton`} aria-hidden="true" />
             ))}
           </section>
         )}
@@ -1474,28 +1797,12 @@ export function JobsPage() {
 
         {jobs.length > 0 && (
           <section key={listKey} className={`${listClass} ${loading && page === 0 ? 'is-stale' : ''} ${selecting ? 'is-selecting' : ''}`}>
-            {displayRows.map(({ job, group, child }) => (
-              <Fragment key={job.job_key}>
-                {job.job_key === dividerKey && (
+            {displayRows.filter(row => !row.fold).map(row => (
+              <Fragment key={row.job.job_key}>
+                {row.job.job_key === dividerKey && (
                   <div className="new-divider grid-span">{dividerCount} new since your last visit</div>
                 )}
-                <ItemComponent
-                  job={job}
-                  profile={profile}
-                  active={job.job_key === currentKey}
-                  selected={selection.isSelected(job.job_key)}
-                  selecting={selecting}
-                  selectMode={selectMode}
-                  showStatus={tab === 'applied' && isApplied(job)}
-                  group={group}
-                  child={child}
-                  actions={rowActions}
-                  since={since}
-                  tab={tab}
-                  rightApplies={rightApplies}
-                  peek={job.job_key === peekKey}
-                  leaving={leaving.has(job.job_key)}
-                />
+                {renderItem(row)}
               </Fragment>
             ))}
           </section>
@@ -1506,14 +1813,38 @@ export function JobsPage() {
         {/* Stays mounted so the first "1 selected" is read out too (BulkBar mounts with its count) */}
         <span className="sr-only" aria-live="polite">{selection.count > 0 ? `${selection.count} selected` : ''}</span>
         {selection.count > 0 && (
-          <BulkBar count={selection.count} busy={bulkBusy} onSave={bulkSave} onApplied={bulkApplied} onHide={bulkHide} onClear={selection.clear} />
+          <BulkBar
+            count={selection.count}
+            busy={bulkBusy}
+            onSave={bulkSave}
+            onApplied={bulkApplied}
+            onHide={bulkHide}
+            onClear={selection.clear}
+            onMove={tab === 'applied' ? bulkMove : null}
+            onSnooze={tab === 'applied' ? bulkSnooze : null}
+          />
         )}
 
-        {!loading && !error && jobs.length === 0 && (
+        {listEmpty && relaxHits.length > 0 && (
+          <div className="state-block relax-block" role="status">
+            <h3>{empty.title}</h3>
+            <p>Try one of these:</p>
+            <div className="actions-row">
+              {relaxHits.map(item => (
+                <button key={item.key} type="button" className="btn" onClick={() => applyRelaxation(item)}>
+                  {item.label} · {item.count}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Without a relaxation that has jobs (or until their counts arrive): the message and its own way out */}
+        {listEmpty && relaxHits.length === 0 && (
           <div className={`state-block ${empty.caughtUp ? 'caught-up' : ''}`} role="status">
             <h3>{empty.title}</h3>
             <p>{empty.text}</p>
-            {empty.action && (
+            {empty.action && !(relaxReady && empty.action !== 'clear') && (
               <div className="actions-row">
                 {empty.action === 'muted' && <button type="button" onClick={() => setFilterValues({ muteView: '' })} className="btn">Back to your lists</button>}
                 {empty.action === 'clear' && <button type="button" onClick={clearAll} className="btn">Clear filters</button>}
@@ -1540,6 +1871,42 @@ export function JobsPage() {
           <div className="footer-note">{endOfListText(jobs.length, tab)}</div>
         )}
 
+        {foldShown && (
+          <section className="finished-fold" aria-label="Finished applications">
+            <button
+              type="button"
+              className="finished-toggle"
+              aria-expanded={foldOpen}
+              aria-controls={foldOpen ? 'finished-rows' : undefined}
+              title="Rejected, Withdrawn and No reply"
+              onClick={toggleFold}
+            >
+              {foldOpen ? <ChevronUpIcon /> : <ChevronDownIcon />}
+              Finished · {finishedCount || fold.total}
+            </button>
+            {foldOpen && (
+              <div id="finished-rows">
+                {foldRows.length > 0 && (
+                  <section className={`${listClass} ${selecting ? 'is-selecting' : ''}`}>
+                    {displayRows.filter(row => row.fold).map(row => <Fragment key={row.job.job_key}>{renderItem(row)}</Fragment>)}
+                  </section>
+                )}
+                {fold.loading && <div className="footer-note">{foldRows.length ? 'Loading more…' : 'Loading…'}</div>}
+                {fold.error && !fold.loading && (
+                  <div className="footer-note">
+                    Couldn't load them: {fold.error} <button type="button" className="btn sm" onClick={fold.reload}>Retry</button>
+                  </div>
+                )}
+                {!fold.loading && !fold.error && fold.hasMore && (
+                  <div className="footer-note">
+                    <button type="button" className="btn" onClick={fold.loadMore}>Load more</button>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+        )}
+
         <p className="footer-note hide-mobile">Press <kbd>?</kbd> for keyboard shortcuts</p>
       </main>
 
@@ -1560,14 +1927,14 @@ export function JobsPage() {
           <strong><SearchIcon /></strong>
           <span>Search</span>
         </button>
-        <SearchFilter variant="nav" filters={filters} facets={facets} onChange={setFilters} open={sheetOpen} onOpenChange={setSheetOpen} panel={false} />
+        <SearchFilter variant="nav" filters={filters} facets={facets} onChange={setFilters} open={sheetOpen} onOpenChange={openSheet} panel={false} />
       </nav>
 
       {selectedJob && (
         <JobDrawer
           job={selectedJob}
           profile={profile}
-          position={{ index: currentIndex, total: totalCount, last: displayJobs.length - 1 }}
+          position={{ index: currentIndex, total: totalCount + (foldRows.length ? fold.total : 0), last: displayJobs.length - 1 }}
           onMove={moveSelection}
           onClose={closeDrawer}
           onApplied={toggleApplied}
@@ -1586,7 +1953,23 @@ export function JobsPage() {
         />
       )}
 
-      {prompt && !promptAnswered && (
+      {checkinVisible && (
+        <CheckinSheet
+          jobs={checkin.jobs}
+          total={checkin.total}
+          onAnswer={answerCheckin}
+          onUndo={runUndoStep}
+          canUndo={undoCount > 0}
+          onOpenJob={(job) => {
+            checkin.hide()
+            openJob(job)
+          }}
+          onClose={checkin.hide}
+        />
+      )}
+
+      {/* "Did you apply?" waits while the weekly check-in is open */}
+      {prompt && !promptAnswered && !checkinVisible && (
         <ReturnPrompt
           prompt={prompt}
           autoFocus={!selectedJob}

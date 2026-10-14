@@ -626,7 +626,7 @@ class AdminReadsTest(TrustTestCase):
     def test_metrics_shape(self):
         m = self.metrics()
         self.assertEqual(set(m), {"generated_at", "collecting_since", "weeks", "weekly_return", "retention",
-                                  "outcome_capture", "guardrails"})
+                                  "outcome_capture", "guardrails", "activation"})
         today = self.value("SELECT current_date")
         monday = today - dt.timedelta(days=today.weekday())
         self.assertEqual([w["week"] for w in m["weeks"]], [(monday - dt.timedelta(weeks=i)).isoformat() for i in range(8)])

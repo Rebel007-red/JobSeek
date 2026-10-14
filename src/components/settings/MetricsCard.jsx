@@ -17,7 +17,8 @@ const ratio = (part, whole) => `${num(part)}/${num(whole)}`
 
 // Admin Metrics card (Settings → System): the north star (strong-fit applications per active user) and its supporting
 // numbers over the last 8 ISO weeks (UTC, Monday first), from api.metrics() (one row, see app.read_metrics). Loaded
-// when the tab opens; aggregates only.
+// when the tab opens; aggregates only. `activation` (new users of the last 60 days who saved or applied on their first
+// or second UTC day) is missing before the Track release SQL and then shows –.
 export function MetricsCard() {
   const [metrics, setMetrics] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -66,6 +67,7 @@ export function MetricsCard() {
   const weeks = Array.isArray(metrics.weeks) ? metrics.weeks : []
   const thisWeek = weeks[0] || {}
   const { weekly_return: weekly = {}, retention = {}, outcome_capture: outcome = {}, guardrails = {} } = metrics
+  const activation = metrics.activation || {}
   const hours = isNumber(guardrails.median_hours_to_apply) ? Number(guardrails.median_hours_to_apply).toLocaleString(undefined, { maximumFractionDigits: 1 }) : '–'
 
   return (
@@ -112,7 +114,13 @@ export function MetricsCard() {
           New users (60 d): {num(retention.new_users)} · back next day {ratio(retention.d1, retention.d1_eligible)} · back
           on day 7 {ratio(retention.d7, retention.d7_eligible)}
         </li>
-        <li>Outcome capture: {num(outcome.moved)} of {num(outcome.eligible)} applications 14+ days old moved past Applied</li>
+        <li>
+          Activated (60 d):{' '}
+          {isNumber(activation.new_users) && Number(activation.new_users) > 0
+            ? `${num(activation.activated)} of ${num(activation.new_users)} new users saved or applied to a job within a day of signing up${isNumber(activation.share) ? ` (${share(activation.share)})` : ''}`
+            : '–'}
+        </li>
+        <li>Outcome capture: {num(outcome.moved)} of {num(outcome.eligible)} applications 14+ days old moved past Applied (No reply counts)</li>
         <li>Duplicate applies (28 d): {share(guardrails.duplicate_rate)}</li>
         <li>Median time to apply (28 d): {hours === '–' ? hours : `${hours} h`}</li>
       </ul>

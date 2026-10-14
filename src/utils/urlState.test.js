@@ -15,8 +15,8 @@ test('an empty URL opens what this device remembers, else Inbox / For you / Best
   assert.equal(state.tab, 'applied')
   assert.equal(state.sort, 'recent')
   assert.equal(state.scope, 'all')
-  // the Applied tab opens sorted by applied date unless another sort was picked
-  assert.equal(parseListState('tab=applied').sort, 'applied')
+  // the Applied tab opens with Needs action first unless another sort was picked
+  assert.equal(parseListState('tab=applied').sort, 'action')
   assert.equal(parseListState('tab=saved').sort, 'fit')
 })
 
@@ -58,11 +58,29 @@ test('the time window remembered with the scope is what a URL without posted mea
 test('Expiring first is an Inbox sort only', () => {
   assert.equal(parseListState('sort=expiring').sort, 'expiring')
   assert.equal(parseListState('tab=saved&sort=expiring').sort, 'fit')
-  assert.equal(parseListState('tab=applied&sort=expiring').sort, 'applied')
+  assert.equal(parseListState('tab=applied&sort=expiring').sort, 'action')
   assert.equal(listStateToParams({ tab: 'inbox', sort: 'expiring' }).toString(), 'sort=expiring')
   assert.equal(listStateToParams({ tab: 'saved', sort: 'expiring' }).toString(), 'tab=saved')
   // a remembered expiring sort does not carry over to another tab
   assert.equal(parseListState('tab=saved', { sortFor: () => 'expiring' }).sort, 'fit')
+})
+
+test('Needs action: needs=1 and the action sort on the Applied tab; old stage links keep working', () => {
+  const state = parseListState('tab=applied&needs=1')
+  assert.equal(state.filters.needsAction, true)
+  assert.equal(state.sort, 'action')
+  assert.equal(listStateToParams(state).toString(), 'tab=applied&needs=1')
+  assert.equal(parseListState('tab=applied&needs=yes').filters.needsAction, false)
+  // the action sort is Applied only; the old default (Applied date) is still a sort you can link to
+  assert.equal(parseListState('sort=action').sort, 'fit')
+  assert.equal(parseListState('tab=applied&sort=applied').sort, 'applied')
+  assert.equal(listStateToParams({ tab: 'applied', sort: 'applied' }).toString(), 'tab=applied&sort=applied')
+  assert.equal(listStateToParams({ tab: 'applied', sort: 'action' }).toString(), 'tab=applied')
+  // No reply is a stage of the chips; older links
+  assert.equal(parseListState('tab=applied&stage=no_response').filters.stage, 'no_response')
+  const old = parseListState('tab=applied&followUp=1&closed=only')
+  assert.deepEqual([old.filters.followUp, old.filters.closed, old.filters.needsAction], [true, 'only', false])
+  assert.equal(listStateToParams(old).toString(), 'tab=applied&closed=only&followUp=1')
 })
 
 test('every filter is read, invalid values are dropped', () => {
@@ -101,7 +119,7 @@ test('defaults are left out, in a stable order', () => {
   })
   assert.equal(params.toString(), `tab=saved&sort=recent&scope=all&q=spark&city=Pune&posted=24&skills=1&muted=only&job=${KEY}&sheet=filters`)
   // the sort is left out when it is the tab's default or the one remembered for it
-  assert.equal(listStateToParams({ tab: 'applied', sort: 'applied' }).toString(), 'tab=applied')
+  assert.equal(listStateToParams({ tab: 'applied', sort: 'action' }).toString(), 'tab=applied')
   assert.equal(listStateToParams({ tab: 'applied', sort: 'fit' }, { tab: 'applied', sortFor: () => 'fit' }).toString(), '')
   // a value the remembered one would hide is written out
   assert.equal(listStateToParams({ tab: 'inbox', scope: 'match' }, { tab: 'saved', scope: 'all' }).toString(), 'tab=inbox&scope=match')
@@ -122,6 +140,8 @@ test('state round-trips through the URL', () => {
       jobKey: null,
       sheet: null,
     },
+    { tab: 'applied', sort: 'action', scope: 'match', filters: { ...DEFAULT_FILTERS, needsAction: true }, jobKey: null, sheet: null },
+    { tab: 'applied', sort: 'applied', scope: 'all', filters: { ...DEFAULT_FILTERS, stage: 'no_response' }, jobKey: null, sheet: null },
   ]
   for (const state of states) {
     for (const memory of [undefined, remembered, { ...remembered, postedWithin: '24' }, { postedWithin: '72' }, { postedWithin: '48' }]) {

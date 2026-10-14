@@ -2,8 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
-  DEFAULT_FILTERS, DEFAULT_SCOPE, DEFAULT_TAB, FRESH_HOURS, LIST_TABS, PANEL_KEYS, POSTED_HOURS, POSTED_OPTIONS, SORT_VALUES,
-  TAB_LABELS, normalizeTab, scopeLabel, scopeMenuItems, sortAllowed,
+  DEFAULT_FILTERS, DEFAULT_SCOPE, DEFAULT_TAB, EMPTY_FILTERS, FRESH_HOURS, LIST_TABS, PANEL_KEYS, POSTED_HOURS, POSTED_OPTIONS,
+  SORT_VALUES, TAB_LABELS, defaultSortFor, normalizeTab, scopeLabel, scopeMenuItems, sortAllowed,
 } from './filters.js'
 
 test('three disjoint tabs; the old ones read as the Inbox', () => {
@@ -25,6 +25,19 @@ test('Expiring first is an Inbox sort; the time window is not a panel filter', (
   assert.equal(sortAllowed('fit', 'applied'), true)
   assert.equal(sortAllowed('nope', 'inbox'), false)
   assert.equal(PANEL_KEYS.includes('postedWithin'), false)
+})
+
+test('Needs action first is the Applied tab sort and its default; Needs action is a flag', () => {
+  assert.ok(SORT_VALUES.includes('action'))
+  assert.equal(sortAllowed('action', 'applied'), true)
+  assert.equal(sortAllowed('action', 'inbox'), false)
+  assert.equal(sortAllowed('action', 'saved'), false)
+  assert.equal(sortAllowed('applied', 'applied'), true)
+  assert.equal(sortAllowed('constructor', 'inbox'), false)
+  assert.deepEqual(LIST_TABS.map(defaultSortFor), ['fit', 'fit', 'action'])
+  assert.equal(EMPTY_FILTERS.needsAction, false)
+  assert.equal('stageGroup' in EMPTY_FILTERS, false)
+  assert.deepEqual(PANEL_KEYS, ['role', 'category', 'source', 'company', 'location', 'city', 'workMode', 'employment', 'maxYears', 'minFit'])
 })
 
 test('the scope menu: four presets, any other state as its own checked item', () => {

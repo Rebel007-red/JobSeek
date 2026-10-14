@@ -300,7 +300,7 @@ class TabsTest(FeatureTestCase):
         self.assertEqual(self.keys({"tab": "applied", "stage": "applied"}), [KEY["inactive_applied"]])
         self.assertEqual(set(self.keys({"tab": "applied", "stage": "saved"})), applied)  # not an applied stage: ignored
         stages = self.read("summary", {"scope": "all"})[0]["stages"]
-        self.assertEqual(stages, {"applied": 1, "interviewing": 0, "offer": 0, "rejected": 1, "withdrawn": 0})
+        self.assertEqual(stages, {"applied": 1, "interviewing": 0, "offer": 0, "no_response": 0, "rejected": 1, "withdrawn": 0})
 
     def test_summary_matches_tab_totals(self):
         self.write("setStatus", {"jobKeys": [KEY["level"], KEY["below"]], "status": "saved"})
@@ -623,7 +623,7 @@ class NewReadsTest(FeatureTestCase):
         self.sql("""INSERT INTO app.publish_history (run_id, snapshot_at, published_at, counts, upserted, deleted_jobs)
                     VALUES ('987654321', now(), now(), '{"jobs": 12}', 3, 1)""")
         row = self.read("systemStatus", uid=U_ADMIN, admin=True)[0]
-        self.assertEqual(set(row), {"database", "counts", "publish", "runs", "scrapes", "linkedin", "generated_at"})
+        self.assertEqual(set(row), {"database", "counts", "publish", "runs", "scrapes", "linkedin", "triggers", "generated_at"})
         self.assertEqual(row["database"]["limit_bytes"], 524288000)
         self.assertGreater(row["database"]["bytes"], 0)
         self.assertEqual(row["counts"]["jobs"], self.value("SELECT count(*) FROM app.jobs"))

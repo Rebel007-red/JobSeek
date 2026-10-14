@@ -4,7 +4,7 @@ The feature-wave reads and filters (collapse, mute rules, statuses, cities, ...)
 """
 import datetime as dt
 
-from base import (CITY, COMPANY, CR_ACTIVE, CR_MAPPED, FIXTURE_KEYS, JOB_BY_NAME, KEY, NOW, OTHER_COMPANY, R_DE, R_OUT,
+from base import (CITY, COMPANY, CR_ACTIVE, CR_MAPPED, FIXTURE_KEYS, JOB_BY_NAME, KEY, NOW, OTHER_COMPANY, R_AE, R_DE, R_OUT,
                   STATE, TODAY, U_FALLBACK, U_MAIN, U_NOPROFILE, DbTestCase)
 
 LIST_COLUMNS = {
@@ -18,6 +18,8 @@ LIST_COLUMNS = {
     "above_experience", "in_for_you", "fit_role_reason", "fit_role_sim", "fit_core_matched", "fit_exp_years",
     "job_skills_known", "city", "cities", "work_mode", "employment_kind", "company_key", "dup_group", "dup_count",
     "dup_keys", "dup_locations", "dup_applied_at", "dup_applied_key", "muted_by", "muted_value",
+    # added with the track release (test_track.py)
+    "replied_at", "interviewed_at", "action_rank",
 }
 NAME = {key: name for name, key in KEY.items()}
 
@@ -183,9 +185,13 @@ class ReadTest(DbTestCase):
     def summary_row(**counts):
         row = {"total": 0, "pending": 0, "new_48h": 0, "strong_fit": 0, "applied": 0, "saved": 0, "follow_up": 0,
                "closed": 0, "muted": 0,
-               "stages": {"applied": 0, "interviewing": 0, "offer": 0, "rejected": 0, "withdrawn": 0},
+               "stages": {"applied": 0, "interviewing": 0, "offer": 0, "no_response": 0, "rejected": 0, "withdrawn": 0},
                # added with the trust release (test_trust.py covers them in depth)
-               "inbox": 0, "inbox_strong": 0, "new_since": None, "expiring": 0, "expiring_strong": 0, "triaged_today": 0}
+               "inbox": 0, "inbox_strong": 0, "new_since": None, "expiring": 0, "expiring_strong": 0, "triaged_today": 0,
+               # added with the track release (test_track.py covers them in depth)
+               "needs_action": 0,
+               "funnel": {"applied": 0, "replied": 0, "interviewed": 0, "offers": 0, "no_reply": 0, "outcomes": 0,
+                          "median_reply_days": None, "by_source": [], "by_role": []}}
         row.update(counts)
         return row
 
@@ -199,7 +205,11 @@ class ReadTest(DbTestCase):
             applied=sum(1 for n in names if ref[KEY[n]]["is_applied"]),
             pending=sum(1 for n in names if not ref[KEY[n]]["is_applied"]),
             closed=1,  # inactive_applied
-            stages={"applied": 2, "interviewing": 0, "offer": 0, "rejected": 0, "withdrawn": 0},
+            stages={"applied": 2, "interviewing": 0, "offer": 0, "no_response": 0, "rejected": 0, "withdrawn": 0},
+            # rank2 (role R_AE) and inactive_applied (role R_OUT), both LinkedIn, neither answered yet
+            funnel={"applied": 2, "replied": 0, "interviewed": 0, "offers": 0, "no_reply": 0, "outcomes": 0,
+                    "median_reply_days": None, "by_source": [{"source": "linkedin", "applied": 2, "replied": 0}],
+                    "by_role": [{"role": R_AE, "applied": 1, "replied": 0}, {"role": R_OUT, "applied": 1, "replied": 0}]},
             inbox=sum(1 for n in names if not ref[KEY[n]]["is_applied"]),  # nothing saved: untracked = not applied
             inbox_strong=sum(1 for n in names if not ref[KEY[n]]["is_applied"] and ref[KEY[n]]["fit_score"] >= 70),
             expiring=1,  # old: posted 10 days ago, untracked, For you
@@ -304,11 +314,13 @@ class ReadTest(DbTestCase):
     def test_status(self):
         rows = self.read("status")
         self.assertEqual(len(rows), 1)
-        self.assertEqual(set(rows[0]), {"run_id", "snapshot_at", "published_at", "jobs"})
+        self.assertEqual(set(rows[0]), {"run_id", "snapshot_at", "published_at", "jobs", "checked_at"})
+        self.sql("DELETE FROM app.pipeline_triggers WHERE true")  # checked_at: test_track.py
         self.sql("""UPDATE app.pipeline_status SET run_id = 'fixture-run', snapshot_at = '2026-01-02T03:04:05Z',
                     published_at = '2026-01-02T03:10:00Z', counts = '{"jobs": 12}' WHERE id = 1""")
         self.assertEqual(self.read("status"), [{"run_id": "fixture-run", "snapshot_at": "2026-01-02T03:04:05+00:00",
-                                                "published_at": "2026-01-02T03:10:00+00:00", "jobs": 12}])
+                                                "published_at": "2026-01-02T03:10:00+00:00", "jobs": 12,
+                                                "checked_at": None}])
 
     def test_fixture_keys_are_unique(self):
         self.assertEqual(len(set(FIXTURE_KEYS)), len(FIXTURE_KEYS))

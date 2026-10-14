@@ -18,6 +18,9 @@ export const EMPTY_FILTERS = {
   closed: '',
   followUp: false,
   stage: '',
+  // The Applied tab's "Needs action" chip (app.user_jobs action_rank > 0). The Finished fold's stageGroup is not a
+  // filter: the page adds it to its requests.
+  needsAction: false,
   muteView: '',
 }
 
@@ -56,18 +59,19 @@ export function normalizeTab(tab) {
   return OLD_TABS.get(tab) ?? null
 }
 
-// 'expiring' ("Expiring first") is offered on the Inbox only (saved and applied jobs never expire)
-export const SORT_VALUES = ['fit', 'recent', 'found', 'applied', 'expiring']
-const INBOX_ONLY_SORTS = ['expiring']
+// 'expiring' ("Expiring first") is offered on the Inbox only (saved and applied jobs never expire); 'action' ("Needs
+// action first": follow-up dates that came, then stale interviews, then applications with no reply) on Applied only
+export const SORT_VALUES = ['fit', 'recent', 'found', 'applied', 'expiring', 'action']
+const TAB_ONLY_SORTS = { expiring: 'inbox', action: 'applied' }
 
 // Whether a sort can be used on this tab
 export function sortAllowed(sort, tab) {
-  return SORT_VALUES.includes(sort) && (!INBOX_ONLY_SORTS.includes(sort) || tab === 'inbox')
+  return SORT_VALUES.includes(sort) && (!TAB_ONLY_SORTS[sort] || TAB_ONLY_SORTS[sort] === tab)
 }
 
-// The sort a tab opens with until you pick another one
+// The sort a tab opens with until you pick another one: the Applied tab is a tracker, so what needs you comes first
 export function defaultSortFor(tab) {
-  return tab === 'applied' ? 'applied' : 'fit'
+  return tab === 'applied' ? 'action' : 'fit'
 }
 
 export const SCOPES = ['match', 'all']

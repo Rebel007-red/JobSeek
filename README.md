@@ -43,18 +43,36 @@ the Databricks volume, carried by GitHub Actions (which holds both sets of secre
   one scope menu switches to Everything). The three tabs never count a job twice. Jobs you haven't saved or applied to
   disappear 7 days after posting, at the first update after midnight UTC; the "Expiring tonight" strip above the Inbox
   lists the ones for you that go tonight, and rows say "Disappears in ~9h". Applications to postings over 7 days old
-  stay under "Older postings" (they may still be open).
+  stay on the Applied tab (they may still be open; the CSV marks them "Older posting").
 - **New since your last visit**: jobs found since you last opened the app (at least 30 minutes ago) get a dot, and
   the header says "N new since 9:51 AM". An empty Inbox says you're caught up and when the next jobs should arrive.
-- **Tracking**: save jobs for later, follow an application through its stages (applied, interviewing, offer,
-  rejected, withdrawn) with a note and a follow-up date, and export the Applied tab as CSV.
+- **Decide first, track later**: the detail drawer of a new job shows the actions, the fit and the description
+  first, and "Also posted in N places" (the other postings of a repost, ✓ on the one you applied to). A saved or
+  applied job gets one stage stepper at the top (Saved — Applied — Interviewing — Offer, then No reply · Rejected ·
+  Withdrawn; `t` focuses it) with the note and follow-up date below it.
+- **Applied tab as a tracker**: one dense row per application (company · title, a stage pill that opens a "Move to"
+  menu, "Applied 8d ago", "Next Oct 12" or a Needs action flag), sorted "Needs action first" (your follow-up date
+  came, an interview with no update for 7 days, then an application with no update for 14 days). Stage chips (Needs action, Waiting,
+  Interviewing, Offer, No reply, Rejected, Withdrawn) with counts; finished applications (Rejected, Withdrawn, No
+  reply) fold into "Finished · N" at the bottom. Bulk "Move to…", note and CSV export as before.
+- **Closing the loop**: once a week (your first visit to the Applied tab that week) "How did last week go?" lists applications with no
+  update for 7+ days, with one-tap answers (Heard back, Rejected, No reply yet, Withdrawn; "No reply" is suggested
+  from 21 days after applying). The Applied tab's funnel line says "138 applied → 4 replies (3%) → 2 interviews · median
+  reply 6 d" (with a by-source and by-role breakdown once 10 outcomes are recorded) and reopens the check-in by hand.
+- **First session**: after the welcome save the Inbox opens with "Your first 5", the five best For-you fits to save,
+  apply to or hide, and a nudge to add cities for the My cities chip.
 - **Less noise**: reposts of the same job are shown once ("+2 more · Pune, Chennai"), mute rules hide companies,
   title words or levels, and hiding a job asks why.
 - **Fit score (0-100)** per job from your target roles (related roles score partly), skills (rare skills count more)
   and experience, shown as points that add up to it ("49 = 40 role + 7 skills + 2 experience"), with the skills a
   job asks for that are not in your profile ("+ I know this" adds one). "For you" hides jobs that ask for more than ~2 years above your maximum.
-- **Preferred cities (optional, up to 3)**: each adds LinkedIn searches for your roles in that city; without any, the
-  LinkedIn search covers all of India. LinkedIn is searched only when its workflow is started by hand.
+- **Preferred cities (optional, up to 3)**: the My cities chip then shows jobs there (and remote ones). They also add
+  LinkedIn searches for your roles in that city (without any, the LinkedIn search covers all of India), but LinkedIn
+  is searched only when its workflow is started by hand.
+- **Filters that show what they do**: the filter panel (Fit · Where · What) applies every change at once, and its
+  button says how many jobs you will see ("Show 42 jobs"). An empty filtered list names what hides the jobs ("No jobs
+  match “snowflke” in For you · last 24h") and offers up to three one-tap relaxations with their counts ("Clear search ·
+  95").
 - **Fast triage**: list or card view, swipe right = save, swipe left = hide (Settings → Account "Swipe right marks
   applied" restores the old swipe; touches that start at the screen edge are ignored), with Undo up to 5 steps, bulk
   selection, keyboard shortcuts (`j`/`k`, `o`, `a`, `s`, `t`, `x`, `u`, `/`, `f`, `1`-`3`, `?` for the full list),
@@ -64,13 +82,16 @@ the Databricks volume, carried by GitHub Actions (which holds both sets of secre
   result, dropped LinkedIn searches and the database size; Settings → Access manages who may use the app (with each
   user's last activity and applications in the last 7 days).
 - **Fast loads**: the last results show instantly from the browser cache and refresh in the background. The page
-  says when the job data was last published ("Updated 2 h ago"); after 6 hours it turns amber and a banner says
-  the job updates are delayed. It reloads by itself when a new update is published.
+  says when the job data was last published ("Updated 2 h ago"), or, when the newest scrape found nothing new,
+  "Checked 1 h ago · no new jobs"; after 6 hours without either it turns amber and a banner says the job updates are
+  delayed. It reloads by itself when a new update is published.
 - **Mobile first**: fixed bottom bar (Inbox / Saved / Applied / Search / Filters), also in phone landscape and on
   tablets up to 960px, bottom-sheet filters, full-screen details, pull to refresh, installable (PWA).
 - **Light / dark** theme follows the device.
 - **Free-tier friendly**: no serverless function or warehouse in the request path; Netlify only deploys on frontend
-  changes.
+  changes. The pipeline runs only for new jobs: when the scrapers found only jobs it already has, the Databricks run
+  is skipped (at least one run a day still happens), Settings → System says "Skipped: no new files", and the app
+  says "Checked 1 h ago · no new jobs".
 
 ## Repository layout
 
@@ -80,9 +101,9 @@ the Databricks volume, carried by GitHub Actions (which holds both sets of secre
 | `supabase/` | `app_schema.sql` + `app_api.sql` (private schema `app`, the app RPCs and the service-only pipeline RPCs; applied by `apply.py`), `tests/` (Postgres tests, `parity.py` against the Spark scoring), `multi_user.sql` (login, admin role, companies) |
 | `databricks/*.py` | Scrapers (`workday.py`, `greenhouse.py`, `linkedin.py`, and `ats_scrape.py` for the API / HTML boards) + `upload_to_volume.py`; shared helpers in `scraper_common.py` |
 | `databricks/ats/` | One adapter per API / HTML board (`lever.py`, `ashby.py`, `smartrecruiters.py`, `workable.py`, `oracle.py`, `successfactors.py`, `darwinbox.py`, `keka.py`), the shared framework (`base.py`: polite HTTP, robots.txt, dates, India filter, rows) and `registry.py` (names and labels); offline tests in `databricks/tests/ats/` |
-| `databricks/jobs/` | `jobseeker_pipeline.json` (pipeline job), `jobseeker_setup.json` (setup job), `deploy_job.py`, `trigger_job.py`, `sync_user_data.py`, `publish_to_supabase.py` (also records the run history), `record_scrape_report.py` (all three use `supabase_api.py`; dependencies in `requirements.txt`), `migrate_user_data.py` (one-off), `test_scrape_report.py` |
+| `databricks/jobs/` | `jobseeker_pipeline.json` (pipeline job), `jobseeker_setup.json` (setup job), `deploy_job.py`, `trigger_job.py`, `sync_user_data.py`, `publish_to_supabase.py` (also records the run history), `record_scrape_report.py`, `record_trigger.py` (all four use `supabase_api.py`; dependencies in `requirements.txt`), `migrate_user_data.py` (one-off), `test_scrape_report.py`, `test_trigger.py` |
 | `databricks/notebooks/` | `01_setup` (setup job), pipeline notebooks `02_ingest_silver`, `03_enrich`, `04_gold_cleanup` (+ `_common`, `00_capability_check`) |
-| `.github/workflows/` | `databricks-scrapers.yml` ("ATS Scrapers", every 6 h at :07 UTC: Workday + Greenhouse + the API boards, sync user data, run the pipeline, publish), `linkedin-databricks.yml` (manual runs only: LinkedIn search, then the same pipeline and publish), `publish-supabase.yml` (hourly catch-up publish); `.github/actions/scrape-to-volume` (scrape, upload, record the report) |
+| `.github/workflows/` | `databricks-scrapers.yml` ("ATS Scrapers", every 6 h at :07 UTC: Workday + Greenhouse + the API boards, sync user data, run the pipeline when there are new jobs (or `force`, or daily), record the decision, publish), `linkedin-databricks.yml` (manual runs only: LinkedIn search, then the same pipeline and publish), `publish-supabase.yml` (hourly catch-up publish); `.github/actions/scrape-to-volume` (scrape, upload, record the report) |
 
 ## Setup
 
@@ -103,6 +124,7 @@ npm test                                           # node --test src/utils/*.tes
 python -m unittest discover -s supabase/tests -v   # Postgres tests (TEST_DATABASE_URL or SUPABASE_DB_URL; rolled back)
 python supabase/tests/parity.py                    # Supabase scoring vs the frozen Spark statements, right after a publish
 python databricks/jobs/test_scrape_report.py       # scrape reports, run history, pipeline constants (offline)
+python databricks/jobs/test_trigger.py             # new-job counts, pipeline decisions, their record (offline)
 python -m unittest discover -s databricks/tests/ats -t databricks/tests/ats   # ATS adapters on saved samples (offline)
 ```
 
@@ -163,9 +185,34 @@ is older than the notebooks. Scheduled runs skip the notebooks' "Inspect" cells 
     SAP SuccessFactors, Darwinbox and Keka. Each ATS that has companies writes `databricks/output/ats/<ats>_<timestamp>.csv`
     (all of them are uploaded), its report, and the run manifest `databricks/output/ats_scrape_manifest.json`. An ATS
     without companies is skipped.
-  - `pipeline` runs once all three ended, also when one failed (`if: !cancelled()`): `sync_user_data.py`, then
-    `trigger_job.py --wait` (scheduled runs always start one; manual runs not within 3 h of the last run).
-  - `publish` as below.
+  - `pipeline` runs once all three ended, also when one failed (`if: !cancelled()`): it adds up the scrape jobs'
+    upload counters, runs `sync_user_data.py`, then `trigger_job.py --wait` (with new jobs: scheduled runs always
+    start one, manual runs not within 3 h of the last run), and records the decision.
+  - `publish` as below (after a skipped pipeline it finds nothing newer and ends in seconds).
+- **The pipeline runs only for new jobs** (it is the Databricks compute; the scrapes are free):
+  - `upload_to_volume.py` uploads every CSV that has data rows (a header-only CSV is skipped) and counts the rows whose
+    `job_key` is not in `config/ats_seen_keys.json` (the jobs silver already has with a description). It writes
+    `uploaded`, `new_files` (uploaded files with at least one new job), `new_jobs`, `empty_files` and
+    `seen_keys=loaded|unavailable` to `$GITHUB_OUTPUT`, also when an upload fails, and the composite action passes the
+    first three on as outputs. When the seen keys can't be read every row counts as new, so an unknown answer only
+    ever starts a run. Files without new jobs are still uploaded: the next run ingests the sightings.
+  - The `pipeline` job's `Count new files` step adds them up (a failed scrape job counts 0) and prints a notice and a
+    run summary line. With `new_files` 0 it calls `trigger_job.py --no-new-files --idle-hours 20`: no run while one
+    is active (nothing is waited for), nor when the latest run started less than 20 h ago (decision `no_new`).
+    Otherwise it starts the **daily run** (`started_daily`), so expiry, the deletion of week-old jobs and the daily
+    retention still happen on a quiet day (`app.c_daily_floor_hours()` matches the 20 h). A latest run that failed
+    is run again at once (also `started_daily`): it may have written the seen keys before failing to publish.
+  - **Run it anyway**: Actions → ATS Scrapers → Run workflow with **force** ticked (`workflow_dispatch` input
+    `force`, default off) starts the pipeline whatever the counters say, with no 3-hour gap either.
+  - Databricks pausing new runs (`FEATURE_DISABLED`, Free Edition over its allowance) stays a warning (decision
+    `paused`): the uploaded files are kept and the next allowed run ingests them.
+  - `record_trigger.py` (`if: always()`, `continue-on-error`, always exits 0) sends the decision (`started`,
+    `started_daily`, `waiting`, `recent`, `paused`, `no_new`, or `failed` when `trigger_job.py` ended without one),
+    the counters, the run id and its result to `pipeline_record_trigger` (`app.pipeline_triggers`, newest 50).
+    Settings → System lists them as "Pipeline decisions", and the app says "Checked 1 h ago · no new jobs" instead of
+    "Updated 9 h ago" after a skip.
+  - The seen-key sources are Workday, Greenhouse and the eight API / HTML boards (`04_gold_cleanup`
+    `SEEN_KEY_SOURCES`). LinkedIn has no seen keys here: its manual workflow always triggers.
 - **Being polite to the boards**: the API scrapers send an honest User-Agent (`JobSeekerBot/1.0`, with the repository
   link), make one request at a time per host with a delay (or the host's robots.txt `Crawl-delay`), retry 429 / 5xx
   with backoff, respect robots.txt and cap requests and detail fetches per company. Workday and the ATS scrapers skip
@@ -202,9 +249,10 @@ is older than the notebooks. Scheduled runs skip the notebooks' "Inspect" cells 
 #### Publishing to Supabase
 
 - `databricks-scrapers.yml` (and the manual `linkedin-databricks.yml`) end with two jobs: `pipeline`
-  (`sync_user_data.py`, allowed to fail so a Supabase outage never stops ingestion, then `trigger_job.py --wait`) and
-  `publish` (`publish_to_supabase.py`, also after a failed or timed-out wait). New jobs reach the app about 2 hours
-  after the scheduled start.
+  (`sync_user_data.py`, allowed to fail so a Supabase outage never stops ingestion, then `trigger_job.py --wait`, in
+  the ATS workflow only when there are new jobs, on `force` or for the daily run) and `publish`
+  (`publish_to_supabase.py`, also after a failed or timed-out wait). New jobs reach the app about 2 hours after the
+  scheduled start.
 - `publish-supabase.yml` runs the same publish hourly at :50 (and by hand, with optional `run_id` / `force`). It exits
   in seconds when the newest complete `publish/<run_id>/` is already in Supabase, so the app is at most about an hour
   behind a finished run.
@@ -223,9 +271,9 @@ is older than the notebooks. Scheduled runs skip the notebooks' "Inspect" cells 
    Applying also backfills the derived job columns.
 
 Service-only RPCs (service role key, used by the GitHub workflows): `pipeline_export_user_data`, `pipeline_publish_state`,
-`pipeline_publish`, `pipeline_publish_finish`, `pipeline_record_scrape` (scrape reports) and `pipeline_record_runs`
-(Databricks run history). The admin-only `systemStatus` read combines them with the database size for Settings →
-System. Notes, follow-up dates, hide reasons, mute rules and feedback stay in Supabase: the user-data export never
+`pipeline_publish`, `pipeline_publish_finish`, `pipeline_record_scrape` (scrape reports), `pipeline_record_runs`
+(Databricks run history) and `pipeline_record_trigger` (the ATS workflow's pipeline decisions). The admin-only
+`systemStatus` read combines them with the database size for Settings → System. Notes, follow-up dates, hide reasons, mute rules and feedback stay in Supabase: the user-data export never
 includes them.
 
 ### 5. Netlify

@@ -2,7 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
-  APPLICATION_STATUSES, APPLIED_STATUSES, EXPERIENCE_LEVELS, FIT_PARTS, FIT_WEIGHTS, HIDE_REASONS, LEVEL_YEARS, STATUS_OPTIONS, STRONG_FIT,
+  APPLICATION_STATUSES, APPLIED_STATUSES, CHECKIN_MIN_DAYS, EXPERIENCE_LEVELS, FINISHED_STATUSES, FIT_PARTS, FIT_WEIGHTS, HIDE_REASONS,
+  INTERVIEW_STALE_DAYS, LEVEL_YEARS, NO_REPLY_DAYS, OPEN_STATUSES, REPLY_STATUSES, STATUS_OPTIONS, STRONG_FIT, statusLabel,
   buildTrend, companyKey, experienceLabel, fitTone, formatDescription, isApplied, isTracked, jobUrl, profileSkillList, skillBuckets,
 } from './gold.js'
 
@@ -59,11 +60,22 @@ test('fit weights add up to 1 and every part has one', () => {
 
 test('statuses: applied ones are a subset, every status has a label', () => {
   assert.deepEqual(STATUS_OPTIONS.map(option => option.value), APPLICATION_STATUSES)
-  assert.deepEqual(STATUS_OPTIONS.map(option => option.label), ['Not applied', 'Saved', 'Applied', 'Interviewing', 'Offer', 'Rejected', 'Withdrawn'])
+  assert.deepEqual(STATUS_OPTIONS.map(option => option.label),
+    ['Not applied', 'Saved', 'Applied', 'Interviewing', 'Offer', 'No reply', 'Rejected', 'Withdrawn'])
   assert.ok(APPLIED_STATUSES.every(status => APPLICATION_STATUSES.includes(status)))
+  assert.equal(statusLabel('no_response'), 'No reply')
   assert.deepEqual(HIDE_REASONS.map(reason => reason.value), ['too_senior', 'wrong_role', 'company', 'location', 'duplicate', 'other'])
   assert.deepEqual(EXPERIENCE_LEVELS, Object.keys(LEVEL_YEARS))
   assert.equal(LEVEL_YEARS.Senior, 5)
+})
+
+test('the tracker groups: open and finished split the applied stages, replies are answers', () => {
+  assert.deepEqual(APPLIED_STATUSES, ['applied', 'interviewing', 'offer', 'no_response', 'rejected', 'withdrawn'])
+  assert.deepEqual([...OPEN_STATUSES, ...FINISHED_STATUSES].sort(), [...APPLIED_STATUSES].sort())
+  assert.equal(OPEN_STATUSES.some(status => FINISHED_STATUSES.includes(status)), false)
+  assert.deepEqual(REPLY_STATUSES, ['interviewing', 'offer', 'rejected'])
+  assert.ok(REPLY_STATUSES.every(status => APPLIED_STATUSES.includes(status)))
+  assert.deepEqual([NO_REPLY_DAYS, INTERVIEW_STALE_DAYS, CHECKIN_MIN_DAYS], [21, 7, 7])
 })
 
 test('isTracked: applied (any stage) or saved', () => {
@@ -75,6 +87,8 @@ test('isTracked: applied (any stage) or saved', () => {
   assert.equal(isTracked(null), false)
   assert.equal(isApplied({ application_status: 'saved' }), false)
   assert.equal(isApplied({ application_status: 'rejected' }), true)
+  assert.equal(isApplied({ application_status: 'no_response' }), true)
+  assert.equal(isTracked({ application_status: 'no_response' }), true)
 })
 
 test('profileSkillList: core skills then also-know, no repeats', () => {

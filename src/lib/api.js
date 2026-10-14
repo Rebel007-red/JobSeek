@@ -9,7 +9,7 @@ const STORE_PREFIX = 'jobseeker:api:v4:'
 const STORE_INDEX = `${STORE_PREFIX}index`
 const STORE_MAX_ENTRIES = 25
 const WRITE_ACTIONS = new Set(['setApplied', 'setStatus', 'setHidden', 'setNote', 'restoreHidden', 'saveProfile',
-  'saveMuteRules', 'setAllowedEmail', 'ping'])
+  'saveMuteRules', 'setAllowedEmail', 'ping', 'markCheckin'])
 
 // v1 cached one shared result per action (single-user era), v2 held results from the old Databricks API, v3 rows lack
 // the status, duplicate and mute fields: drop them.
@@ -205,16 +205,28 @@ const MINUTE = 60_000
 export const SYNC_MS = 5 * MINUTE
 const REFS_MS = 6 * 60 * MINUTE
 const STATUS_MS = MINUTE
-// Reads that change with your applies, saves, hides and notes (dropped after every such write)
-const JOB_VIEWS = ['jobs', 'summary', 'hiddenJobs', 'trend', 'jobRow', 'jobGroup', 'trackedJobs']
+// Reads that change with your applies, saves, hides and notes (dropped after every such write; a stage change or a new
+// follow-up date also changes what the weekly check-in asks about)
+const JOB_VIEWS = ['jobs', 'summary', 'hiddenJobs', 'trend', 'jobRow', 'jobGroup', 'trackedJobs', 'checkin']
 const PUBLISHED_VIEWS = [...JOB_VIEWS, 'facets', 'refs', 'job']
 // The profile and mute rules change scores and lists, and the facets (they leave muted jobs out)
 const PROFILE_VIEWS = ['profile', ...JOB_VIEWS, 'facets']
-const NOTE_VIEWS = ['jobNote', 'jobs', 'jobRow', 'jobGroup', 'trackedJobs', 'summary']
+const NOTE_VIEWS = ['jobNote', 'jobs', 'jobRow', 'jobGroup', 'trackedJobs', 'summary', 'checkin']
 // Most rows of the Expiring strip (app.c_expiring_max())
 export const EXPIRING_MAX = 10
 // The server ignores these for the expiring list, so they stay out of its cache key
-const EXPIRING_IGNORED = ['tab', 'scope', 'postedWithin', 'offset', 'closed', 'followUp', 'stage', 'muteView']
+const EXPIRING_IGNORED = ['tab', 'scope', 'postedWithin', 'offset', 'closed', 'followUp', 'stage', 'muteView', 'needsAction',
+  'stageGroup']
+// Only the Applied tab has these (the Needs action chip, the Finished fold); on another tab they would empty the list (a
+// chip still set after switching tabs), so they are left out of that tab's request
+const APPLIED_ONLY_PARAMS = ['needsAction', 'stageGroup']
+function jobsParams(params) {
+  const otherTab = typeof params?.tab === 'string' && params.tab !== 'applied'
+  if (!otherTab || !APPLIED_ONLY_PARAMS.some(key => key in params)) return params
+  return Object.fromEntries(Object.entries(params).filter(([key]) => !APPLIED_ONLY_PARAMS.includes(key)))
+}
+// "Your first 5" after the welcome save: the five best For-you fits in the Inbox, any date (the jobs read, no new SQL)
+export const FIRST_FIVE_PARAMS = { tab: 'inbox', scope: 'match', postedWithin: '', sort: 'fit', limit: 5 }
 const MUTE_FIELDS = { companies: 'muted_companies', titleWords: 'muted_title_words', levels: 'muted_levels' }
 // Glossary words: a job "disappears" from the list; the posting itself may still be open
 const EXPIRED_MESSAGE = "this job just disappeared (jobs you haven't saved or applied to disappear 7 days after posting). Refresh to see the current list."
@@ -313,10 +325,14 @@ function rememberRun(runId) {
 
 // scope: 'match' ("For you": your roles, fit 60+) or 'all'
 export const api = {
-  jobs: (params, options) => query('jobs', params, { maxAge: SYNC_MS, ...options }),
+  // params: the filters (filters.js) plus tab, scope, sort, offset, limit; on the Applied tab also needsAction: true (the
+  // Needs action chip), stageGroup: 'open' | 'finished' (the main list and the Finished fold) and sort 'action'. An older
+  // API ignores those three (the whole tab, sorted by fit). Other tabs never send needsAction or stageGroup.
+  jobs: (params, options) => query('jobs', jobsParams(params), { maxAge: SYNC_MS, ...options }),
   // The counts of the filters + scope + time window. With since (ISO time of your last visit, useVisit) it also has
-  // new_since. Keys: inbox, inbox_strong, saved, applied, new_since, expiring, expiring_strong, triaged_today, stages,
-  // follow_up, closed, muted (and the older total, pending, new_48h, strong_fit); see app.read_summary.
+  // new_since. Keys: inbox, inbox_strong, saved, applied, new_since, expiring, expiring_strong, triaged_today, stages
+  // (incl. no_response), follow_up, closed, muted, needs_action, funnel (and the older total, pending, new_48h,
+  // strong_fit); see app.read_summary. An older API lacks needs_action, funnel and stages.no_response.
   summary: (filters, options) => first('summary', filters, { maxAge: SYNC_MS, ...options }).then(row => row || {}),
   // The Expiring strip: untouched For-you jobs that disappear tonight, soonest first (at most EXPIRING_MAX rows; total_count
   // on each row = all of them). params = the page's filters; the time window, tab and scope do not apply to this list.
@@ -343,7 +359,9 @@ export const api = {
   hiddenJobs: (options) => query('hiddenJobs', {}, { maxAge: SYNC_MS, ...options }),
   profile: (options) => first('profile', {}, { maxAge: SYNC_MS, ...options }),
   refs: () => query('refs', {}, { maxAge: REFS_MS }),
-  // { run_id, snapshot_at, published_at, jobs } of the last pipeline publish (all null before the first one)
+  // { run_id, snapshot_at, published_at, jobs } of the last pipeline publish (all null before the first one), and
+  // checked_at: the time of the newest ATS Scrapers pipeline decision, only when that decision was "no new jobs" (null
+  // otherwise, so a later run with new jobs never reads as "no new jobs"; missing on an older API)
   status: (options) => first('status', {}, { maxAge: STATUS_MS, ...options }).then(row => row || {}),
   // True (and cached job data dropped) when a pipeline publish happened since this device last looked. published_at is
   // part of the marker because a repaired run is re-published under the same run_id with a newer snapshot.
@@ -366,6 +384,14 @@ export const api = {
   cachedRows: (action, params) => readCache(keyFor(action, params))?.rows ?? null,
   // One job as a list row for this user, whatever the filters (a deep link ?job=, "View it"); null when it is gone
   jobRow: (jobKey, options) => first('jobRow', { jobKey }, { maxAge: SYNC_MS, persist: false, ...options }),
+  // "Your first 5" (FIRST_FIVE_PARAMS): list rows, best fit first
+  firstFive: () => query('jobs', FIRST_FIVE_PARAMS, { maxAge: SYNC_MS }),
+  // The weekly check-in: { last_checkin_at, total, jobs } (jobs: at most 20 list rows, oldest update first, each with
+  // days_since_update and suggest); null when no row came back. An older API rejects it ("Unknown action").
+  checkin: () => first('checkin', {}, { maxAge: SYNC_MS, persist: false }),
+  // Records that the weekly sheet was shown (it opens by itself at most once a week): { last_checkin_at } or null
+  // without a profile. The cached check-in read is dropped (it carries the old time).
+  markCheckin: async () => (await write('markCheckin', {}, ['checkin']))[0] || null,
   // Every visible posting of a duplicate group (dup_group), representative first
   jobGroup: (dupGroup, options) => query('jobGroup', { dupGroup }, { maxAge: SYNC_MS, persist: false, ...options }),
   // { job_key, note, next_action_at, application_status, status_updated_at } or null
@@ -415,9 +441,11 @@ export const api = {
   // Admin only: latest first_seen_at per lower(company) and source plus the last scrape (last_scraped_at, last_ok_at,
   // jobs_found, last_error, failures), for the scraper health badges
   companyHealth: () => query('companyHealth', {}, { maxAge: SYNC_MS, persist: false }),
-  // Admin only: database size, counts, last publish, pipeline runs and scrape results (the System tab)
+  // Admin only: database size, counts, last publish, pipeline runs, scrape results and the ATS Scrapers' pipeline
+  // decisions (triggers: newest 10; missing on an older API) for the System tab
   systemStatus: () => first('systemStatus', {}, { persist: false }),
-  // Admin only: the north star and the other usage aggregates of the last 8 ISO weeks (the Metrics card; see
-  // app.read_metrics for the shape). null before the SQL has it.
+  // Admin only: the north star and the other usage aggregates of the last 8 ISO weeks, and activation (new users of the
+  // last 60 days who saved or applied within a day; the Metrics card; see app.read_metrics for the shape). null before
+  // the SQL has it.
   metrics: () => first('metrics', {}, { persist: false }),
 }

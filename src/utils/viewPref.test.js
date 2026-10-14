@@ -3,9 +3,9 @@ import assert from 'node:assert/strict'
 
 import { setSessionUser } from '../lib/session.js'
 import {
-  countOpenWithoutSwipe, markSwipeUsed, readExpiringCollapsed, readScope, readSort, readSwipePeekDone, readSwipeRightApplies,
-  readSwipeTipShown, readTab, readWindow, rememberedListState, saveExpiringCollapsed, saveScopeWindow, saveSort,
-  saveSwipePeekDone, saveSwipeRightApplies, saveSwipeTipShown, saveTab,
+  countOpenWithoutSwipe, markSwipeUsed, readExpiringCollapsed, readFirstFivePending, readScope, readSort, readSwipePeekDone,
+  readSwipeRightApplies, readSwipeTipShown, readTab, readWindow, rememberedListState, saveExpiringCollapsed,
+  saveFirstFivePending, saveScopeWindow, saveSort, saveSwipePeekDone, saveSwipeRightApplies, saveSwipeTipShown, saveTab,
 } from './viewPref.js'
 
 // A small localStorage for node
@@ -43,9 +43,44 @@ test('the Inbox takes over the sort remembered for To apply, once', () => {
   assert.equal(readSort('saved'), 'fit')
   store.set('jobseeker:sort:u1:saved', 'expiring')
   assert.equal(readSort('saved'), 'fit')
-  assert.equal(readSort('applied'), 'applied')
+  assert.equal(readSort('applied'), 'action')
   saveSort('inbox', 'expiring')
   assert.equal(readSort('inbox'), 'expiring')
+})
+
+test('the Applied tab opens with Needs action first once; a sort picked before (not the old default) is kept', () => {
+  // the old default stored under the old key is not carried over
+  store.set('jobseeker:sort:u1:applied', 'applied')
+  assert.equal(readSort('applied'), 'action')
+  assert.equal(store.has('jobseeker:sort:u1:applied:v2'), false)
+  // picking Applied date again is remembered under the new key
+  saveSort('applied', 'applied')
+  assert.equal(store.get('jobseeker:sort:u1:applied:v2'), 'applied')
+  assert.equal(readSort('applied'), 'applied')
+  saveSort('applied', 'action')
+  assert.equal(readSort('applied'), 'action')
+  // another sort picked under the old key carries over, once
+  setSessionUser({ id: 'u2' })
+  store.set('jobseeker:sort:u2:applied', 'recent')
+  assert.equal(readSort('applied'), 'recent')
+  assert.equal(store.get('jobseeker:sort:u2:applied:v2'), 'recent')
+  // an Inbox-only sort never shows on Applied, the Applied-only one never elsewhere
+  store.set('jobseeker:sort:u2:applied:v2', 'expiring')
+  assert.equal(readSort('applied'), 'action')
+  store.set('jobseeker:sort:u2:saved', 'action')
+  assert.equal(readSort('saved'), 'fit')
+})
+
+test('Your first 5 waits until it is closed, per device', () => {
+  assert.equal(readFirstFivePending(), false)
+  saveFirstFivePending(true)
+  assert.equal(store.get('jobseeker.firstFive'), '1')
+  assert.equal(readFirstFivePending(), true)
+  setSessionUser({ id: 'u2' })
+  assert.equal(readFirstFivePending(), true)
+  saveFirstFivePending(false)
+  assert.equal(readFirstFivePending(), false)
+  assert.equal(store.has('jobseeker.firstFive'), false)
 })
 
 test('the scope menu remembers the scope and the time window together', () => {
@@ -60,7 +95,7 @@ test('the scope menu remembers the scope and the time window together', () => {
   assert.deepEqual([readScope(), readWindow()], ['match', '72'])
   const remembered = rememberedListState()
   assert.equal(remembered.postedWithin, '72')
-  assert.equal(remembered.sortFor('applied'), 'applied')
+  assert.equal(remembered.sortFor('applied'), 'action')
   saveScopeWindow({ scope: 'match', postedWithin: '' })
   assert.equal(readWindow(), '')
   // per user

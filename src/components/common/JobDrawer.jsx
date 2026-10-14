@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
@@ -7,14 +7,16 @@ import { formatDate, formatRelativeAge, parseDay, postedAgo } from '../../utils/
 import { recordOpened } from '../../utils/viewPref'
 import { sourceLabel } from '../../utils/sources'
 import {
-  APPLIED_STATUSES, EMPLOYMENT_LABELS, FIT_PARTS, WORK_MODE_LABELS, experienceLabel, fitLabel, formatDescription, isApplied, jobDate,
-  jobUrl, statusLabel,
+  APPLIED_STATUSES, EMPLOYMENT_LABELS, FIT_PARTS, WORK_MODE_LABELS, experienceLabel, fitLabel, formatDescription, isApplied, isTracked,
+  jobDate, jobUrl, statusLabel,
 } from '../../utils/gold'
 import { fitPointsLine, notForYouReasons, skillsSplit, standardRoleLabel } from '../../utils/fit'
 import { FitBreakdown, FitRing } from './Fit'
+import { AlsoPosted } from '../job/AlsoPosted'
 import { ApplicationPanel } from '../job/ApplicationPanel'
 import { FitFeedback } from '../job/FitFeedback'
-import { AgeNotice, DuplicateNotice, JobBadges } from '../job/JobNotices'
+import { AgeNotice, JobBadges } from '../job/JobNotices'
+import { StageStepper } from '../job/StageStepper'
 import { shareJob } from '../job/share'
 import {
   BookmarkIcon, CheckCircleIcon, ChevronDownIcon, ChevronUpIcon, CloseIcon, ExternalLinkIcon, EyeOffIcon, ShareIcon,
@@ -49,9 +51,37 @@ function dayLabel(value) {
 }
 
 // The statusFocus value the last drawer acted on: the page's counter outlives the drawer, so a new drawer focuses the
-// picker only when the counter moved since (t opened it), not on every open after one t press (a focused picker would
-// take the o / a / s keys as type-ahead and change the status). 0 = a page that has not used t yet.
+// stage only when the counter moved since (t opened it), not on every open after one t press. 0 = a page that has not
+// used t yet.
 let seenStatusFocus = 0
+
+// About 10 lines of the description on phones until "Read more" (CSS .drawer-description.is-clamped, MOBILE only; on
+// desktop nothing overflows, so the button never shows). Keyed by job: a new job starts clamped.
+function Description({ text }) {
+  const ref = useRef(null)
+  const [expanded, setExpanded] = useState(false)
+  const [overflows, setOverflows] = useState(false)
+
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el || expanded) return undefined
+    const measure = () => setOverflows(el.scrollHeight > el.clientHeight + 1)
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [text, expanded])
+
+  return (
+    <>
+      <div ref={ref} className={`drawer-description ${expanded ? '' : 'is-clamped'}`}>{text}</div>
+      {(overflows || expanded) && (
+        <button type="button" className="text-button description-more hide-desktop" onClick={() => setExpanded(value => !value)} aria-expanded={expanded}>
+          {expanded ? 'Show less' : 'Read more'}
+        </button>
+      )}
+    </>
+  )
+}
 
 const statusOf = (job) => job.application_status || (job.is_applied ? 'applied' : 'not_applied')
 
@@ -70,13 +100,14 @@ function statusPatch(job, status) {
 // onMove(-1 | 1) steps through it (also j / k).
 // Page handlers (each optional; without one the drawer writes through the API itself and only updates its own view):
 // onApplied(job, applied); onHide(job, reason?) where reason is 'wrong_role' | 'too_senior' from the fit feedback;
-// onStatus(job, status) for the status picker, the Save button, the AgeNotice and "Save anyway";
+// onStatus(job, status) for the stage stepper, the Save button, the AgeNotice and "Save anyway";
 // onJobChange(jobKey, patch) after a note save ({ has_note, next_action_at, application_status });
-// onSnooze(job, nextActionAt) => Promise for the AgeNotice's "No reply yet" (sets the follow-up date, keeps the note;
-// the page patches next_action_at and shows the toast with Undo);
+// onSnooze(job, nextActionAt) => Promise for the AgeNotice's "No reply yet" / "Still waiting" (sets the follow-up date,
+// keeps the note; the page patches next_action_at and shows the toast with Undo);
 // onKnowSkill(skill) => Promise<boolean> adds a "Not in your profile" skill to Also know (the "+ I know this" buttons show
-// only with it); onMuteCompany(job); onOpenJob(jobKey) for "View it" on the duplicate notice; onToast(message) for short
-// messages ("Link copied"). statusFocus: change it (a counter) to focus the status picker (the t key).
+// only with it); onMuteCompany(job); onOpenJob(jobKey) for the "Also posted in" chips; onToast(message) for short
+// messages ("Link copied"). statusFocus: change it (a counter) to focus the current stage (the t key; Save on a job you
+// have not saved or applied to).
 // isAdmin shows the "Technical details"; since (useVisit) marks a job found since your last visit as New.
 // skillCounts (fit.js skillCounts of the listed jobs): "Not in your profile" lists the skills more of them ask for first,
 // MISSING_SHOWN of them until "+N more".
@@ -96,7 +127,8 @@ export function JobDrawer({
   const closeRef = useRef(null)
   const bodyRef = useRef(null)
   const panelRef = useRef(null)
-  const statusRef = useRef(null)
+  const statusRef = useRef(null) // the stepper's current stage
+  const saveRef = useRef(null)
   const jobKeyRef = useRef(jobProp.job_key)
   // First paint shows the panel shell (header, actions); the body renders right after, so the tap paints quickly
   const bodyReady = useDeferredValue(true, false)
@@ -110,6 +142,13 @@ export function JobDrawer({
 
   // Tab stays in the drawer; closing returns focus to the current job's row (it may have moved with j / k)
   useDialogFocus(panelRef, closeRef, () => document.querySelector(`[data-job-key="${CSS.escape(jobKeyRef.current)}"]`))
+
+  // A job change can take the focused control away (an Also posted chip opens its posting in this drawer): the focus
+  // goes to Close instead of dropping out of the dialog
+  useEffect(() => {
+    const active = document.activeElement
+    if (!active || active === document.body || !active.isConnected) closeRef.current?.focus({ preventScroll: true })
+  }, [jobKey])
 
   useEffect(() => {
     let cancelled = false
@@ -131,12 +170,12 @@ export function JobDrawer({
     }
   }, [onClose])
 
-  // The t key: focus the status picker (it renders with the body)
+  // The t key: focus the current stage, or Save on a job you have not saved or applied to
   useEffect(() => {
     if (!statusFocus) seenStatusFocus = 0
     if (!bodyReady || !statusFocus || statusFocus === seenStatusFocus) return
     seenStatusFocus = statusFocus
-    statusRef.current?.focus()
+    ;(statusRef.current?.isConnected ? statusRef.current : saveRef.current)?.focus()
   }, [statusFocus, bodyReady])
 
   const patchLocal = useCallback((key, patch) => {
@@ -160,6 +199,7 @@ export function JobDrawer({
   const status = statusOf(job)
   const applied = isApplied(job)
   const saved = status === 'saved'
+  const tracked = isTracked(job)
 
   const changeStatus = async (next) => {
     if (next === status) return
@@ -182,7 +222,8 @@ export function JobDrawer({
     else patchLocal(key, patch)
   }
 
-  // "No reply yet": the follow-up date a week out hides the AgeNotice until then (setNote without a note keeps the note)
+  // "No reply yet" / "Still waiting": the follow-up date a week out hides the AgeNotice until then (setNote without a
+  // note keeps the note)
   const snooze = async (nextActionAt) => {
     setSnoozing(true)
     try {
@@ -310,6 +351,106 @@ export function JobDrawer({
     </div>
   )
 
+  // The body, decide first and track later: a job you have not saved or applied to reads fit → its other postings →
+  // description → skills, with the note one collapsed row near the end; a saved or applied job gets its note and the
+  // "Heard back?" question first. Keyed sections, so the note keeps its state (and unsaved text) when saving the job
+  // moves it up.
+  const fitSection = (
+    <section key="fit" className="drawer-section drawer-fit" aria-labelledby="drawer-fit-title">
+      <div className="drawer-fit-head">
+        <FitRing score={job.fit_score} size="lg" />
+        <div>
+          <h3 id="drawer-fit-title">{scored ? fitLabel(job.fit_score) : 'Not scored yet'}</h3>
+          {/* without the parts the points would be made up, so the line needs them */}
+          {scored && hasParts && <p className="fit-points-line">{fitPointsLine(job)}</p>}
+        </div>
+      </div>
+      {hasParts ? <FitBreakdown job={job} profile={profile} slots={{ fit_skills: alsoAsks }} /> : alsoAsks}
+    </section>
+  )
+
+  const alsoPosted = <AlsoPosted key="also" job={job} onOpenJob={onOpenJob} />
+
+  const description = (
+    <section key="description" className="drawer-section">
+      <h3>Description</h3>
+      {current.error && <p className="form-error">{current.error}</p>}
+      {!extra && !current.error && <div className="skeleton-lines description-placeholder"><i /><i /><i /><i /></div>}
+      {extra && <Description key={jobKey} text={formatDescription(extra.description) || 'No description available.'} />}
+    </section>
+  )
+
+  const skillsSection = (
+    <section key="skills" className="drawer-section drawer-skills">
+      {skillsDetail && <h3>Skills</h3>}
+      {skillsDetail}
+      {notForYou.length > 0 && (
+        <div className="fit-not-for-you">
+          <p>Not in For you: {notForYou.map(reason => reason.text).join(' · ')}</p>
+          <div className="fit-fix-actions">
+            {notForYou.filter(reason => reason.action).map(reason => (
+              <Link key={reason.key} className="btn sm" to={reason.action.href}>{reason.action.label}</Link>
+            ))}
+            <button type="button" className="btn sm" onClick={() => changeStatus('saved')}>
+              Save anyway · saved jobs always show
+            </button>
+          </div>
+        </div>
+      )}
+      <FitFeedback
+        job={job}
+        onHide={(reason) => onHide(job, reason)}
+        onMuteCompany={muteCompany}
+        muted={job.muted_by === 'company' || mutedKey === jobKey}
+      />
+    </section>
+  )
+
+  const notePanel = (
+    <ApplicationPanel
+      key={`note-${jobKey}`}
+      job={job}
+      onNoteSaved={(patch) => noteSaved(jobKey, patch)}
+      notify={notify}
+    />
+  )
+
+  const ageNotice = <AgeNotice key="age" job={job} onStatus={changeStatus} onSnooze={snooze} busy={snoozing} />
+
+  const details = (
+    <section key="details" className="drawer-section">
+      <h3>Details</h3>
+      <dl className="detail-list">
+        <DetailRow label="Standard role" value={job.role_title} />
+        <DetailRow label="Also close to" value={extra?.role_alternative ?? job.role_alternative} />
+        <DetailRow label="Category" value={job.category} />
+        <DetailRow label="Level" value={job.experience_level || job.seniority_level} />
+        <DetailRow label="Location" value={job.location} />
+        <DetailRow label={job.cities?.length > 1 ? 'Cities' : 'City'} value={job.cities?.length ? job.cities.join(', ') : job.city} />
+        <DetailRow label="Work mode" value={job.work_mode ? WORK_MODE_LABELS[job.work_mode] || job.work_mode : null} />
+        <DetailRow label="Employment" value={EMPLOYMENT_LABELS[job.employment_kind] || job.employment_type} />
+        <DetailRow label="Function" value={extra?.job_function} />
+        <DetailRow label="Industry" value={extra?.industries} />
+        <DetailRow label="Source" value={job.source ? sourceLabel(job.source) : job.source} />
+        <DetailRow label="Posted" value={formatDate(job.posted_date)} />
+        <DetailRow label="First found" value={formatDate(job.first_seen_at)} />
+        <DetailRow label="Applied on" value={applied ? formatDate(job.applied_at) : null} />
+      </dl>
+      {isAdmin && (
+        <details className="drawer-tech">
+          <summary>Technical details</summary>
+          <dl className="detail-list">
+            <DetailRow label="Standard role" value={standardRoleLabel(job.role_title, roleScore)} />
+            <DetailRow label="Matched by" value={ROLE_METHODS[extra?.role_method] || extra?.role_method} />
+            <DetailRow label="Last seen" value={job.last_seen_at ? `${formatDate(job.last_seen_at)} (${formatRelativeAge(job.last_seen_at)})` : null} />
+            <DetailRow label="Seen in scrapes" value={job.times_seen ? `${job.times_seen}×` : null} />
+            <DetailRow label="Job key" value={jobKey} />
+          </dl>
+        </details>
+      )}
+    </section>
+  )
+
   return (
     <div className="drawer-root" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
       <div className="drawer-backdrop" onClick={onClose} aria-hidden="true" />
@@ -344,6 +485,10 @@ export function JobDrawer({
           </div>
         </header>
 
+        {/* A saved or applied job: its stage right under the header (above the actions on desktop; on phones the actions
+            stay in the bottom bar) */}
+        {tracked && <StageStepper key={jobKey} job={job} onChange={changeStatus} ref={statusRef} />}
+
         {/* Top row on desktop; a thumb-reach bottom bar on mobile (see CSS) */}
         <div className="drawer-actions">
           {url ? (
@@ -372,6 +517,7 @@ export function JobDrawer({
           {/* An applied job is kept anyway, so it has no Save (as its row has no bookmark) */}
           {!applied && (
             <button
+              ref={saveRef}
               type="button"
               className={`btn drawer-save ${saved ? 'is-saved' : ''}`}
               onClick={() => changeStatus(saved ? 'not_applied' : 'saved')}
@@ -394,91 +540,9 @@ export function JobDrawer({
 
         <div className="drawer-body" ref={bodyRef}>
           {bodyReady ? (
-            <>
-              <DuplicateNotice job={job} onOpenJob={onOpenJob} />
-              <AgeNotice job={job} onStatus={changeStatus} onSnooze={snooze} busy={snoozing} />
-
-              <section className="drawer-section" aria-labelledby="drawer-fit-title">
-                <div className="drawer-fit-head">
-                  <FitRing score={job.fit_score} size="lg" />
-                  <div>
-                    <h3 id="drawer-fit-title">{scored ? fitLabel(job.fit_score) : 'Not scored yet'}</h3>
-                    {/* without the parts the points would be made up, so the line needs them */}
-                    {scored && hasParts && <p className="fit-points-line">{fitPointsLine(job)}</p>}
-                  </div>
-                </div>
-                {hasParts ? <FitBreakdown job={job} profile={profile} slots={{ fit_skills: alsoAsks }} /> : alsoAsks}
-                {skillsDetail}
-                {notForYou.length > 0 && (
-                  <div className="fit-not-for-you">
-                    <p>Not in For you: {notForYou.map(reason => reason.text).join(' · ')}</p>
-                    <div className="fit-fix-actions">
-                      {notForYou.filter(reason => reason.action).map(reason => (
-                        <Link key={reason.key} className="btn sm" to={reason.action.href}>{reason.action.label}</Link>
-                      ))}
-                      <button type="button" className="btn sm" onClick={() => changeStatus('saved')}>
-                        Save anyway · saved jobs always show
-                      </button>
-                    </div>
-                  </div>
-                )}
-                <FitFeedback
-                  job={job}
-                  onHide={(reason) => onHide(job, reason)}
-                  onMuteCompany={muteCompany}
-                  muted={job.muted_by === 'company' || mutedKey === jobKey}
-                />
-              </section>
-
-              <ApplicationPanel
-                key={jobKey}
-                job={job}
-                status={status}
-                onStatus={changeStatus}
-                onNoteSaved={(patch) => noteSaved(jobKey, patch)}
-                notify={notify}
-                statusRef={statusRef}
-              />
-
-              <section className="drawer-section">
-                <h3>Description</h3>
-                {current.error && <p className="form-error">{current.error}</p>}
-                {!extra && !current.error && <div className="skeleton-lines description-placeholder"><i /><i /><i /><i /></div>}
-                {extra && <div className="drawer-description">{formatDescription(extra.description) || 'No description available.'}</div>}
-              </section>
-
-              <section className="drawer-section">
-                <h3>Details</h3>
-                <dl className="detail-list">
-                  <DetailRow label="Standard role" value={job.role_title} />
-                  <DetailRow label="Also close to" value={extra?.role_alternative ?? job.role_alternative} />
-                  <DetailRow label="Category" value={job.category} />
-                  <DetailRow label="Level" value={job.experience_level || job.seniority_level} />
-                  <DetailRow label="Location" value={job.location} />
-                  <DetailRow label={job.cities?.length > 1 ? 'Cities' : 'City'} value={job.cities?.length ? job.cities.join(', ') : job.city} />
-                  <DetailRow label="Work mode" value={job.work_mode ? WORK_MODE_LABELS[job.work_mode] || job.work_mode : null} />
-                  <DetailRow label="Employment" value={EMPLOYMENT_LABELS[job.employment_kind] || job.employment_type} />
-                  <DetailRow label="Function" value={extra?.job_function} />
-                  <DetailRow label="Industry" value={extra?.industries} />
-                  <DetailRow label="Source" value={job.source ? sourceLabel(job.source) : job.source} />
-                  <DetailRow label="Posted" value={formatDate(job.posted_date)} />
-                  <DetailRow label="First found" value={formatDate(job.first_seen_at)} />
-                  <DetailRow label="Applied on" value={applied ? formatDate(job.applied_at) : null} />
-                </dl>
-                {isAdmin && (
-                  <details className="drawer-tech">
-                    <summary>Technical details</summary>
-                    <dl className="detail-list">
-                      <DetailRow label="Standard role" value={standardRoleLabel(job.role_title, roleScore)} />
-                      <DetailRow label="Matched by" value={ROLE_METHODS[extra?.role_method] || extra?.role_method} />
-                      <DetailRow label="Last seen" value={job.last_seen_at ? `${formatDate(job.last_seen_at)} (${formatRelativeAge(job.last_seen_at)})` : null} />
-                      <DetailRow label="Seen in scrapes" value={job.times_seen ? `${job.times_seen}×` : null} />
-                      <DetailRow label="Job key" value={jobKey} />
-                    </dl>
-                  </details>
-                )}
-              </section>
-            </>
+            tracked
+              ? [notePanel, ageNotice, fitSection, alsoPosted, description, skillsSection, details]
+              : [fitSection, alsoPosted, description, skillsSection, notePanel, details]
           ) : (
             <div className="skeleton-lines drawer-section"><i /><i /><i /><i /></div>
           )}

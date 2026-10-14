@@ -269,7 +269,7 @@ export function ProfileEditor({ profile, onSave, onboarding = false, anchor = ''
           resolve={resolveCity}
           placeholder="e.g. Bengaluru"
           help={help(
-            'Optional: the My cities chip shows jobs in these cities.',
+            `Optional, up to ${MAX_CITIES}: the My cities chip then shows jobs there (and remote ones).`,
             'The My cities chip on the job list shows only jobs in these cities; your job list is not limited to them otherwise. When the LinkedIn search is run (by hand only, for now), your roles are also searched in each city. Leave empty for all of India.',
           )}
           maxItems={MAX_CITIES}

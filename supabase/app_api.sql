@@ -2,10 +2,10 @@
 -- transaction. Idempotent: safe to re-run.
 --
 --   public.app_read(action, params)    signed-in users: jobs, summary, trend, facets, job, jobRow, jobGroup, jobNote,
---                                      trackedJobs, hiddenJobs, profile, refs, status; admins also allowedEmails,
---                                      companyHealth, systemStatus, metrics
+--                                      trackedJobs, hiddenJobs, profile, refs, status, checkin; admins also
+--                                      allowedEmails, companyHealth, systemStatus, metrics
 --   public.app_write(action, params)   signed-in users: setApplied, setStatus, setHidden, setNote, restoreHidden,
---                                      saveProfile, saveMuteRules, ping; admins also setAllowedEmail
+--                                      saveProfile, saveMuteRules, ping, markCheckin; admins also setAllowedEmail
 --   public.pipeline_*                  service role only (GitHub Actions)
 -- Trust release additions (every older action, parameter and returned key keeps its meaning):
 --   jobs     tab 'inbox' (untracked jobs only; 'pending' and 'all' still work), expiring: true (the Expiring tonight
@@ -16,6 +16,17 @@
 --   metrics  admin: aggregates of app.user_activity_day and app.user_job_state (8 ISO weeks and guardrails)
 -- The triage writes (setApplied, setStatus, setHidden, setNote, restoreHidden) also keep app.user_activity_day and
 -- user_job_state.fit_at_action current (app.record_triage).
+-- Track release additions (every older action, parameter and returned key keeps its meaning):
+--   status       application status 'no_response' (No reply: an applied stage, after offer; kept past expiry, never muted)
+--   jobs         needsAction: true (action_rank > 0), stageGroup 'open' | 'finished', sort 'action' (Needs action first)
+--   rows         replied_at, interviewed_at (first answer / first interview, kept through a later Rejected or Withdrawn)
+--                and action_rank (1 follow-up date due, 2 interview without update, 3 no reply, 0 nothing to do)
+--   summary      needs_action and funnel (Applied -> Replied -> Interview -> Offer, median reply days, by source / role)
+--   checkin      the applications the weekly "How did last week go?" sheet asks about; markCheckin records it was shown
+--   status       checked_at (the newest ATS Scrapers decision, when it found no new jobs)
+--   systemStatus triggers (admin: the last pipeline decisions); metrics activation (admin)
+--   pipeline_record_trigger (service role: one pipeline decision of the ATS Scrapers workflow)
+-- metrics' outcome_capture counts 'no_response' as moved (anything past 'applied' is a recorded answer).
 -- Every call returns {"rows": [...]}. Errors are raised with a readable message (PostgREST error.message):
 -- 28000 sign in required, 42501 not allowed / admins only / service role only, 22023 invalid input.
 --
@@ -79,12 +90,35 @@ CREATE OR REPLACE FUNCTION app.c_max_page_size() RETURNS int LANGUAGE sql IMMUTA
 CREATE OR REPLACE FUNCTION app.c_default_page_size() RETURNS int LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT 48 $$;
 -- keep in sync: src/utils/gold.js APPLICATION_STATUSES (and the CHECK on app.user_job_state.application_status)
 CREATE OR REPLACE FUNCTION app.c_application_statuses() RETURNS text[] LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT ARRAY[
-  'not_applied', 'saved', 'applied', 'interviewing', 'offer', 'rejected', 'withdrawn'
+  'not_applied', 'saved', 'applied', 'interviewing', 'offer', 'no_response', 'rejected', 'withdrawn'
 ]::text[] $$;
 -- keep in sync: src/utils/gold.js APPLIED_STATUSES (statuses that count as applied: is_applied)
 CREATE OR REPLACE FUNCTION app.c_applied_statuses() RETURNS text[] LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT ARRAY[
-  'applied', 'interviewing', 'offer', 'rejected', 'withdrawn'
+  'applied', 'interviewing', 'offer', 'no_response', 'rejected', 'withdrawn'
 ]::text[] $$;
+-- keep in sync: src/utils/gold.js REPLY_STATUSES (heard back at all: the funnel's "replied")
+CREATE OR REPLACE FUNCTION app.c_reply_statuses() RETURNS text[] LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT ARRAY[
+  'interviewing', 'offer', 'rejected'
+]::text[] $$;
+-- keep in sync: src/utils/gold.js OPEN_STATUSES (the Applied tab's main list with Any stage: stageGroup 'open')
+CREATE OR REPLACE FUNCTION app.c_open_statuses() RETURNS text[] LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT ARRAY[
+  'applied', 'interviewing', 'offer'
+]::text[] $$;
+-- keep in sync: src/utils/gold.js FINISHED_STATUSES (the Applied tab's "Finished" fold: stageGroup 'finished')
+CREATE OR REPLACE FUNCTION app.c_finished_statuses() RETURNS text[] LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT ARRAY[
+  'no_response', 'rejected', 'withdrawn'
+]::text[] $$;
+-- keep in sync: src/utils/gold.js NO_REPLY_DAYS (applied this long ago with no answer: "No reply" is suggested)
+CREATE OR REPLACE FUNCTION app.c_no_reply_days() RETURNS int LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT 21 $$;
+-- keep in sync: src/utils/gold.js INTERVIEW_STALE_DAYS (interviewing with no update for this long: Needs action)
+CREATE OR REPLACE FUNCTION app.c_interview_stale_days() RETURNS int LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT 7 $$;
+-- keep in sync: src/utils/gold.js CHECKIN_MIN_DAYS (the weekly check-in asks about applications without an update for
+-- this long; a snooze from it asks again after as many days)
+CREATE OR REPLACE FUNCTION app.c_checkin_min_days() RETURNS int LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT 7 $$;
+-- keep in sync: most applications one check-in read returns (pinned in src/utils/sql_constants.test.js)
+CREATE OR REPLACE FUNCTION app.c_checkin_max() RETURNS int LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT 20 $$;
+-- keep in sync: rows of summary funnel.by_source / by_role (pinned in src/utils/sql_constants.test.js)
+CREATE OR REPLACE FUNCTION app.c_funnel_top() RETURNS int LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT 5 $$;
 -- keep in sync: src/utils/gold.js HIDE_REASONS (and the CHECKs in app_schema.sql)
 CREATE OR REPLACE FUNCTION app.c_hide_reasons() RETURNS text[] LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT ARRAY[
   'too_senior', 'wrong_role', 'company', 'location', 'duplicate', 'other'
@@ -135,6 +169,16 @@ CREATE OR REPLACE FUNCTION app.c_visit_gap_minutes() RETURNS int LANGUAGE sql IM
 CREATE OR REPLACE FUNCTION app.c_activity_keep_days() RETURNS int LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT 180 $$;
 -- keep in sync: largest counter one ping may add (pinned in src/utils/sql_constants.test.js)
 CREATE OR REPLACE FUNCTION app.c_max_ping_count() RETURNS int LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT 500 $$;
+-- keep in sync: databricks/jobs/record_trigger.py DECISIONS (pinned by databricks/jobs/test_trigger.py). Defined in
+-- app_schema.sql too (the CHECK on app.pipeline_triggers.decision calls it), with the same body.
+CREATE OR REPLACE FUNCTION app.c_trigger_decisions() RETURNS text[] LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT ARRAY[
+  'started', 'started_daily', 'waiting', 'recent', 'paused', 'no_new', 'failed'
+]::text[] $$;
+-- keep in sync: rows of app.pipeline_triggers kept (pinned in src/utils/sql_constants.test.js)
+CREATE OR REPLACE FUNCTION app.c_trigger_keep() RETURNS int LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT 50 $$;
+-- keep in sync: databricks/jobs/trigger_job.py --idle-hours default (with no new jobs the pipeline still starts when its
+-- newest run started this many hours ago: the daily run; pinned by databricks/jobs/test_trigger.py)
+CREATE OR REPLACE FUNCTION app.c_daily_floor_hours() RETURNS int LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT 20 $$;
 
 -- =====================================================================================================================
 -- Small helpers
@@ -692,7 +736,11 @@ CREATE TYPE app.user_job AS (
   fit_core_matched int,
   fit_exp_years int,
   job_skills_known boolean,
-  in_for_you boolean
+  in_for_you boolean,
+  -- added with the Track release (appended)
+  replied_at timestamptz,
+  interviewed_at timestamptz,
+  action_rank smallint
 );
 DO $$
 BEGIN
@@ -825,6 +873,7 @@ scored AS (
     coalesce(st.is_applied, false) AS is_applied, st.applied_at,
     coalesce(st.is_hidden, false) AS is_hidden, st.hidden_at,
     coalesce(st.application_status, 'not_applied') AS application_status, st.status_updated_at, st.next_action_at,
+    st.replied_at, st.interviewed_at,
     coalesce(st.note <> '', false) AS has_note,
     coalesce(st.is_applied OR st.application_status <> 'not_applied', false) AS is_tracked,
     j.city, j.cities, j.work_mode, j.employment_kind, j.company_key, j.dup_group,
@@ -941,7 +990,23 @@ SELECT
   p.core_matched AS fit_core_matched,
   p.exp_min AS fit_exp_years,
   NOT p.no_job_skills AS job_skills_known,
-  p.is_tracked OR (p.role_match AND fs.fit_score >= app.c_match_min_fit() AND NOT p.above_experience) AS in_for_you
+  p.is_tracked OR (p.role_match AND fs.fit_score >= app.c_match_min_fit() AND NOT p.above_experience) AS in_for_you,
+  p.replied_at,
+  p.interviewed_at,
+  -- Needs action (the Applied tab's chip and sort, one definition): 1 = your follow-up date has come (any open stage or
+  -- No reply); 2 = interviewing with no update for c_interview_stale_days(); 3 = applied with no update for
+  -- c_follow_up_days(); 0 = nothing to do (also while a follow-up date is still ahead). Untracked and finished jobs: 0.
+  -- follow_up above (kept for older clients) equals application_status = 'applied' AND action_rank IN (1, 3) whenever
+  -- status_updated_at is set (every write sets it; follow_up does not fall back to applied_at).
+  CASE
+    WHEN p.application_status IN ('applied', 'interviewing', 'offer', 'no_response') AND p.next_action_at <= current_date THEN 1
+    WHEN p.next_action_at > current_date THEN 0
+    WHEN p.application_status = 'interviewing'
+         AND coalesce(p.status_updated_at, p.applied_at) < now() - make_interval(days => app.c_interview_stale_days()) THEN 2
+    WHEN p.application_status = 'applied'
+         AND coalesce(p.status_updated_at, p.applied_at) < now() - make_interval(days => app.c_follow_up_days()) THEN 3
+    ELSE 0
+  END::smallint AS action_rank
 FROM parts p
 CROSS JOIN LATERAL (
   -- Spark: DOUBLE arithmetic in this order (0.15 * experience is DECIMAL x DECIMAL, then DOUBLE), round = HALF_UP.
@@ -978,6 +1043,9 @@ $$;
 --   tab     inbox = untracked (not saved, applied or staged), applied = applied (any stage), pending = not applied
 --           (saved included), saved = status saved
 --   closed / followUp / stage
+--   needsAction  true: action_rank > 0 (Needs action)
+--   stageGroup   'open' = applied / interviewing / offer, 'finished' = no_response / rejected / withdrawn (the Applied
+--                tab's main list and its Finished fold); any other value is ignored
 -- or, with expiring: true, instead of all of these: untracked, For you, not muted and on its last day before the
 -- publish deletes it (job date <= today - c_job_delete_after_days(), UTC; the rule of src/utils/job.js expiryHint).
 -- The text and panel filters still apply; scope does not matter (For you only).
@@ -1014,6 +1082,9 @@ WITH f AS MATERIALIZED (
     CASE WHEN app.js_text(p -> 'closed', 10) IN ('only', 'hide') THEN app.js_text(p -> 'closed', 10) ELSE '' END AS closed,
     coalesce(p -> 'followUp' = 'true'::jsonb, false) AS follow_up,
     CASE WHEN app.js_text(p -> 'stage', 20) = ANY (app.c_applied_statuses()) THEN app.js_text(p -> 'stage', 20) ELSE '' END AS stage,
+    coalesce(p -> 'needsAction' = 'true'::jsonb, false) AS needs_action,
+    CASE app.js_text(p -> 'stageGroup', 20) WHEN 'open' THEN app.c_open_statuses() WHEN 'finished' THEN app.c_finished_statuses()
+    END AS stage_group,
     coalesce(p_mode = 'list' AND p -> 'expiring' = 'true'::jsonb, false) AS expiring,
     current_date - app.c_job_delete_after_days() AS expiring_on
   FROM (SELECT lower(app.js_text(p -> 'q', 100)) AS q) raw
@@ -1066,6 +1137,8 @@ WHERE NOT u.is_hidden AND (coalesce(u.is_active, true) OR u.is_tracked)
     AND (f.closed = '' OR (f.closed = 'only') = NOT coalesce(u.is_active, true))
     AND (NOT f.follow_up OR u.follow_up)
     AND (f.stage = '' OR u.application_status = f.stage)
+    AND (NOT f.needs_action OR u.action_rank > 0)
+    AND (f.stage_group IS NULL OR u.application_status = ANY (f.stage_group))
   ) END)
 $$;
 
@@ -1083,7 +1156,7 @@ $$;
 CREATE OR REPLACE FUNCTION app.read_jobs(p_uid uuid, p jsonb) RETURNS jsonb
 LANGUAGE plpgsql STABLE AS $$
 DECLARE
-  v_sort text := CASE WHEN jsonb_typeof(p -> 'sort') = 'string' AND (p ->> 'sort') IN ('recent', 'found', 'applied', 'expiring')
+  v_sort text := CASE WHEN jsonb_typeof(p -> 'sort') = 'string' AND (p ->> 'sort') IN ('recent', 'found', 'applied', 'expiring', 'action')
                       THEN p ->> 'sort' ELSE 'fit' END;
   v_collapse boolean := p -> 'collapse' IS DISTINCT FROM 'false'::jsonb;
   v_limit int := CASE WHEN p -> 'expiring' = 'true'::jsonb
@@ -1099,22 +1172,26 @@ BEGIN
   --    and paged, and total_count counts them.
   --    Sorts (then job_key): fit = fit_score, job date, first_seen_at, role_score; recent = job date, fit_score;
   --    found = first_seen_at, fit_score; applied = applied_at, status_updated_at; expiring = job date ascending (soonest
-  --    gone first), fit_score, first_seen_at. k0..k6 hold the sort keys of the chosen sort (NULL where unused; k0 is
-  --    the job date turned around, so every key sorts DESC) so ORDER BY ... LIMIT can use a top-N sort.
+  --    gone first), fit_score, first_seen_at; action (Needs action first) = action_rank 1, 2, 3, then 0; within rank 1
+  --    the oldest follow-up date first, within ranks 2 and 3 the longest without an update (UTC day) first; then
+  --    applied_at (newest first, as the applied sort). k0..k6 hold the sort keys of the chosen sort (NULL where unused;
+  --    k0 and k1 may be turned around, so every key sorts DESC) so ORDER BY ... LIMIT can use a top-N sort.
   --    expiring: true (the Expiring tonight list) returns at most c_expiring_max() rows; total_count counts them all.
   WITH x AS MATERIALIZED (
     SELECT f.job_key, app.group_key(f.job_key, f.dup_group, f.is_tracked, v_collapse) AS gk, f.fit_score,
       coalesce(f.posted_date, (f.first_seen_at AT TIME ZONE 'UTC')::date) AS job_date, f.first_seen_at, f.role_score,
-      f.applied_at, f.status_updated_at, coalesce(f.city, f.location) AS place
+      f.applied_at, f.status_updated_at, coalesce(f.city, f.location) AS place, f.action_rank, f.next_action_at
     FROM app.filtered_jobs(p_uid, p, 'list') f
   ),
   -- (the representative's sort keys travel along: x is estimated at one row, so a join back to x became a nested loop
   --  that re-ran this window once per job, 8 s for 1,400 jobs)
   by_group AS (
     SELECT n.job_key, n.dup_count, n.keys[2:21] AS dup_keys, n.places[2:21] AS dup_locations,
-      n.fit_score, n.job_date, n.first_seen_at, n.role_score, n.applied_at, n.status_updated_at
+      n.fit_score, n.job_date, n.first_seen_at, n.role_score, n.applied_at, n.status_updated_at, n.action_rank,
+      n.next_action_at
     FROM (
       SELECT x.job_key, x.fit_score, x.job_date, x.first_seen_at, x.role_score, x.applied_at, x.status_updated_at,
+        x.action_rank, x.next_action_at,
         row_number() OVER w AS rn,
         count(*) OVER w_all - 1 AS dup_count,
         array_agg(x.job_key) OVER w_all AS keys,
@@ -1129,10 +1206,15 @@ BEGIN
   page AS (
     SELECT g.job_key, g.dup_count, g.dup_keys, g.dup_locations,
       count(*) OVER () AS total_count,
-      CASE WHEN v_sort = 'expiring' THEN DATE '2000-01-01' - g.job_date END AS k0,
-      CASE WHEN v_sort IN ('fit', 'expiring') THEN g.fit_score END AS k1,
+      CASE v_sort WHEN 'expiring' THEN DATE '2000-01-01' - g.job_date
+                  WHEN 'action' THEN CASE g.action_rank WHEN 1 THEN 3 WHEN 2 THEN 2 WHEN 3 THEN 1 ELSE 0 END END AS k0,
+      CASE WHEN v_sort IN ('fit', 'expiring') THEN g.fit_score
+           -- days before 2100: larger = older (the due date for rank 1, the last update for ranks 2 and 3)
+           WHEN v_sort = 'action' AND g.action_rank > 0 THEN DATE '2100-01-01' - coalesce(
+             CASE WHEN g.action_rank = 1 THEN g.next_action_at END,
+             (coalesce(g.status_updated_at, g.applied_at) AT TIME ZONE 'UTC')::date) END AS k1,
       CASE WHEN v_sort IN ('fit', 'recent') THEN g.job_date END AS k2,
-      CASE WHEN v_sort IN ('fit', 'found', 'expiring') THEN g.first_seen_at WHEN v_sort = 'applied' THEN g.applied_at END AS k3,
+      CASE WHEN v_sort IN ('fit', 'found', 'expiring') THEN g.first_seen_at WHEN v_sort IN ('applied', 'action') THEN g.applied_at END AS k3,
       CASE WHEN v_sort = 'fit' THEN g.role_score END AS k4,
       CASE WHEN v_sort IN ('recent', 'found') THEN g.fit_score END AS k5,
       CASE WHEN v_sort = 'applied' THEN g.status_updated_at END AS k6
@@ -1170,14 +1252,56 @@ $$;
 --   expiring         untracked, For you, not muted, on its last day (as the expiring: true list); the time window and
 --                    the scope do not apply. expiring_strong: of these, fit >= c_strong_fit()
 --   triaged_today    saved + applied + hidden of today's app.user_activity_day row (net of same-day undos)
+--   needs_action     applied jobs with action_rank > 0 (= the Applied tab's needsAction list total_count)
+--   funnel           your applications (the panel filters, scope and q apply, the time window does not): applied,
+--                    replied (an answer at all: replied_at, or Interviewing / Offer / Rejected), interviewed
+--                    (interviewed_at, or Interviewing / Offer), offers, no_reply, outcomes (anything past Applied),
+--                    median_reply_days (applied_at to replied_at, 1 decimal; null without replies) and the top
+--                    c_funnel_top() sources and roles by applications (rows without a source or role left out)
 -- strong_fit keeps its old meaning (tracked jobs included): parity.py and older clients compare it.
 CREATE OR REPLACE FUNCTION app.read_summary(p_uid uuid, p jsonb) RETURNS jsonb
 LANGUAGE sql STABLE AS $$
   WITH x AS MATERIALIZED (
     SELECT f.job_key, f.is_applied, f.application_status, f.is_tracked, f.is_active, f.follow_up, f.first_seen_at,
       f.fit_score, f.muted_by, f.fresh, f.posted_date, f.in_for_you,
-      app.group_key(f.job_key, f.dup_group, f.is_tracked, p -> 'collapse' IS DISTINCT FROM 'false'::jsonb) AS gk
+      app.group_key(f.job_key, f.dup_group, f.is_tracked, p -> 'collapse' IS DISTINCT FROM 'false'::jsonb) AS gk,
+      f.source, f.role_title, f.applied_at, f.replied_at, f.interviewed_at, f.action_rank
     FROM app.filtered_jobs(p_uid, p, 'summary') f
+  ),
+  -- the applications of the funnel, each with "heard back" / "had an interview" decided once
+  apps AS (
+    SELECT x.source, x.role_title, x.application_status, x.applied_at, x.replied_at,
+      x.replied_at IS NOT NULL OR x.application_status = ANY (app.c_reply_statuses()) AS replied,
+      x.interviewed_at IS NOT NULL OR x.application_status IN ('interviewing', 'offer') AS interviewed
+    FROM x
+    WHERE x.is_applied
+  ),
+  funnel AS (
+    SELECT jsonb_build_object(
+      'applied', count(*),
+      'replied', count(*) FILTER (WHERE a.replied),
+      'interviewed', count(*) FILTER (WHERE a.interviewed),
+      'offers', count(*) FILTER (WHERE a.application_status = 'offer'),
+      'no_reply', count(*) FILTER (WHERE a.application_status = 'no_response'),
+      'outcomes', count(*) FILTER (WHERE a.application_status <> 'applied'),
+      -- round(numeric, 1) rounds half away from zero: half up for these non-negative days
+      'median_reply_days', round((percentile_cont(0.5) WITHIN GROUP (
+                             ORDER BY extract(epoch FROM a.replied_at - a.applied_at) / 86400)
+                             FILTER (WHERE a.replied_at >= a.applied_at))::numeric, 1),
+      'by_source', coalesce((
+        SELECT jsonb_agg(jsonb_build_object('source', t.source, 'applied', t.applied, 'replied', t.replied)
+                         ORDER BY t.applied DESC, t.source COLLATE "C")
+        FROM (SELECT b.source, count(*) AS applied, count(*) FILTER (WHERE b.replied) AS replied
+              FROM apps b WHERE b.source IS NOT NULL GROUP BY b.source
+              ORDER BY count(*) DESC, b.source COLLATE "C" LIMIT app.c_funnel_top()) t), '[]'::jsonb),
+      'by_role', coalesce((
+        SELECT jsonb_agg(jsonb_build_object('role', t.role_title, 'applied', t.applied, 'replied', t.replied)
+                         ORDER BY t.applied DESC, t.role_title COLLATE "C")
+        FROM (SELECT b.role_title, count(*) AS applied, count(*) FILTER (WHERE b.replied) AS replied
+              FROM apps b WHERE b.role_title IS NOT NULL GROUP BY b.role_title
+              ORDER BY count(*) DESC, b.role_title COLLATE "C" LIMIT app.c_funnel_top()) t), '[]'::jsonb)
+    ) AS counts
+    FROM apps a
   ),
   since AS (SELECT app.js_timestamp(p -> 'since') AS at),
   stages AS (
@@ -1222,7 +1346,9 @@ LANGUAGE sql STABLE AS $$
     'stages', (SELECT s.counts FROM stages s),
     'follow_up', count(*) FILTER (WHERE x.follow_up),
     'closed', count(*) FILTER (WHERE x.is_tracked AND NOT coalesce(x.is_active, true)),
-    'muted', count(*) FILTER (WHERE x.fresh AND x.muted_by IS NOT NULL)
+    'muted', count(*) FILTER (WHERE x.fresh AND x.muted_by IS NOT NULL),
+    'needs_action', count(*) FILTER (WHERE x.is_applied AND x.action_rank > 0),
+    'funnel', (SELECT f.counts FROM funnel f)
   )))
   FROM x
 $$;
@@ -1363,6 +1489,42 @@ LANGUAGE sql STABLE AS $$
   ) t
 $$;
 
+-- The applications the weekly "How did last week go?" sheet asks about: Applied or Interviewing, no update for
+-- c_checkin_min_days() and no follow-up date still ahead (a snooze from the sheet sets one), not hidden; oldest update
+-- first, at most c_checkin_max() of them (total counts them all). Each in the list row shape plus days_since_update (UTC
+-- days) and suggest ('no_response' once a plain application is c_no_reply_days() old, as src/utils/tracker.js
+-- suggestedStage). Always one row; last_checkin_at = when the sheet was last shown (markCheckin), null if never.
+-- Without a profile: total 0 and no jobs.
+CREATE OR REPLACE FUNCTION app.read_checkin(p_uid uuid) RETURNS jsonb
+LANGUAGE sql STABLE AS $$
+  WITH due AS (
+    SELECT u AS job, coalesce(u.status_updated_at, u.applied_at) AS since,
+      row_number() OVER (ORDER BY coalesce(u.status_updated_at, u.applied_at), u.job_key COLLATE "C") AS ord
+    FROM app.user_job_state st
+    JOIN app.user_jobs(p_uid) u ON u.job_key = st.job_key
+    WHERE st.user_id = p_uid AND st.is_applied AND NOT st.is_hidden
+      AND st.application_status IN ('applied', 'interviewing')
+      AND coalesce(st.status_updated_at, st.applied_at) <= now() - make_interval(days => app.c_checkin_min_days())
+      AND (st.next_action_at IS NULL OR st.next_action_at <= current_date)
+      -- without a profile markCheckin cannot record the sheet, so it would count as due on every visit
+      AND EXISTS (SELECT 1 FROM app.user_profile up WHERE up.profile_id = p_uid)
+  )
+  SELECT jsonb_build_object('rows', jsonb_build_array(jsonb_build_object(
+    'last_checkin_at', (SELECT up.last_checkin_at FROM app.user_profile up WHERE up.profile_id = p_uid),
+    'total', (SELECT count(*) FROM due),
+    'jobs', coalesce((
+      SELECT jsonb_agg(app.list_row(to_jsonb(d.job)) || jsonb_build_object(
+               'dup_count', 0, 'dup_keys', '[]'::jsonb, 'dup_locations', '[]'::jsonb,
+               'days_since_update', current_date - (d.since AT TIME ZONE 'UTC')::date,
+               'suggest', CASE WHEN (d.job).application_status = 'applied'
+                                    AND (d.job).applied_at <= now() - make_interval(days => app.c_no_reply_days())
+                               THEN 'no_response' END)
+             ORDER BY d.ord)
+      FROM due d
+      WHERE d.ord <= app.c_checkin_max()), '[]'::jsonb)
+  )))
+$$;
+
 CREATE OR REPLACE FUNCTION app.read_hidden_jobs(p_uid uuid) RETURNS jsonb
 LANGUAGE sql STABLE AS $$
   SELECT jsonb_build_object('rows', coalesce(jsonb_agg(to_jsonb(h) - 'rn' ORDER BY h.rn), '[]'::jsonb))
@@ -1410,14 +1572,20 @@ LANGUAGE sql STABLE AS $$
   FROM refs x
 $$;
 
--- When the job data was last published (the UI shows "Updated X ago" and refreshes when run_id changes)
+-- When the job data was last published (the UI shows "Updated X ago" and refreshes when run_id changes), and checked_at:
+-- the newest ATS Scrapers decision when it found no new jobs (the pipeline did not run; "Checked 1 h ago · no new
+-- jobs"). Null when the newest decision is anything else: after a run that found new jobs but failed or was paused
+-- before it published, an older "no new jobs" check is no longer true, and "Updated X ago" (or the delay banner) shows.
 CREATE OR REPLACE FUNCTION app.read_status() RETURNS jsonb
 LANGUAGE sql STABLE AS $$
   SELECT jsonb_build_object('rows', jsonb_build_array(jsonb_build_object(
     'run_id', ps.run_id,
     'snapshot_at', ps.snapshot_at,
     'published_at', ps.published_at,
-    'jobs', (ps.counts ->> 'jobs')::bigint
+    'jobs', (ps.counts ->> 'jobs')::bigint,
+    'checked_at', (SELECT t.decided_at FROM (SELECT k.decided_at, k.decision FROM app.pipeline_triggers k
+                                             ORDER BY k.decided_at DESC, k.id DESC LIMIT 1) t
+                   WHERE t.decision = 'no_new')
   )))
   FROM (SELECT 1) one
   LEFT JOIN app.pipeline_status ps ON ps.id = 1
@@ -1460,7 +1628,8 @@ $$;
 --   weekly_return    users active on 1+ / 3+ of the last 7 days
 --   retention        accounts created in the last 60 days, back the next day (d1) and on day 7 (d7), each with the
 --                    accounts old enough to tell
---   outcome_capture  applications 14+ days old and how many moved past 'applied'
+--   outcome_capture  applications 14+ days old and how many moved past 'applied' (No reply counts as moved)
+--   activation       the accounts of retention that saved or applied to a job on their signup day or the next (UTC)
 --   guardrails       last 28 days of applications: duplicates (an earlier application of yours in the same dup_group)
 --                    and the median hours from first seen to applied
 CREATE OR REPLACE FUNCTION app.read_metrics() RETURNS jsonb
@@ -1533,6 +1702,13 @@ LANGUAGE sql STABLE AS $$
       count(*) FILTER (WHERE s.day + 7 <= current_date
                          AND EXISTS (SELECT 1 FROM active_days ad WHERE ad.user_id = s.id AND ad.day = s.day + 7)) AS d7
     FROM signups s
+  ),
+  act AS (
+    SELECT count(*) AS new_users,
+      count(*) FILTER (WHERE EXISTS (SELECT 1 FROM app.user_activity_day d
+                                     WHERE d.user_id = s.id AND d.day IN (s.day, s.day + 1) AND d.saved + d.applied > 0))
+        AS activated
+    FROM signups s
   )
   SELECT jsonb_build_object('rows', jsonb_build_array(jsonb_build_object(
     'generated_at', now(),
@@ -1554,7 +1730,10 @@ LANGUAGE sql STABLE AS $$
     'guardrails', (SELECT jsonb_build_object('applications_28d', r.n, 'duplicate_applications_28d', r.dup,
                      'duplicate_rate', CASE WHEN r.n > 0 THEN round(r.dup::numeric / r.n, 2) END,
                      'median_hours_to_apply', round(r.median_hours::numeric, 1))
-                   FROM r)
+                   FROM r),
+    'activation', (SELECT jsonb_build_object('new_users', a.new_users, 'activated', a.activated,
+                     'share', CASE WHEN a.new_users > 0 THEN round(a.activated::numeric / a.new_users, 2) END)
+                   FROM act a)
   )))
 $$;
 
@@ -1578,7 +1757,8 @@ LANGUAGE sql STABLE AS $$
 $$;
 
 -- Admin System tab: database size, counts, the published snapshot, the last pipeline runs (with what their publish
--- did), the last scrapes per source and the LinkedIn search cap
+-- did), the last scrapes per source, the LinkedIn search cap and the last 10 pipeline decisions of the ATS Scrapers
+-- workflow (triggers: whether it started the Databricks pipeline and why not)
 CREATE OR REPLACE FUNCTION app.read_system_status() RETURNS jsonb
 LANGUAGE sql STABLE AS $$
   WITH runs AS (
@@ -1629,6 +1809,14 @@ LANGUAGE sql STABLE AS $$
     'linkedin', (SELECT jsonb_build_object('finished_at', s.finished_at, 'searches_total', s.searches_total,
                                            'searches_cap', s.searches_cap, 'dropped', to_jsonb(s.dropped_searches))
                  FROM scrapes s WHERE s.source = 'linkedin' AND s.rn = 1),
+    'triggers', coalesce((SELECT jsonb_agg(jsonb_build_object(
+                            'decided_at', t.decided_at, 'decision', t.decision, 'forced', t.forced,
+                            'uploaded_files', t.uploaded_files, 'new_files', t.new_files, 'new_jobs', t.new_jobs,
+                            'run_id', t.run_id, 'result', t.result, 'message', t.message, 'event', t.event,
+                            'workflow', t.workflow, 'github_run_id', t.github_run_id)
+                          ORDER BY t.decided_at DESC, t.id DESC)
+                          FROM (SELECT * FROM app.pipeline_triggers k ORDER BY k.decided_at DESC, k.id DESC LIMIT 10) t),
+                         '[]'::jsonb),
     'generated_at', now()
   )))
 $$;
@@ -1748,7 +1936,8 @@ $$;
 
 -- Per-user flags; a row is only written for a job that exists in app.jobs (else 0 affected rows).
 -- setApplied (kept for older clients): true keeps a stage you already reached (interviewing, offer, ...), else
--- 'applied'; false = 'not_applied'. status_updated_at moves only when the status changes.
+-- 'applied'; false = 'not_applied'. status_updated_at moves only when the status changes. replied_at / interviewed_at
+-- stay with a kept stage and are cleared otherwise (see write_set_status).
 CREATE OR REPLACE FUNCTION app.write_set_applied(p_uid uuid, p jsonb) RETURNS jsonb
 LANGUAGE plpgsql VOLATILE AS $$
 DECLARE
@@ -1777,6 +1966,8 @@ BEGIN
                  ELSE 'applied' END) IS DISTINCT FROM t.application_status THEN now()
       ELSE t.status_updated_at
     END,
+    replied_at = CASE WHEN v_applied AND t.application_status = ANY (app.c_applied_statuses()) THEN t.replied_at END,
+    interviewed_at = CASE WHEN v_applied AND t.application_status = ANY (app.c_applied_statuses()) THEN t.interviewed_at END,
     updated_at = now();
   GET DIAGNOSTICS v_n = ROW_COUNT;
   PERFORM app.record_triage(p_uid, v_before);
@@ -1788,6 +1979,10 @@ $$;
 -- is_applied (applied_at = the first time); a tracked status (anything but not_applied) also unhides the job. Note and
 -- follow-up date are kept. appliedAt / statusUpdatedAt (an undo putting a job back): the times to restore instead of
 -- now() (applied_at only when the job has none; never later than now), so an undo does not restart the follow-up clock.
+-- replied_at / interviewed_at (the funnel): set the first time the job reaches an answer (interviewing, offer, rejected)
+-- / an interview (interviewing, offer), at statusUpdatedAt when given, and kept through a later rejected or withdrawn;
+-- cleared when it goes back to no_response, applied or earlier (an undo of the answer, or a wrong answer corrected).
+-- An undo to Rejected / Withdrawn also drops the stamps the undone change set (a mis-tapped Interviewing leaves none).
 CREATE OR REPLACE FUNCTION app.write_set_status(p_uid uuid, p jsonb) RETURNS jsonb
 LANGUAGE plpgsql VOLATILE AS $$
 DECLARE
@@ -1814,9 +2009,12 @@ BEGIN
   v_tracked := v_status <> 'not_applied';
   v_before := app.triage_before(p_uid, v_keys);
   INSERT INTO app.user_job_state AS t
-    (user_id, job_key, is_applied, applied_at, is_hidden, hidden_at, application_status, status_updated_at, updated_at)
+    (user_id, job_key, is_applied, applied_at, is_hidden, hidden_at, application_status, status_updated_at, updated_at,
+     replied_at, interviewed_at)
   SELECT p_uid, j.job_key, v_applied, CASE WHEN v_applied THEN coalesce(v_applied_at, now()) END, false, NULL, v_status,
-    coalesce(v_stamp, now()), now()
+    coalesce(v_stamp, now()), now(),
+    CASE WHEN v_status IN ('interviewing', 'offer', 'rejected') THEN coalesce(v_stamp, now()) END,
+    CASE WHEN v_status IN ('interviewing', 'offer') THEN coalesce(v_stamp, now()) END
   FROM app.jobs j
   WHERE j.job_key = ANY (v_keys)
   ON CONFLICT (user_id, job_key) DO UPDATE SET
@@ -1825,6 +2023,24 @@ BEGIN
     application_status = v_status,
     status_updated_at = CASE WHEN t.application_status IS DISTINCT FROM v_status THEN coalesce(v_stamp, now())
                              ELSE t.status_updated_at END,
+    -- An undo (v_stamp given) that changes the status drops a stamp the change being undone set: that write stamped it
+    -- with the now() it also wrote to updated_at, while an older or restored stamp is earlier (Withdrawn, a mis-tap on
+    -- Interviewing, Undo: no reply and no interview are left behind). Server times only, so the client's clock does
+    -- not matter; a note saved in between only keeps the stamps, as before.
+    replied_at = CASE
+      WHEN v_status NOT IN ('interviewing', 'offer', 'rejected', 'withdrawn') THEN NULL
+      WHEN v_stamp IS NOT NULL AND t.application_status IS DISTINCT FROM v_status AND t.replied_at >= t.updated_at
+        THEN CASE WHEN v_status <> 'withdrawn' THEN v_stamp END
+      WHEN v_status = 'withdrawn' THEN t.replied_at
+      ELSE coalesce(t.replied_at, v_stamp, now())
+    END,
+    interviewed_at = CASE
+      WHEN v_status NOT IN ('interviewing', 'offer', 'rejected', 'withdrawn') THEN NULL
+      WHEN v_stamp IS NOT NULL AND t.application_status IS DISTINCT FROM v_status AND t.interviewed_at >= t.updated_at
+        THEN CASE WHEN v_status IN ('interviewing', 'offer') THEN v_stamp END
+      WHEN v_status IN ('rejected', 'withdrawn') THEN t.interviewed_at
+      ELSE coalesce(t.interviewed_at, v_stamp, now())
+    END,
     is_hidden = t.is_hidden AND NOT v_tracked,
     hidden_at = CASE WHEN v_tracked THEN NULL ELSE t.hidden_at END,
     hide_reason = CASE WHEN v_tracked THEN NULL ELSE t.hide_reason END,
@@ -2218,6 +2434,17 @@ BEGIN
 END
 $$;
 
+-- markCheckin {}: the weekly "How did last week go?" sheet was shown (src/hooks/useCheckin.js), so it does not open by
+-- itself again this week. An existing profile only (never creates one); no activity counters. Params are ignored.
+CREATE OR REPLACE FUNCTION app.write_mark_checkin(p_uid uuid) RETURNS jsonb
+LANGUAGE sql VOLATILE AS $$
+  WITH marked AS (
+    UPDATE app.user_profile up SET last_checkin_at = now() WHERE up.profile_id = p_uid RETURNING up.last_checkin_at
+  )
+  SELECT jsonb_build_object('rows', coalesce((SELECT jsonb_agg(jsonb_build_object('last_checkin_at', m.last_checkin_at))
+                                             FROM marked m), '[]'::jsonb))
+$$;
+
 CREATE OR REPLACE FUNCTION app.write_set_allowed_email(p_uid uuid, p jsonb) RETURNS jsonb
 LANGUAGE plpgsql VOLATILE AS $$
 DECLARE
@@ -2271,6 +2498,7 @@ BEGIN
     WHEN 'profile' THEN RETURN app.read_profile(c.caller_uid);
     WHEN 'refs' THEN RETURN app.read_refs();
     WHEN 'status' THEN RETURN app.read_status();
+    WHEN 'checkin' THEN RETURN app.read_checkin(c.caller_uid);
     WHEN 'allowedEmails' THEN RETURN app.read_allowed_emails();
     WHEN 'companyHealth' THEN RETURN app.read_company_health();
     WHEN 'systemStatus' THEN RETURN app.read_system_status();
@@ -2305,6 +2533,7 @@ BEGIN
     WHEN 'saveMuteRules' THEN RETURN app.write_save_mute_rules(c.caller_uid, v_params);
     WHEN 'setAllowedEmail' THEN RETURN app.write_set_allowed_email(c.caller_uid, v_params);
     WHEN 'ping' THEN RETURN app.write_ping(c.caller_uid, v_params);
+    WHEN 'markCheckin' THEN RETURN app.write_mark_checkin(c.caller_uid);
     ELSE
       RAISE EXCEPTION USING MESSAGE = 'Unknown action: ' || left(coalesce(v_action, 'undefined'), 40), ERRCODE = '22023';
   END CASE;
@@ -2928,6 +3157,90 @@ BEGIN
 END
 $$;
 
+-- One pipeline decision of the ATS Scrapers workflow (databricks/jobs/record_trigger.py, format
+-- jobseeker.trigger_report.v1): {github_run_id, github_run_attempt, workflow, event, decided_at, decision, forced,
+-- uploaded_files, new_files, new_jobs, run_id, result, message}. decision one of c_trigger_decisions(); the counts JSON
+-- integers 0..1000000 or null; decided_at missing or later than now = now; texts trimmed and cut to 200 characters
+-- (message 1000). Recording the same GitHub run attempt again replaces its row; the newest c_trigger_keep() are kept.
+CREATE OR REPLACE FUNCTION public.pipeline_record_trigger(report jsonb) RETURNS jsonb
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+SET search_path = '' SET "TimeZone" = 'UTC' SET extra_float_digits = 1
+AS $$
+#variable_conflict use_column
+DECLARE
+  v_report jsonb := $1;
+  v_decision text;
+  v_decided timestamptz;
+  v_forced boolean;
+  v_name text;
+  v_value jsonb;
+  v_counts int[] := '{}';
+  v_id bigint;
+BEGIN
+  PERFORM app.require_service();
+  IF jsonb_typeof(v_report) IS DISTINCT FROM 'object' OR v_report ->> 'format' IS DISTINCT FROM 'jobseeker.trigger_report.v1' THEN
+    PERFORM app.fail('Unknown format');
+  END IF;
+  v_decision := CASE WHEN jsonb_typeof(v_report -> 'decision') = 'string' THEN v_report ->> 'decision' END;
+  IF v_decision IS NULL OR v_decision <> ALL (app.c_trigger_decisions()) THEN
+    PERFORM app.fail('Invalid decision');
+  END IF;
+  FOREACH v_name IN ARRAY ARRAY['uploaded_files', 'new_files', 'new_jobs'] LOOP
+    v_value := nullif(v_report -> v_name, 'null'::jsonb);
+    IF v_value IS NULL THEN
+      v_counts := v_counts || NULL::int;
+      CONTINUE;
+    END IF;
+    -- two steps: the cast runs only on a checked string (OR does not promise an evaluation order)
+    IF jsonb_typeof(v_value) <> 'number' OR (v_value #>> '{}') !~ '^[0-9]{1,7}$' THEN
+      PERFORM app.fail('Invalid count');
+    END IF;
+    IF (v_value #>> '{}')::int > 1000000 THEN
+      PERFORM app.fail('Invalid count');
+    END IF;
+    v_counts := v_counts || (v_value #>> '{}')::int;
+  END LOOP;
+  v_value := nullif(v_report -> 'decided_at', 'null'::jsonb);
+  v_decided := app.js_timestamp(v_value);
+  IF v_value IS NOT NULL AND v_decided IS NULL THEN
+    PERFORM app.fail('Invalid decided_at');
+  END IF;
+  v_decided := least(coalesce(v_decided, now()), now());
+  v_value := nullif(v_report -> 'forced', 'null'::jsonb);
+  IF v_value IS NOT NULL AND jsonb_typeof(v_value) <> 'boolean' THEN
+    PERFORM app.fail('Invalid forced');
+  END IF;
+  v_forced := coalesce(v_value = 'true'::jsonb, false);
+
+  INSERT INTO app.pipeline_triggers AS t (github_run_id, github_run_attempt, workflow, event, decided_at, decision, forced,
+    uploaded_files, new_files, new_jobs, run_id, result, message, recorded_at)
+  VALUES (
+    -- GitHub and Databricks ids may come as JSON numbers
+    nullif(left(app.js_trim(CASE jsonb_typeof(v_report -> 'github_run_id') WHEN 'string' THEN v_report ->> 'github_run_id'
+                                                                           WHEN 'number' THEN v_report ->> 'github_run_id' END), 200), ''),
+    app.js_int(v_report -> 'github_run_attempt', 0, 1000000),
+    nullif(app.js_text(v_report -> 'workflow', 200), ''),
+    nullif(app.js_text(v_report -> 'event', 200), ''),
+    v_decided, v_decision, v_forced, v_counts[1], v_counts[2], v_counts[3],
+    nullif(left(app.js_trim(CASE jsonb_typeof(v_report -> 'run_id') WHEN 'string' THEN v_report ->> 'run_id'
+                                                                    WHEN 'number' THEN v_report ->> 'run_id' END), 200), ''),
+    nullif(app.js_text(v_report -> 'result', 200), ''),
+    nullif(app.js_text(v_report -> 'message', 1000), ''),
+    now())
+  ON CONFLICT (github_run_id, github_run_attempt) DO UPDATE SET
+    workflow = EXCLUDED.workflow, event = EXCLUDED.event, decided_at = EXCLUDED.decided_at, decision = EXCLUDED.decision,
+    forced = EXCLUDED.forced, uploaded_files = EXCLUDED.uploaded_files, new_files = EXCLUDED.new_files,
+    new_jobs = EXCLUDED.new_jobs, run_id = EXCLUDED.run_id, result = EXCLUDED.result, message = EXCLUDED.message,
+    recorded_at = EXCLUDED.recorded_at
+  RETURNING t.id INTO v_id;
+
+  DELETE FROM app.pipeline_triggers r
+  WHERE r.id NOT IN (SELECT k.id FROM app.pipeline_triggers k ORDER BY k.decided_at DESC, k.id DESC LIMIT app.c_trigger_keep());
+
+  RETURN jsonb_build_object('recorded', true, 'id', v_id);
+END
+$$;
+
 -- =====================================================================================================================
 -- Derived job columns: trigger and backfill (rows published before this file existed, or derived with older rules)
 -- =====================================================================================================================
@@ -2963,11 +3276,12 @@ GRANT EXECUTE ON FUNCTION public.app_read(text, jsonb), public.app_write(text, j
 
 REVOKE ALL ON FUNCTION public.pipeline_export_user_data(), public.pipeline_publish_state(boolean),
   public.pipeline_publish(jsonb), public.pipeline_publish_finish(text, jsonb, boolean),
-  public.pipeline_record_scrape(jsonb), public.pipeline_record_runs(jsonb)
+  public.pipeline_record_scrape(jsonb), public.pipeline_record_runs(jsonb), public.pipeline_record_trigger(jsonb)
   FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.pipeline_export_user_data(), public.pipeline_publish_state(boolean),
   public.pipeline_publish(jsonb), public.pipeline_publish_finish(text, jsonb, boolean),
-  public.pipeline_record_scrape(jsonb), public.pipeline_record_runs(jsonb) TO service_role;
+  public.pipeline_record_scrape(jsonb), public.pipeline_record_runs(jsonb), public.pipeline_record_trigger(jsonb)
+  TO service_role;
 
 -- Internal helpers: callable only by the owner (through the SECURITY DEFINER functions above)
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA app FROM PUBLIC, anon, authenticated, service_role;

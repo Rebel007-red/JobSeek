@@ -25,22 +25,37 @@ export const NEUTRAL_SKILLS = 0.3
 export const UNKNOWN_EXPERIENCE = 0.7
 // An also-know skill counts this much of a core skill (the skill tiers of app.user_jobs)
 export const ALSO_SKILL_WEIGHT = 0.5
-// An applied job with no status change for this many days shows "Follow up"
+// An applied job with no status change for this many days shows "Follow up" (app.c_follow_up_days)
 export const FOLLOW_UP_DAYS = 14
+// From this many days after applying with no answer, "No reply" is the suggested stage (app.c_no_reply_days)
+export const NO_REPLY_DAYS = 21
+// An interview with no update for this many days needs action (app.c_interview_stale_days)
+export const INTERVIEW_STALE_DAYS = 7
+// The weekly check-in asks about applications with no update for this many days, and "No reply yet" / "Still waiting"
+// ask again this many days later (app.c_checkin_min_days)
+export const CHECKIN_MIN_DAYS = 7
 // Most jobs one write sends (api.js splits larger selections into chunks of this size; app.c_max_bulk_keys)
 export const MAX_BULK_KEYS = 100
 
 // Application statuses (app.c_application_statuses). Tracked = applied (any stage) or saved: kept past the 7-day
-// expiry, never muted, always "For you".
-export const APPLICATION_STATUSES = ['not_applied', 'saved', 'applied', 'interviewing', 'offer', 'rejected', 'withdrawn']
-// Statuses that count as applied (is_applied)
-export const APPLIED_STATUSES = ['applied', 'interviewing', 'offer', 'rejected', 'withdrawn']
+// expiry, never muted, always "For you". 'no_response' ("No reply": you applied and heard nothing back) is an applied
+// stage like the others.
+export const APPLICATION_STATUSES = ['not_applied', 'saved', 'applied', 'interviewing', 'offer', 'no_response', 'rejected', 'withdrawn']
+// Statuses that count as applied (is_applied; app.c_applied_statuses)
+export const APPLIED_STATUSES = ['applied', 'interviewing', 'offer', 'no_response', 'rejected', 'withdrawn']
+// "Replied" = heard back at all, for the funnel (app.c_reply_statuses)
+export const REPLY_STATUSES = ['interviewing', 'offer', 'rejected']
+// Still going: the Applied tab's main list (app.c_open_statuses)
+export const OPEN_STATUSES = ['applied', 'interviewing', 'offer']
+// "Finished": folded at the bottom of the Applied tab (app.c_finished_statuses)
+export const FINISHED_STATUSES = ['no_response', 'rejected', 'withdrawn']
 export const STATUS_LABELS = {
   not_applied: 'Not applied',
   saved: 'Saved',
   applied: 'Applied',
   interviewing: 'Interviewing',
   offer: 'Offer',
+  no_response: 'No reply',
   rejected: 'Rejected',
   withdrawn: 'Withdrawn',
 }

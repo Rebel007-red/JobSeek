@@ -191,6 +191,51 @@ test('trust release constants: expiry, the expiring list, visits, activity reten
   }
 })
 
+test('track release: stage groups, No reply, check-in and funnel constants match gold.js', () => {
+  assert.deepEqual(textArray('reply_statuses'), [...exported(gold, 'REPLY_STATUSES')])
+  assert.deepEqual(textArray('open_statuses'), [...exported(gold, 'OPEN_STATUSES')])
+  assert.deepEqual(textArray('finished_statuses'), [...exported(gold, 'FINISHED_STATUSES')])
+  // open + finished = every applied stage, each once
+  assert.deepEqual([...textArray('open_statuses'), ...textArray('finished_statuses')].sort(), [...textArray('applied_statuses')].sort())
+  assert.equal(number('no_reply_days'), exported(gold, 'NO_REPLY_DAYS'))
+  assert.equal(number('interview_stale_days'), exported(gold, 'INTERVIEW_STALE_DAYS'))
+  assert.equal(number('checkin_min_days'), exported(gold, 'CHECKIN_MIN_DAYS'))
+  // pinned
+  assert.equal(number('checkin_max'), 20)
+  assert.equal(number('funnel_top'), 5)
+  assert.equal(number('trigger_keep'), 50)
+  assert.equal(number('daily_floor_hours'), 20)
+  // Needs action, the check-in and the funnel use the constants, not copies of them
+  const uses = {
+    user_jobs: ['interview_stale_days', 'follow_up_days'],
+    read_checkin: ['checkin_min_days', 'checkin_max', 'no_reply_days'],
+    read_summary: ['reply_statuses', 'funnel_top'],
+    filtered_jobs: ['open_statuses', 'finished_statuses'],
+    pipeline_record_trigger: ['trigger_decisions', 'trigger_keep'],
+  }
+  for (const [name, list] of Object.entries(uses)) {
+    const prefix = name.startsWith('pipeline_') ? 'public' : 'app'
+    const start = SQL.indexOf(`CREATE OR REPLACE FUNCTION ${prefix}.${name}(`)
+    assert.ok(start >= 0, `${prefix}.${name} missing`)
+    const body = SQL.slice(start, SQL.indexOf('$$;', SQL.indexOf('AS $$', start) + 5))
+    for (const constant of list) assert.ok(body.includes(`app.c_${constant}()`), `${prefix}.${name} does not use app.c_${constant}()`)
+  }
+})
+
+test('pipeline decisions: app.c_trigger_decisions() in both SQL files = record_trigger.py, the daily floor = trigger_job.py', () => {
+  const decisions = textArray('trigger_decisions')
+  assert.deepEqual(decisions, ['started', 'started_daily', 'waiting', 'recent', 'paused', 'no_new', 'failed'])
+  const inSchema = /CREATE OR REPLACE FUNCTION app\.c_trigger_decisions\(\)[^$]*\$\$\s*SELECT\s+ARRAY\[([\s\S]*?)\]::text\[\]\s*\$\$;/.exec(SCHEMA)
+  assert.ok(inSchema, 'app.c_trigger_decisions() missing from app_schema.sql (the CHECK on app.pipeline_triggers.decision calls it)')
+  assert.deepEqual(quoted(inSchema[1]), decisions)
+  assert.match(SCHEMA, /CONSTRAINT pipeline_triggers_decision_check CHECK \(decision = ANY \(app\.c_trigger_decisions\(\)\)\)/)
+  // the ops scripts keep their own copies (test_trigger.py pins them too); compared when they exist
+  const recorder = /^DECISIONS = \(([\s\S]*?)\)/m.exec(source('../../databricks/jobs/record_trigger.py'))
+  if (recorder) assert.deepEqual(quoted(recorder[1].replaceAll('"', "'")), decisions, 'record_trigger.py DECISIONS')
+  const idle = /^IDLE_HOURS = ([\d.]+)/m.exec(source('../../databricks/jobs/trigger_job.py'))
+  if (idle) assert.equal(Number(idle[1]), number('daily_floor_hours'), 'trigger_job.py IDLE_HOURS (--idle-hours default)')
+})
+
 test('scrape sources: app.c_scrape_sources() in both SQL files = src/utils/sources.js = databricks/ats/registry.py', async () => {
   const { SCRAPE_SOURCES } = await import('./sources.js')
   assert.deepEqual(textArray('scrape_sources'), SCRAPE_SOURCES) // sources.test.js pins SCRAPE_SOURCES to the registry

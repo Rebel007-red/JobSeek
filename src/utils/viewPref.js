@@ -70,14 +70,19 @@ const tabKey = () => `jobseeker:tab:${user()}`
 export const readTab = () => normalizeTab(read(tabKey())) ?? DEFAULT_TAB
 export const saveTab = (tab) => save(tabKey(), tab)
 
-// Sort per tab, per user on this device (Applied opens with Applied date, the others with Best fit). The Inbox takes over
-// the sort remembered for To apply ('pending') the first time it is read.
-const sortKey = (tab) => `jobseeker:sort:${user()}:${tab}`
+// Sort per tab, per user on this device (Applied opens with Needs action first, the others with Best fit). The Inbox
+// takes over the sort remembered for To apply ('pending') the first time it is read.
+// The Applied tab's sort lives under a new key (':applied:v2') since its default changed from Applied date to Needs
+// action first: the old key mostly holds the old default, so 'applied' stored there is not carried over (everyone gets
+// the new default once); any other sort picked there is.
+const sortKey = (tab) => `jobseeker:sort:${user()}:${tab === 'applied' ? 'applied:v2' : tab}`
+const oldSortKey = (tab) => `jobseeker:sort:${user()}:${tab === 'inbox' ? 'pending' : tab}`
 
 export const readSort = (tab) => {
   let sort = read(sortKey(tab))
-  if (sort === null && tab === 'inbox') {
-    sort = read(sortKey('pending'))
+  if (sort === null && (tab === 'inbox' || tab === 'applied')) {
+    sort = read(oldSortKey(tab))
+    if (tab === 'applied' && sort === 'applied') sort = null
     if (sortAllowed(sort, tab)) save(sortKey(tab), sort)
   }
   return sortAllowed(sort, tab) ? sort : defaultSortFor(tab)
@@ -132,6 +137,12 @@ export function markSwipeUsed() {
 
 export const readSwipeTipShown = () => read(SWIPE_TIP_KEY) === '1'
 export const saveSwipeTipShown = () => save(SWIPE_TIP_KEY, '1')
+
+// "Your first 5" card waits at the top of the Inbox (set by the welcome save, cleared when you close it), per device
+const FIRST_FIVE_KEY = 'jobseeker.firstFive'
+
+export const readFirstFivePending = () => read(FIRST_FIVE_KEY) === '1'
+export const saveFirstFivePending = (on) => (on ? save(FIRST_FIVE_KEY, '1') : remove(FIRST_FIVE_KEY))
 
 // The Expiring strip collapsed, per user on this device, for the rest of the UTC day (the day those jobs disappear)
 const expiringKey = () => `jobseeker:expiringCollapsed:${user()}`

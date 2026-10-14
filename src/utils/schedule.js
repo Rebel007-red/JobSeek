@@ -1,11 +1,12 @@
 // When the scheduled workflows start, and when the next new jobs should arrive (the caught-up line, the System tab).
 
 // When the scheduled workflows start (UTC). keep in sync: the `cron` lines of .github/workflows/databricks-scrapers.yml
-// ('7 0,6,12,18 * * *', "ATS Scrapers": every company board, then the pipeline and publish) and publish-supabase.yml
+// ('7 0,6,12,18 * * *', "ATS Scrapers": every company board, then the pipeline when there are new jobs (and at least
+// daily), and publish) and publish-supabase.yml
 // ('50 * * * *'). linkedin-databricks.yml has no schedule any more (it is run by hand).
 const EVERY_HOUR = Array.from({ length: 24 }, (_, hour) => hour)
 export const SCHEDULES = [
-  { label: 'Company boards scrape, then the pipeline and publish', hours: [0, 6, 12, 18], minute: 7 },
+  { label: 'Company boards scrape, then the pipeline (when there are new jobs, and at least daily) and publish', hours: [0, 6, 12, 18], minute: 7 },
   { label: 'Catch-up publish', hours: EVERY_HOUR, minute: 50 },
 ]
 

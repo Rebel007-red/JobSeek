@@ -31,6 +31,31 @@ const SCRAPE_STATUSES = {
   failed: { label: 'Failed', tone: 'danger' },
   crashed: { label: 'Crashed', tone: 'danger' },
 }
+// What the ATS Scrapers workflow decided about the pipeline (app.pipeline_triggers, databricks/jobs/record_trigger.py).
+// keep in sync: app.c_trigger_decisions() / record_trigger.py DECISIONS. "recent" is the workflow's 3 h gap
+// (trigger_job.py --min-interval-hours, manual runs only).
+const DECISIONS = {
+  started: { label: 'Started', tone: 'success' },
+  started_daily: { label: 'Started: daily run', tone: 'success' },
+  waiting: { label: 'Joined a waiting run', tone: 'running' },
+  recent: { label: 'Skipped: ran under 3 h ago', tone: 'muted' },
+  paused: { label: 'Paused by Databricks', tone: 'warning' },
+  no_new: { label: 'Skipped: no new files', tone: 'muted' },
+  failed: { label: 'Failed', tone: 'danger' },
+}
+const DECISION_TITLES = {
+  started_daily: 'No new jobs, but the daily run was due (the latest run started 20+ hours ago, or it failed): expiry and the daily clean-up still run',
+  paused: 'Databricks accepts no new runs for now (Free Edition over its allowance). The uploaded files are kept; the next allowed run ingests them',
+  no_new: 'The scrapers found only jobs the pipeline already has, and a run was still going or the latest one started less than 20 hours ago',
+}
+// The wait's own results (trigger_job.py); Databricks result states use RUN_RESULTS. NONE / SKIPPED / PAUSED add
+// nothing to the decision badge, so they show no badge.
+const WAIT_RESULTS = {
+  TIMEOUT: { label: 'Still running when the wait ended', tone: 'warning' },
+  STARTED: { label: 'Started', tone: 'running' },
+  ERROR: { label: 'Wait failed', tone: 'danger' },
+}
+const QUIET_RESULTS = ['NONE', 'SKIPPED', 'PAUSED']
 // How a run was started (Databricks trigger); the workflows start it with run-now (ONE_TIME)
 const TRIGGERS = { ONE_TIME: 'run now', PERIODIC: 'Databricks schedule', RETRY: 'retry' }
 const DATABASE_WARN = 0.8 // the size bar turns to the warning tone above this share of the limit
@@ -62,14 +87,38 @@ function taskName(key) {
 }
 
 const count = (value) => (value === null || value === undefined ? '–' : Number(value).toLocaleString())
+const known = (value) => value !== null && value !== undefined
+// '6:10 AM' today, else 'Oct 12, 2026, 6:10 AM'
+const when = (value, now) => (new Date(value).toDateString() === now.toDateString() ? time(value) : dateTime(value))
+
+// A decision's run result: the Databricks run's own result when the run history has it (a wait that timed out is
+// settled there later), else the wait's result; null when it adds nothing to the decision
+function decisionResult(trigger, runs) {
+  const run = trigger.run_id ? runs.find(item => String(item.run_id) === String(trigger.run_id)) : null
+  const fromRun = run && runBadge(run.result, run.state)
+  if (fromRun) return fromRun
+  const result = trigger.result
+  if (!result || QUIET_RESULTS.includes(result)) return null
+  return WAIT_RESULTS[result] || runBadge(result, null)
+}
+
+// "3 files uploaded, 1 with new jobs (12 jobs)"; the parts the workflow did not count are left out
+function uploadText({ uploaded_files: uploaded, new_files: newFiles, new_jobs: newJobs }) {
+  if (!known(uploaded)) return ''
+  const files = `${count(uploaded)} ${Number(uploaded) === 1 ? 'file' : 'files'} uploaded`
+  if (!known(newFiles)) return files
+  const jobs = known(newJobs) ? ` (${count(newJobs)} ${Number(newJobs) === 1 ? 'job' : 'jobs'})` : ''
+  return `${files}, ${count(newFiles)} with new jobs${jobs}`
+}
 
 function Badge({ badge, title }) {
   if (!badge) return null
   return <span className={`company-health ${badge.tone}`} title={title}>{badge.label}</span>
 }
 
-// Admin System tab: pipeline runs, scrape reports, the LinkedIn search cap, the database size and the schedule
-// (api.systemStatus(): one row, see app.read_system_status in supabase/app_api.sql)
+// Admin System tab: pipeline runs, scrape reports, the LinkedIn search cap, the ATS Scrapers workflow's pipeline
+// decisions, the database size and the schedule (api.systemStatus(): one row, see app.read_system_status in
+// supabase/app_api.sql). `triggers` is missing before the Track release SQL: the decisions card then stays away.
 export function StatusPanel() {
   const [status, setStatus] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -105,7 +154,10 @@ export function StatusPanel() {
     )
   }
 
-  const { database = {}, counts = {}, publish, runs = [], scrapes = [], linkedin, generated_at: generatedAt } = status || {}
+  const { database = {}, counts = {}, publish, runs = [], scrapes = [], linkedin, triggers, generated_at: generatedAt } = status || {}
+  const decisions = Array.isArray(triggers) ? triggers : null
+  // The newest decision explains a run list that stopped growing: the pipeline was skipped, or Databricks paused it
+  const latestDecision = decisions?.[0]
   const used = Number(database.bytes) || 0
   const limit = Number(database.limit_bytes) || 500 * MB
   const share = Math.min(used / limit, 1)
@@ -180,7 +232,9 @@ export function StatusPanel() {
         </ul>
         <p className="muted-text">
           Users see &ldquo;Next jobs around {clockLabel(nextJobsAt(now))}&rdquo; (the next company-boards scrape plus about
-          the time it takes to publish, an estimate). LinkedIn has no schedule: it runs only when started by hand.
+          the time it takes to publish, an estimate). The pipeline starts only when the scrapers found new jobs, when the
+          workflow is run by hand with <code>force</code>, or for its daily run (when the latest run started 20+ hours
+          ago, or failed). LinkedIn has no schedule: it runs only when started by hand.
         </p>
       </section>
 
@@ -245,11 +299,62 @@ export function StatusPanel() {
         )}
       </section>
 
+      {decisions && (
+        <section className="settings-card" aria-labelledby="system-decisions">
+          <div className="settings-card-header">
+            <h3 id="system-decisions">Pipeline decisions</h3>
+            {decisions.length > 0 && <small className="muted-text">Last {decisions.length} ATS Scrapers runs</small>}
+          </div>
+          {decisions.length === 0 ? (
+            <div className="settings-empty-state inline-empty">No decisions recorded yet. They appear after the next ATS Scrapers run.</div>
+          ) : (
+            <ol className="settings-list system-list">
+              {decisions.map((trigger, index) => {
+                const badge = DECISIONS[trigger.decision] || { label: trigger.decision, tone: 'pending' }
+                const result = decisionResult(trigger, runs)
+                const uploads = uploadText(trigger)
+                return (
+                  <li key={`${trigger.github_run_id || 'run'}-${trigger.decided_at}-${index}`} className="settings-row system-decision">
+                    <div className="settings-row-main">
+                      <div className="settings-company-name">
+                        {dateTime(trigger.decided_at)} <Badge badge={badge} title={DECISION_TITLES[trigger.decision]} />
+                      </div>
+                      {(uploads || trigger.forced || trigger.run_id) && (
+                        <div className="settings-company-meta">
+                          {uploads && <span>{uploads}</span>}
+                          {trigger.forced && <span>Forced by hand</span>}
+                          {trigger.run_id && (
+                            <span>Run {trigger.run_id}{result && <> <Badge badge={result} title={trigger.result || undefined} /></>}</span>
+                          )}
+                        </div>
+                      )}
+                      {trigger.message && <p className="system-message">{trigger.message}</p>}
+                    </div>
+                  </li>
+                )
+              })}
+            </ol>
+          )}
+        </section>
+      )}
+
       <section className="settings-card" aria-labelledby="system-runs">
         <div className="settings-card-header">
           <h3 id="system-runs">Databricks runs</h3>
           <small className="muted-text">Last {runs.length}</small>
         </div>
+        {latestDecision?.decision === 'no_new' && (
+          <p className="system-lead">
+            Pipeline skipped: no new files at {when(latestDecision.decided_at, now)}. The scrapers found only jobs the
+            pipeline already has; it runs again with new jobs, or for its daily run.
+          </p>
+        )}
+        {latestDecision?.decision === 'paused' && (
+          <p className="system-lead warning">
+            Databricks paused new runs at {when(latestDecision.decided_at, now)} (Free Edition over its allowance). The
+            uploaded files are kept; the next allowed run ingests them.
+          </p>
+        )}
         {runs.length === 0 ? (
           <div className="settings-empty-state inline-empty">No runs recorded yet. They appear after the next publish.</div>
         ) : (

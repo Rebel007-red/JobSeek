@@ -3703,6 +3703,572 @@ h1[tabindex="-1"]:focus {
   font-weight: 600;
 }
 
+/* ---- Track release ---- */
+
+/* No reply is a finished stage, muted like Rejected and Withdrawn */
+.flag.stage.no_response {
+  color: var(--muted);
+}
+
+/* The Applied tab's application row (ApplicationRow): Company · Title | stage pill · applied · flag · note | open.
+   One line on desktop; two lines on phones (below), at most 76 px */
+.app-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 5px 8px 5px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+  scroll-margin: calc(var(--header-h) + 56px) 0 16px;
+}
+
+.jobs-list > .swipe-wrap:last-child .app-row,
+.jobs-list > .app-row:last-child {
+  border-bottom: 0;
+}
+
+@media (hover: hover) {
+  .app-row:hover {
+    background: var(--surface-2);
+  }
+
+  .app-row:hover .select-box {
+    visibility: visible;
+  }
+}
+
+.app-row:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.app-row.is-active {
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.app-row.is-selected {
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+}
+
+.app-row-main {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.app-row-company {
+  flex: 0 1 auto;
+  max-width: 45%;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+}
+
+.app-row-title {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+}
+
+.app-row-title::before {
+  content: "·";
+  margin: 0 6px;
+  color: var(--muted);
+}
+
+.app-row-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.app-row-date {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Desktop: the side is four columns (stage, applied, flag, note), so every row's pill and dates line up */
+@media (min-width: 721px) and (pointer: fine), (min-width: 721px) and (pointer: none), (min-width: 961px) and (min-height: 501px) {
+  .app-row-side {
+    display: grid;
+    grid-template-columns: 112px 112px 116px 18px;
+    gap: 10px;
+  }
+
+  .app-row-flag {
+    display: flex;
+    min-width: 0;
+  }
+}
+
+.app-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.app-row .icon-btn {
+  color: var(--muted);
+}
+
+/* The Applied tab's funnel line: "138 applied → 4 replies (3%) → … · median reply 6 d", Weekly check-in, the breakdown */
+.funnel-line {
+  margin-bottom: 8px;
+}
+
+.funnel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.funnel-text {
+  min-width: 0;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.funnel-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.funnel-toggle .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.checkin-open {
+  margin-left: auto;
+}
+
+.checkin-open[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.funnel-breakdown {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 8px 16px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.funnel-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.funnel-table th,
+.funnel-table td {
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.funnel-table thead th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.funnel-table th:first-child {
+  max-width: 160px;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+}
+
+.funnel-table tbody th {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.funnel-table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+/* Stage chips: the Needs action count stands out while something needs you; the export icon closes the row */
+.pill-toggle.tone-warning:not(.active) .chip-count {
+  color: var(--warning);
+  font-weight: 700;
+}
+
+.stage-chips .export-btn {
+  flex: none;
+  width: 30px;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-2);
+}
+
+/* "Finished · 12": Rejected, Withdrawn and No reply, folded under the open applications */
+.finished-fold {
+  margin-top: 12px;
+}
+
+.finished-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+}
+
+.finished-toggle[aria-expanded="true"] {
+  margin-bottom: 8px;
+  border-style: solid;
+}
+
+@media (hover: hover) {
+  .finished-toggle:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-2);
+    color: var(--text);
+  }
+}
+
+.finished-fold .app-row-company,
+.finished-fold .app-row-title {
+  color: var(--text-2);
+}
+
+/* "Your first 5": the five best fits after the welcome save, in the Expiring strip's place */
+.first-five {
+  margin-bottom: 10px;
+  border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--primary-soft) 45%, var(--surface));
+}
+
+.first-five-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 6px 6px 12px;
+}
+
+.first-five-heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.first-five-heading h2 {
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.first-five-heading p,
+.first-five-note,
+.first-five-foot p {
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.first-five-note {
+  display: flex;
+  justify-content: center;
+  padding: 10px 12px;
+}
+
+.first-five-rows {
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid color-mix(in srgb, var(--primary) 25%, var(--border));
+  list-style: none;
+}
+
+.first-five-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 3px 6px 3px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.first-five-row.is-done .first-five-open {
+  opacity: 0.7;
+}
+
+.first-five-open {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  text-align: left;
+}
+
+.first-five-open strong,
+.first-five-open span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.first-five-open strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.first-five-open span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (hover: hover) {
+  .first-five-open:hover strong {
+    text-decoration: underline;
+  }
+}
+
+.first-five-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.first-five-actions .icon-btn {
+  color: var(--muted);
+}
+
+.first-five-actions .icon-btn.danger {
+  margin-left: 4px;
+}
+
+.first-five-state {
+  padding: 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.first-five-state.is-kept {
+  color: var(--success);
+}
+
+.first-five-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 8px 12px;
+}
+
+.first-five-foot p {
+  flex: 1 1 260px;
+}
+
+.first-five-foot a {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* Phones: the sort as a pill in the chip row; the native select lies invisibly over it (the system picker opens) */
+.sort-chip {
+  position: relative;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.sort-chip select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 16px; /* iOS would zoom into a smaller one */
+}
+
+.sort-chip:focus-within {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* The empty state's relaxations: "Any work mode · 12" */
+.relax-block .actions-row {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Shortcut help: "1 - 5", "j / k" */
+.kbd-joiner {
+  margin: 0 3px;
+  color: var(--muted);
+}
+
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px), (pointer: coarse) and (max-width: 960px) {
+  /* Two lines: company · title, then the pill, the dates and the icons (the open link and the checkbox at the end) */
+  .app-row {
+    grid-template-areas:
+      "main main"
+      "side actions";
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 2px;
+    min-height: 0;
+    padding: 6px 6px 5px 10px;
+    scroll-margin: calc(var(--header-h) + 8px) 0 calc(64px + env(safe-area-inset-bottom));
+  }
+
+  .app-row-main {
+    grid-area: main;
+  }
+
+  .app-row-side {
+    grid-area: side;
+    overflow: hidden;
+  }
+
+  /* cut long content sideways only, so the stage pill's hit area reaches above and below its line */
+  @supports (overflow: clip) {
+    .app-row-side {
+      overflow: visible;
+      overflow-x: clip;
+    }
+  }
+
+  .app-row-side > :empty {
+    display: none;
+  }
+
+  .app-row-stage {
+    display: flex;
+  }
+
+  .app-row-actions {
+    grid-area: actions;
+  }
+
+  .app-row-company {
+    max-width: 55%;
+  }
+
+  /* The open link and the checkbox stay on the pill's line; their hit areas reach 44 px */
+  .app-row .app-row-actions .icon-btn {
+    position: relative;
+    width: 36px;
+    height: 32px;
+  }
+
+  .app-row .app-row-actions .icon-btn::after {
+    content: "";
+    position: absolute;
+    inset: -7px -5px;
+  }
+
+  .funnel-text {
+    flex: 1 1 100%;
+  }
+
+  .checkin-open {
+    margin-left: 0;
+  }
+
+  .stage-chips .export-btn {
+    width: 44px;
+  }
+
+  .first-five-row {
+    gap: 8px;
+    padding-left: 10px;
+  }
+}
+
+@media (pointer: coarse) {
+  .stage-chips .export-btn {
+    height: 44px;
+  }
+
+  .first-five-open,
+  .finished-toggle,
+  .sort-chip {
+    min-height: 44px;
+  }
+
+  /* 44 px hit areas that keep the look: the row's stage pill (the open link's is above), the breakdown toggle */
+  .app-row .stage-pill::after {
+    inset: -8px -2px;
+  }
+
+  .funnel-toggle {
+    position: relative;
+  }
+
+  .funnel-toggle::after {
+    content: "";
+    position: absolute;
+    inset: -14px -6px;
+  }
+
+  .first-five-actions {
+    gap: 0;
+  }
+
+  .first-five-actions .icon-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .first-five-actions .icon-btn.danger {
+    margin-left: 0;
+  }
+
+  /* the link's box grows to 44 px without changing the line */
+  .first-five-foot a {
+    display: inline-block;
+    margin: -14px -8px;
+    padding: 14px 8px;
+  }
+}
+
 /* ==== END FEATURES: jobs list ==== */
 
 /* ==== FEATURES: drawer and fit (owner: drawer-fit) ==== */
@@ -4098,6 +4664,765 @@ ul.skill-tags {
 
   .drawer-tech summary:hover {
     color: var(--text-2);
+  }
+}
+
+/* ---- Track release: stage stepper, stage menu, other postings, note row, description clamp, weekly check-in ---- */
+
+.status-picker.status-no_response {
+  color: var(--muted);
+}
+
+/* The drawer's stage (saved or applied jobs): Saved — Applied ✓ Oct 7 — Interviewing — Offer | No reply · Rejected ·
+   Withdrawn, right under the header */
+.stage-stepper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 0 16px 10px;
+}
+
+.stage-stepper-label {
+  flex: none;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.stage-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px; /* the wider gap sets the outcomes apart from the track (they wrap below it in a narrow drawer) */
+  min-width: 0;
+}
+
+.stage-track,
+.stage-track-item,
+.stage-outcomes {
+  display: flex;
+  align-items: center;
+}
+
+.stage-outcomes {
+  gap: 4px;
+}
+
+.stage-line {
+  width: 10px;
+  height: 2px;
+  margin: 0 2px;
+  border-radius: 1px;
+  background: var(--border-strong);
+}
+
+.stage-line.is-done {
+  background: color-mix(in srgb, var(--success) 60%, transparent);
+}
+
+.stage-step {
+  position: relative;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background-color 0.12s, border-color 0.12s;
+}
+
+.stage-step.is-done {
+  border-color: color-mix(in srgb, var(--success) 35%, transparent);
+  color: var(--success);
+}
+
+/* The current stage, toned like its pill: Saved primary, the track success, the outcomes neutral */
+.stage-step.is-current {
+  border-color: var(--success);
+  background: var(--success-soft);
+  color: var(--success);
+  font-weight: 700;
+}
+
+.stage-step.is-current.stage-saved {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.stage-step.is-current.stage-no_response,
+.stage-step.is-current.stage-rejected,
+.stage-step.is-current.stage-withdrawn {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.stage-step[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.stage-step:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* The stage pill of the Applied rows and the bulk bar's "Move to…": a button that opens the stage menu */
+.stage-menu-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 28px;
+  max-width: 100%;
+  padding: 0 6px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.stage-menu-button.md {
+  height: var(--control-h);
+  font-size: 13px;
+}
+
+.stage-menu-button .icon {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+}
+
+.stage-menu-button-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stage-menu-button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.stage-pill {
+  height: 24px;
+  padding: 0 4px 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.stage-pill.stage-saved {
+  border-color: color-mix(in srgb, var(--primary) 40%, transparent);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.stage-pill.stage-applied,
+.stage-pill.stage-interviewing,
+.stage-pill.stage-offer {
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.stage-pill.stage-no_response,
+.stage-pill.stage-rejected,
+.stage-pill.stage-withdrawn {
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+
+.stage-pill .icon {
+  color: currentColor;
+}
+
+/* The open menu: a popover on desktop (fixed, placed by StageMenu.jsx), a bottom sheet on phones */
+.stage-menu {
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.stage-menu.is-popover {
+  position: fixed;
+  z-index: 85;
+  width: 220px;
+  animation: fade-up 0.12s ease-out;
+}
+
+.stage-menu-title {
+  padding: 6px 8px 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.stage-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+}
+
+.stage-menu-item:focus-visible {
+  outline: none;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+.stage-menu-item.is-current {
+  font-weight: 600;
+}
+
+.stage-menu-item.is-suggested .stage-menu-label {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.stage-menu-check {
+  display: inline-flex;
+  width: 16px;
+  color: var(--primary);
+}
+
+.stage-menu-item kbd {
+  margin-left: auto;
+}
+
+/* "Followed up · ask again in 7 days" under a line: keeps the stage, moves the follow-up date */
+.stage-menu-sep {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--border);
+}
+
+.stage-menu-item.stage-menu-snooze {
+  height: auto;
+  min-height: 32px;
+  padding-block: 6px;
+  color: var(--text-2);
+}
+
+.stage-menu-root {
+  position: fixed;
+  inset: 0;
+  z-index: 85;
+}
+
+.stage-menu-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--backdrop);
+  animation: fade 0.15s ease-out;
+}
+
+.stage-menu.is-sheet {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 6px max(8px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+  border-bottom: 0;
+  border-radius: var(--radius) var(--radius) 0 0;
+  animation: sheet-up 0.2s ease-out;
+}
+
+.stage-menu.is-sheet .stage-menu-item {
+  height: 48px;
+  font-size: 15px;
+}
+
+.stage-menu.is-sheet .stage-menu-item.stage-menu-snooze {
+  height: auto;
+  min-height: 48px;
+}
+
+.stage-menu-grip,
+.checkin-grip {
+  display: block;
+  flex: none;
+  width: 36px;
+  height: 4px;
+  margin: 2px auto 6px;
+  border-radius: 2px;
+  background: var(--border-strong);
+}
+
+/* "Also posted in 6 places": place chips that open the other postings; ✓ on the one you applied to */
+.also-posted-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.also-posted-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  max-width: 240px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* the text clips, not the chip (its hit area reaches past it on phones) */
+.also-posted-chip-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.also-posted-chip.is-applied {
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.also-posted-chip:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.also-posted-more {
+  min-height: 26px;
+}
+
+.also-posted-warning {
+  margin-top: 10px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+  border-radius: var(--radius-sm);
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.also-posted > .drawer-banner:first-child {
+  margin-top: 0;
+}
+
+.also-posted-placeholder i {
+  width: 60%;
+  height: 26px;
+  border-radius: 999px;
+}
+
+/* The note, collapsed to one row until there is a note or a date */
+.drawer-section.note-row {
+  padding: 8px 0;
+}
+
+.note-add {
+  min-height: 32px;
+  padding: 0;
+  font-size: 13px;
+}
+
+.application-panel .note-field {
+  margin-top: 0;
+}
+
+/* The suggested answer of "Heard back?" and of the weekly check-in */
+.age-notice .btn.is-suggested,
+.checkin-answers .btn.is-suggested {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.drawer-body > .age-notice:first-child {
+  margin-top: 12px;
+}
+
+/* The weekly check-in: "How did last week go?" */
+.checkin-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, 100%);
+  overflow: hidden;
+  padding: 14px 16px 12px;
+}
+
+.checkin-panel:focus {
+  outline: none;
+}
+
+.checkin-grip {
+  display: none;
+}
+
+.checkin-header {
+  margin-bottom: 4px;
+}
+
+.checkin-sub {
+  margin-bottom: 10px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.checkin-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0 -16px;
+  padding: 0 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+
+.checkin-item {
+  display: grid;
+  gap: 8px;
+  padding: 10px 8px;
+  border-top: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.checkin-item:focus {
+  outline: none;
+}
+
+.checkin-item:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+.checkin-item-text {
+  min-width: 0;
+}
+
+.checkin-title {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.checkin-item.is-done .checkin-title {
+  color: var(--text-2);
+}
+
+.checkin-meta {
+  margin-top: 1px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.checkin-answers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.checkin-result-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.checkin-undo {
+  min-height: 28px;
+  font-size: 13px;
+}
+
+.checkin-result,
+.checkin-all-done {
+  color: var(--success);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.checkin-item .form-error {
+  margin: 0;
+}
+
+.checkin-footer {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.checkin-keys {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.checkin-done {
+  margin-left: auto;
+}
+
+@media (min-width: 721px) and (pointer: fine), (min-width: 721px) and (pointer: none), (min-width: 961px) and (min-height: 501px) {
+  /* the row the keys act on (j / k, 1-5) */
+  .checkin-item.is-active {
+    background: var(--surface-2);
+  }
+
+  /* the check-in's toasts go to the top, clear of its footer and its key hint */
+  .checkin-root ~ .toast,
+  body:has(.checkin-root) .toast {
+    top: 16px;
+    bottom: auto;
+  }
+}
+
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px), (pointer: coarse) and (max-width: 960px) {
+  /* The stage strip stays between the header and the scrolling body; the steps scroll sideways */
+  .stage-stepper {
+    order: 1;
+    gap: 0;
+    padding: 0 0 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .stage-stepper-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* Every stage in view, no sideways scroll: the steps flow onto as many lines as they need (a long "Applied ✓ Sep 23"
+     pushes Offer down), the outcomes set apart by a wider gap */
+  .stage-steps {
+    gap: 8px 4px;
+    padding: 2px max(10px, env(safe-area-inset-right)) 2px max(14px, env(safe-area-inset-left));
+  }
+
+  .stage-track,
+  .stage-outcomes {
+    display: contents;
+  }
+
+  .stage-outcomes > :first-child {
+    margin-left: 10px;
+  }
+
+  .stage-line {
+    width: 6px;
+    margin: 0 1px;
+  }
+
+  /* About 10 lines of the description until "Read more" */
+  .drawer-description.is-clamped {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 10;
+    line-clamp: 10;
+  }
+
+  .description-more {
+    margin-top: 6px;
+    padding: 0;
+    font-size: 13px;
+  }
+
+  /* The weekly check-in is a bottom sheet */
+  .checkin-root {
+    place-items: end stretch;
+    padding: 0;
+  }
+
+  .checkin-panel {
+    width: 100%;
+    max-height: 88vh;
+    max-height: 88dvh;
+    padding: 6px max(14px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+    border-bottom: 0;
+    border-radius: var(--radius) var(--radius) 0 0;
+    animation: sheet-up 0.2s ease-out;
+  }
+
+  .checkin-grip {
+    display: block;
+  }
+
+  .checkin-list {
+    margin: 0 -14px;
+    padding: 0 14px;
+  }
+
+  .checkin-done {
+    flex: 1;
+    height: 44px;
+  }
+
+  /* one line of answers per item: the first three and More */
+  .checkin-answers.is-folded {
+    flex-wrap: nowrap;
+  }
+
+  .checkin-answers.is-folded .btn {
+    gap: 4px;
+    padding-inline: 9px;
+  }
+
+  /* "suggested" goes under the answer, so the line keeps its width */
+  .checkin-answers .btn.is-suggested {
+    flex-direction: column;
+    gap: 0;
+    line-height: 1.15;
+  }
+
+  .checkin-answers .answer-suggested {
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .checkin-answers .answer-suggested > span {
+    display: none;
+  }
+
+  .checkin-answers .btn {
+    min-height: 44px;
+  }
+
+  /* the check-in's toasts (with Undo) sit above its footer */
+  .checkin-root ~ .toast,
+  body:has(.checkin-root) .toast {
+    bottom: calc(76px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (pointer: coarse) {
+  /* finger-sized hit areas without making the pills and chips tall */
+  .stage-step {
+    height: 36px;
+    font-size: 13px;
+  }
+
+  .stage-menu-button {
+    height: 32px;
+  }
+
+  .also-posted-chip {
+    height: 36px;
+  }
+
+  .also-posted-chips {
+    gap: 8px;
+  }
+
+  .checkin-title,
+  .checkin-undo {
+    position: relative;
+  }
+
+  .stage-pill {
+    height: 28px;
+  }
+
+  .stage-step::after,
+  .stage-menu-button::after {
+    content: "";
+    position: absolute;
+    inset: -6px -2px;
+  }
+
+  /* 44 px hit areas around the 36 px steps and chips (their rows are 8 px apart) and the check-in's title and Undo */
+  .stage-step::after,
+  .also-posted-chip::after {
+    content: "";
+    position: absolute;
+    inset: -4px -2px;
+  }
+
+  .checkin-title::after,
+  .checkin-undo::after {
+    content: "";
+    position: absolute;
+    inset: -12px 0;
+  }
+
+  .stage-menu-button.md {
+    height: 44px;
+  }
+
+  .note-add,
+  .also-posted-more,
+  .description-more {
+    min-height: 44px;
+  }
+}
+
+/* Landscape phones: a slimmer stage strip, so the body keeps more of the height */
+@media (pointer: coarse) and (max-height: 500px) {
+  .stage-stepper {
+    padding-bottom: 4px;
+  }
+
+  .stage-step {
+    height: 32px;
+  }
+}
+
+@media (hover: hover) {
+  .stage-step:hover:not(.is-current, [aria-disabled="true"]),
+  .stage-menu-button:hover:not(:disabled),
+  .also-posted-chip:hover {
+    border-color: var(--border-strong);
+  }
+
+  .stage-step:hover:not(.is-current, .is-done, [aria-disabled="true"]),
+  .also-posted-chip:hover:not(.is-applied) {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+
+  .stage-menu-item:hover {
+    background: var(--surface-2);
+  }
+
+  .checkin-title:hover {
+    text-decoration: underline;
   }
 }
 
@@ -4623,6 +5948,31 @@ ol.settings-list {
   overflow-wrap: anywhere;
 }
 
+/* The runs card's first line when the newest pipeline decision skipped or paused the pipeline */
+.system-lead {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.system-lead.warning {
+  background: var(--warning-soft);
+  color: var(--text);
+}
+
+.system-panel .muted-text code {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.system-decision .settings-company-meta .company-health {
+  margin-left: 2px;
+}
+
 /* The last scrapes of a source, newest first: one dot each; the label is in the title and for screen readers */
 .system-history {
   display: flex;
@@ -4787,3 +6137,237 @@ ol.settings-list {
 }
 
 /* ==== END FEATURES: settings and admin ==== */
+
+/* ==== FEATURES: filters (owner: client) ==== */
+/* The live filter panel (SearchFilter): Fit · Where · What, every change applies at once, "Show N jobs" closes it.
+   Later rules than the global .filter-panel ones, so they win at equal specificity. */
+.live-filters {
+  padding: 0;
+  overflow: hidden;
+}
+
+/* The handle and the header: the part a downward drag closes on phones */
+.live-filters .filter-drag {
+  flex: none;
+  padding: 12px 16px 0;
+}
+
+.live-filters .filter-grip {
+  display: none;
+  width: 36px;
+  height: 4px;
+  margin: 0 auto 8px;
+  border-radius: 2px;
+  background: var(--border-strong);
+}
+
+.live-filters .filter-panel-header {
+  margin-bottom: 4px;
+}
+
+/* Only the groups scroll; the header and the footer stay in view */
+.filter-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 4px 16px 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+
+.filter-group:first-child,
+.filter-extra + .filter-group {
+  border-top: 0;
+}
+
+.filter-group h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.live-filters .filter-grid {
+  flex: none;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+}
+
+.filter-label {
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Segmented choice (Fit, Work mode): equal buttons, the pressed one raised */
+.filter-seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.filter-seg button {
+  flex: 1 1 0;
+  min-width: max-content;
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.filter-seg button[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--primary);
+  box-shadow: var(--shadow-sm);
+}
+
+@media (hover: hover) {
+  .filter-seg button[aria-pressed="false"]:hover {
+    color: var(--text);
+  }
+}
+
+/* On / off rows (Has my skills, My cities) */
+.filter-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: var(--control-h);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.filter-toggle[aria-disabled="true"] {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.filter-switch {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  transition: background-color 0.15s;
+}
+
+.filter-switch::after {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  content: "";
+  transition: transform 0.15s;
+}
+
+.filter-toggle[aria-checked="true"] .filter-switch {
+  background: var(--primary);
+}
+
+.filter-toggle[aria-checked="true"] .filter-switch::after {
+  transform: translateX(14px);
+}
+
+.filter-toggle[aria-disabled="true"] .filter-switch {
+  opacity: 0.5;
+}
+
+.filter-toggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.filter-hint {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.live-filters .filter-panel-actions {
+  align-items: center;
+  margin: 0;
+  padding: 12px 16px;
+}
+
+.live-filters .filter-reset {
+  margin-right: auto;
+  font-size: 13px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .filter-switch,
+  .filter-switch::after {
+    transition: none;
+  }
+}
+
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px), (pointer: coarse) and (max-width: 960px) {
+  /* A bottom sheet: the grab handle shows, the drag area must not scroll the page */
+  .live-filters {
+    padding-bottom: 0;
+  }
+
+  .live-filters .filter-drag {
+    padding-top: 8px;
+    touch-action: none;
+  }
+
+  .live-filters .filter-grip {
+    display: block;
+  }
+
+  .live-filters .filter-panel-actions {
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+
+  .live-filters .filter-panel-actions > .primary-button {
+    flex: 1;
+  }
+
+  .live-filters .filter-panel-actions > .filter-reset {
+    flex: none;
+    margin-right: 0;
+    padding: 0 12px;
+  }
+}
+
+@media (pointer: coarse) {
+  .filter-seg button,
+  .filter-toggle {
+    min-height: 44px;
+  }
+
+  .filter-seg button {
+    height: auto;
+  }
+}
+/* ==== END FEATURES: filters ==== */
