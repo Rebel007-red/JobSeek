@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import re
+import time
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -274,12 +275,12 @@ def jobs_to_dataframe(jobs):
     return dataframe
 
 
-def keep_recent_jobs(dataframe):
+def keep_recent_jobs(dataframe, max_days=None):
     if dataframe.empty:
         return dataframe
 
     filtered = dataframe[dataframe["posted_days"].notna()].copy()
-    return filtered[filtered["posted_days"] <= MAX_POSTED_DAYS]
+    return filtered[filtered["posted_days"] <= (MAX_POSTED_DAYS if max_days is None else max_days)]
 
 
 async def first_text(page, selector):
@@ -299,8 +300,19 @@ async def goto_settled(page, url):
         await page.goto(url, wait_until="domcontentloaded", timeout=20000)
 
 
+# Description pages open DESC_CONCURRENCY at a time, newest jobs first, for at most DESC_TIME_BUDGET_MINUTES: the CSV is
+# always written before the workflow's timeout cancels the job, and jobs left without a description are fetched again
+# by the next run (they are not in the seen keys yet)
+DESC_CONCURRENCY = max(1, int(os.getenv("DESC_CONCURRENCY", "5")))
+DESC_TIME_BUDGET_MINUTES = float(os.getenv("DESC_TIME_BUDGET_MINUTES", "50"))
+# ...and never later than SCRAPE_DEADLINE_MINUTES after the scraper started (the Workday job's timeout is 90 minutes)
+SCRAPE_DEADLINE_MINUTES = float(os.getenv("SCRAPE_DEADLINE_MINUTES", "80"))
+_clock = time.monotonic  # the budget's clock (tests replace it; asyncio keeps the real one)
+_STARTED = _clock()
+
+
 async def fetch_descriptions(jobs, label, read_description, skip_ids=frozenset(), skip_keys=frozenset()):
-    """Fill in missing descriptions by opening each job_url in headless Chromium, 3 pages at a time.
+    """Fill in missing descriptions by opening each job_url in headless Chromium, DESC_CONCURRENCY pages at a time.
 
     read_description(page, job) loads the job page and returns its description; any failure leaves "".
     Jobs whose job_id is in skip_ids (or whose job_key is in skip_keys) keep an empty description: the pipeline already
@@ -314,24 +326,32 @@ async def fetch_descriptions(jobs, label, read_description, skip_ids=frozenset()
     if not pending:
         return jobs
 
+    pending.sort(key=lambda job: job.get("posted_days") if job.get("posted_days") is not None else 99)
     total_jobs = len(pending)
+    deadline = min(_clock() + DESC_TIME_BUDGET_MINUTES * 60, _STARTED + SCRAPE_DEADLINE_MINUTES * 60)
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
-            semaphore = asyncio.Semaphore(3)
+            semaphore = asyncio.Semaphore(DESC_CONCURRENCY)
             fetched = 0
+            out_of_time = 0
 
             async def fetch_single_description(job):
-                nonlocal fetched
+                nonlocal fetched, out_of_time
                 if not job.get("job_url"):
                     job["description"] = ""
                     return
 
                 async with semaphore:
+                    if _clock() > deadline:
+                        job["description"] = ""
+                        out_of_time += 1
+                        return
                     page = await browser.new_page()
                     try:
                         fetched += 1
-                        print(f"    [DESC] {fetched}/{total_jobs}")
+                        if fetched % 25 == 0 or fetched == total_jobs:
+                            print(f"    [DESC] {fetched}/{total_jobs}")
                         job["description"] = await read_description(page, job)
                     except Exception:
                         job["description"] = ""
@@ -340,6 +360,10 @@ async def fetch_descriptions(jobs, label, read_description, skip_ids=frozenset()
 
             await asyncio.gather(*(fetch_single_description(job) for job in pending))
             await browser.close()
+            if out_of_time:
+                print(f"::warning::{label}: description time budget used up ({DESC_TIME_BUDGET_MINUTES:g} min, or "
+                      f"{SCRAPE_DEADLINE_MINUTES:g} min after the start); "
+                      f"{out_of_time} of {total_jobs} jobs written without a description, fetched by the next run")
     except Exception as exc:
         print(f"    [WARN] Failed to fetch filtered {label} job descriptions: {exc}")
         for job in jobs:
@@ -362,14 +386,19 @@ def write_flat_jobs_csv(dataframe, prefix, output_dir=OUTPUT_DIR):
         return None
 
 
-async def write_recent_jobs(jobs, label, prefix, read_description, skip_ids=frozenset(), skip_keys=frozenset()):
-    """Keep jobs posted within MAX_POSTED_DAYS, fetch their missing descriptions (except skip_ids / skip_keys) and
-    write the CSV.
+async def write_recent_jobs(jobs, label, prefix, read_description, skip_ids=frozenset(), skip_keys=frozenset(),
+                            max_days=None, keep=None):
+    """Keep jobs posted within max_days (default MAX_POSTED_DAYS) that pass keep(job) (default: all), fetch their missing
+    descriptions (except skip_ids / skip_keys) and write the CSV.
 
     Returns the written dataframe and the output file (None when writing failed).
     """
-    recent = keep_recent_jobs(jobs_to_dataframe(jobs))
-    print(f"[FILTER] {label} jobs after filtering (posted_days <= {MAX_POSTED_DAYS}): {len(recent)}")
+    days = MAX_POSTED_DAYS if max_days is None else max_days
+    recent = keep_recent_jobs(jobs_to_dataframe(jobs), days)
+    print(f"[FILTER] {label} jobs after filtering (posted_days <= {days}): {len(recent)}")
+    if keep is not None and not recent.empty:
+        recent = recent[recent.apply(lambda row: bool(keep(row)), axis=1)]
+        print(f"[FILTER] {label} jobs kept before fetching descriptions: {len(recent)}")
     recent_jobs = await fetch_descriptions(recent.to_dict(orient="records"), label, read_description, skip_ids,
                                            skip_keys)
     dataframe = jobs_to_dataframe(recent_jobs)

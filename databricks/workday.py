@@ -1,4 +1,5 @@
 import asyncio
+import os
 import re
 import sys
 from datetime import date
@@ -7,6 +8,7 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
 
+from ats.base import mentions_india
 from scraper_common import (
     ScrapeFailed,
     fetch_companies,
@@ -22,6 +24,9 @@ from scraper_common import (
     short_error,
     write_recent_jobs,
 )
+
+# Workday jobs older than this are not scraped (the app keeps jobs 7 days; a 6-hourly run first sees a job within a day)
+WORKDAY_MAX_POSTED_DAYS = int(os.getenv("WORKDAY_MAX_POSTED_DAYS", "4"))
 
 NEXT_BUTTON_SELECTORS = [
     'button[aria-label*="Next"]',
@@ -221,8 +226,12 @@ async def main():
         # written, refreshing last_seen_at, but their page is not opened again: with the 7-day window and a run every
         # 6 hours each job would otherwise be read up to 28 times
         seen_keys = await fetch_seen_job_keys()
+        # Workday boards are global and each description is a full page load, so only India jobs from the last
+        # WORKDAY_MAX_POSTED_DAYS days are kept before any page is opened (multi-city rows such as "3 Locations" never
+        # counted as India downstream, so dropping them here changes nothing in the feed)
         filtered_jobs_dataframe, output_file = await write_recent_jobs(
-            jobs, "Workday", "workday", read_workday_description, skip_keys=seen_keys
+            jobs, "Workday", "workday", read_workday_description, skip_keys=seen_keys,
+            max_days=WORKDAY_MAX_POSTED_DAYS, keep=lambda job: mentions_india(job.get("location")),
         )
         failed_companies = report.failed_names
         rows = filtered_jobs_dataframe.to_dict(orient="records")
